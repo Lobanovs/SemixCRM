@@ -8,9 +8,11 @@ import {
   Laptop,
   Lightbulb,
   Menu,
+  Moon,
   PawPrint,
   Search,
   Settings,
+  Sun,
   UserRound,
   X,
 } from 'lucide-react'
@@ -84,6 +86,7 @@ function App() {
   const [search, setSearch] = useState('')
   const [isSidebarOpen, setSidebarOpen] = useState(false)
   const [showGuide, setShowGuide] = useState(false)
+  const [isDark, setIsDark] = useState(() => window.localStorage.getItem('semix-crm-theme') === 'dark')
 
   const filteredFeatures = useMemo(() => {
     const query = search.trim().toLocaleLowerCase('ru')
@@ -102,7 +105,7 @@ function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${isDark ? 'theme-dark' : ''}`}>
       <aside className={`sidebar ${isSidebarOpen ? 'is-open' : ''}`} aria-label="Главная навигация">
         <div className="brand-row">
           <a className="brand" href="#home" onClick={() => selectSection('Главная')}>Semix CRM</a>
@@ -146,6 +149,20 @@ function App() {
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск..." />
           <Search size={24} strokeWidth={1.8} />
         </label>
+        <button
+          className="theme-toggle"
+          type="button"
+          aria-label={isDark ? 'Включить светлую тему' : 'Включить тёмную тему'}
+          aria-pressed={isDark}
+          title={isDark ? 'Светлая тема' : 'Тёмная тема'}
+          onClick={() => setIsDark((current) => {
+            const next = !current
+            window.localStorage.setItem('semix-crm-theme', next ? 'dark' : 'light')
+            return next
+          })}
+        >
+          {isDark ? <Sun size={21} strokeWidth={1.8} /> : <Moon size={21} strokeWidth={1.8} />}
+        </button>
         <button className="profile-button" type="button" aria-label="Профиль">
           <UserRound size={24} strokeWidth={1.8} />
         </button>

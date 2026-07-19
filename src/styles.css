@@ -1,5 +1,7 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
 :root {
-  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: "Plus Jakarta Sans", Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #131821;
   background: #ffffff;
   font-synthesis: none;
@@ -2769,20 +2771,20 @@ a:focus-visible {
 
 /* Unified CRM visual language */
 :root {
-  --type-page-title: 28px;
-  --type-page-subtitle: 14px;
-  --type-section-title: 15px;
-  --type-card-title: 14px;
-  --type-body: 12px;
-  --type-meta: 11px;
-  --type-caption: 10px;
-  --crm-radius: 11px;
-  --crm-panel-gap: 24px;
+  --type-page-title: 32px;
+  --type-page-subtitle: 15px;
+  --type-section-title: 17px;
+  --type-card-title: 15px;
+  --type-body: 13px;
+  --type-meta: 12px;
+  --type-caption: 11px;
+  --crm-radius: 12px;
+  --crm-panel-gap: 26px;
 }
 
 .data-page,
 .schedule-page {
-  padding: 18px 28px 24px;
+  padding: 24px 32px 32px;
   font-size: var(--type-body);
 }
 
@@ -2812,7 +2814,7 @@ a:focus-visible {
 }
 
 .page-title-block {
-  margin-bottom: 17px;
+  margin-bottom: 22px;
 }
 
 .page-title-block h1,
@@ -2833,13 +2835,20 @@ a:focus-visible {
 }
 
 .metric-card {
-  min-height: 96px;
-  padding: 14px 16px;
+  min-height: 108px;
+  gap: 16px;
+  padding: 17px 18px;
   border-radius: var(--crm-radius);
 }
 
-.metric-copy > span { font-size: 13px; line-height: 1.25; }
-.metric-copy strong { font-size: 25px; line-height: 1; }
+.metric-icon {
+  width: 54px;
+  height: 54px;
+  flex-basis: 54px;
+}
+
+.metric-copy > span { font-size: 14px; line-height: 1.25; }
+.metric-copy strong { font-size: 27px; line-height: 1; }
 .metric-copy small { font-size: var(--type-meta); line-height: 1.35; }
 
 .local-search input,
@@ -2856,7 +2865,7 @@ a:focus-visible {
 .local-search,
 .select-control,
 .solid-action {
-  min-height: 36px;
+  min-height: 42px;
 }
 
 .project-name-line h2,
@@ -2932,8 +2941,8 @@ a:focus-visible {
 }
 
 .schedule-metrics .metric-card {
-  min-height: 96px;
-  padding: 14px 16px;
+  min-height: 108px;
+  padding: 17px 18px;
 }
 
 .day-column h3,
@@ -3107,4 +3116,298 @@ a:focus-visible {
 
   .client-actions { grid-template-columns: 1fr 1fr; }
   .client-actions .primary-row-action { grid-column: 1 / -1; }
+}
+
+/* Readable weekly planner scale */
+.schedule-grid {
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 28px;
+}
+
+.week-board {
+  min-height: 500px;
+  grid-template-columns: repeat(7, minmax(136px, 1fr));
+  overflow-x: auto;
+}
+
+.week-column { padding: 16px 12px 12px; }
+.week-column > header { margin-bottom: 14px; }
+.week-column > header strong { font-size: 16px; }
+.week-column > header span { font-size: 11px; }
+.week-column > header b { width: 24px; height: 24px; font-size: 10px; }
+.day-task-list { gap: 10px; }
+.day-task { min-height: 38px; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; }
+.task-check, .goal-check { width: 16px; height: 16px; }
+.day-task strong { font-size: 11px; line-height: 1.35; }
+.day-task small { font-size: 10px; }
+.day-note { min-height: 120px; padding: 11px 9px 8px; }
+.day-note > small { font-size: 10px; }
+.day-note p { font-size: 10px; line-height: 1.45; }
+.day-note button { min-height: 30px; font-size: 10px; }
+.schedule-bottom-grid { gap: 22px; margin-top: 22px; }
+.summary-panel, .goals-panel { min-height: 255px; padding: 20px 22px; }
+.summary-panel-title h2 { font-size: 17px; }
+.summary-panel-title p { font-size: 11px; }
+.summary-panel textarea { height: 120px; font-size: 11px; }
+.save-summary { min-height: 38px; }
+.goal-list { gap: 9px; margin-top: 14px; }
+.goal-row { min-height: 25px; font-size: 11px; }
+.goal-row small { font-size: 10px; }
+.calendar-panel { min-height: 330px; padding: 18px 20px 16px; }
+.calendar-weekdays span,
+.calendar-cells button,
+.calendar-range button,
+.calendar-range > span { font-size: 10px; }
+.calendar-cells button,
+.calendar-range button,
+.calendar-range > span { height: 30px; }
+.upcoming-list > div > div strong { font-size: 11px; }
+.upcoming-list > div > div small { font-size: 10px; }
+.past-panel > button:not(.archive-button),
+.past-panel .archive-button { font-size: 10px; }
+.upcoming-panel { min-height: 315px; }
+.past-panel { height: 185px; }
+.quick-actions-panel > div button { min-height: 40px; font-size: 10px; }
+
+@media (max-width: 760px) {
+  .schedule-grid { grid-template-columns: 1fr; }
+  .week-board { min-height: 500px; grid-template-columns: repeat(7, 142px); }
+}
+
+/* Dark mode */
+.theme-dark {
+  color-scheme: dark;
+  color: #e7edf7;
+  background: #0d131d;
+  --color-border: #2b394d;
+  --color-muted: #263347;
+  --color-surface: #151e2b;
+}
+
+.theme-dark .sidebar,
+.theme-dark .topbar,
+.theme-dark .workspace,
+.theme-dark .data-page,
+.theme-dark .schedule-page {
+  background: #0d131d;
+  color: #e7edf7;
+}
+
+.theme-dark .sidebar,
+.theme-dark .topbar { border-color: #273449; }
+.theme-dark .brand,
+.theme-dark .nav-item,
+.theme-dark .profile-button,
+.theme-dark .theme-toggle,
+.theme-dark .welcome-section h1,
+.theme-dark .quick-section h2,
+.theme-dark .guide-section h2,
+.theme-dark .page-title-block h1,
+.theme-dark .section-placeholder h1,
+.theme-dark .metric-copy > span,
+.theme-dark .metric-copy strong,
+.theme-dark .project-name-line h2,
+.theme-dark .panel-title-row h2,
+.theme-dark .side-panel > h2,
+.theme-dark .side-panel h3,
+.theme-dark .opportunity-identity h2,
+.theme-dark .opportunity-identity h3,
+.theme-dark .opportunity-meta > p strong,
+.theme-dark .opportunity-status > strong,
+.theme-dark .client-identity h2,
+.theme-dark .client-status-column > strong,
+.theme-dark .week-column > header strong,
+.theme-dark .day-task strong,
+.theme-dark .summary-panel-title h2,
+.theme-dark .goals-panel h2,
+.theme-dark .calendar-title-row h2,
+.theme-dark .side-panel-title-row h2,
+.theme-dark .past-panel > h2,
+.theme-dark .quick-actions-panel > h2 {
+  color: #f4f7fb;
+}
+
+.theme-dark .page-title-block p,
+.theme-dark .welcome-section p,
+.theme-dark .project-identity p,
+.theme-dark .opportunity-identity p,
+.theme-dark .client-pain p,
+.theme-dark .client-category,
+.theme-dark .client-source,
+.theme-dark .metric-copy small,
+.theme-dark .parser-title p,
+.theme-dark .parser-filters p,
+.theme-dark .nearest-action p span,
+.theme-dark .summary-panel-title p,
+.theme-dark .summary-panel-title > span,
+.theme-dark .day-task small,
+.theme-dark .day-note > small,
+.theme-dark .day-note p,
+.theme-dark .week-column > header span,
+.theme-dark .calendar-weekdays span,
+.theme-dark .upcoming-list p strong,
+.theme-dark .upcoming-list > div > div small,
+.theme-dark .past-panel > button:not(.archive-button) {
+  color: #aab8cb;
+}
+
+.theme-dark .help-card,
+.theme-dark .quick-card,
+.theme-dark .metric-card,
+.theme-dark .project-row,
+.theme-dark .opportunity-row,
+.theme-dark .client-row,
+.theme-dark .side-panel,
+.theme-dark .week-board,
+.theme-dark .summary-panel,
+.theme-dark .goals-panel,
+.theme-dark .calendar-panel,
+.theme-dark .day-note,
+.theme-dark .compact-modal,
+.theme-dark .tips-card,
+.theme-dark .stats-card {
+  border-color: #2b394d;
+  background: #151e2b;
+  box-shadow: none;
+}
+
+.theme-dark .help-card p,
+.theme-dark .quick-copy > span,
+.theme-dark .guide-step p,
+.theme-dark .guide-step p,
+.theme-dark .tips-card li,
+.theme-dark .stat span,
+.theme-dark .project-meta-grid span,
+.theme-dark .opportunity-meta > p,
+.theme-dark .opportunity-status > span:not(.status-badge),
+.theme-dark .client-status-column > span:not(.status-badge),
+.theme-dark .client-fit > small,
+.theme-dark .parser-stats span,
+.theme-dark .recommendation-item > p span,
+.theme-dark .client-recommendation p span,
+.theme-dark .conversion-note,
+.theme-dark .goal-row small,
+.theme-dark .drag-handle {
+  color: #9eacc0;
+}
+
+.theme-dark .quick-card { color: #f4f7fb; }
+.theme-dark .quick-copy strong,
+.theme-dark .stats-card h3,
+.theme-dark .stat strong,
+.theme-dark .stat span { color: #f4f7fb; }
+
+.theme-dark .search-box,
+.theme-dark .local-search,
+.theme-dark .select-control,
+.theme-dark .client-status-column select,
+.theme-dark .compact-modal input,
+.theme-dark .compact-modal select,
+.theme-dark .summary-panel textarea,
+.theme-dark .week-switcher > button,
+.theme-dark .today-button,
+.theme-dark .month-switcher > button,
+.theme-dark .day-note button,
+.theme-dark .row-actions button,
+.theme-dark .opportunity-buttons button,
+.theme-dark .stacked-order-actions button,
+.theme-dark .client-actions button,
+.theme-dark .secondary-wide-action,
+.theme-dark .quick-actions-panel > div button,
+.theme-dark .past-panel .archive-button {
+  border-color: #35465d;
+  background: #1a2636;
+  color: #e8eef7;
+}
+
+.theme-dark .search-box input,
+.theme-dark .local-search input,
+.theme-dark .select-control select,
+.theme-dark .compact-modal input,
+.theme-dark .compact-modal select,
+.theme-dark .summary-panel textarea {
+  color: #eef4fc;
+}
+
+.theme-dark .search-box input::placeholder,
+.theme-dark .local-search input::placeholder { color: #8292aa; }
+.theme-dark .profile-button,
+.theme-dark .theme-toggle,
+.theme-dark .menu-toggle,
+.theme-dark .mobile-close { background: #1d293a; color: #dce7f5; }
+.theme-dark .nav-item:hover { background: #17263a; }
+.theme-dark .nav-item.active { background: linear-gradient(90deg, #172e50, #16273d); color: #74b1ff; }
+.theme-dark .nav-item svg { color: #93a4ba; }
+.theme-dark .nav-item.active svg { color: #65a7ff; }
+.theme-dark .sidebar-backdrop { background: rgba(4, 8, 14, 0.7); }
+
+.theme-dark .project-identity,
+.theme-dark .opportunity-row > div:not(:last-child),
+.theme-dark .client-row > div:not(:last-child),
+.theme-dark .week-column + .week-column,
+.theme-dark .parser-stats,
+.theme-dark .nearest-action,
+.theme-dark .source-chip,
+.theme-dark .activity-list > div,
+.theme-dark .upcoming-list > div {
+  border-color: #2b394d;
+}
+
+.theme-dark .source-chip,
+.theme-dark .data-tag { background: #1e2a3a; color: #c7d2e2; }
+.theme-dark .local-search:focus-within,
+.theme-dark .search-box:focus-within { border-color: #4e8fe2; box-shadow: 0 0 0 3px rgba(74, 143, 226, 0.18); }
+.theme-dark .calendar-range { background: #17345e; }
+.theme-dark .calendar-range > span,
+.theme-dark .calendar-range button { color: #8dbbff; }
+.theme-dark .calendar-range .range-selected { background: #246fe2; color: #fff; }
+.theme-dark .week-board .task-check,
+.theme-dark .goal-check { border-color: #60758f; }
+.theme-dark .day-note button,
+.theme-dark .quick-actions-panel > div button,
+.theme-dark .past-panel .archive-button { color: #7eb5ff; }
+.theme-dark .modal-backdrop { background: rgba(2, 6, 12, 0.72); }
+
+.theme-dark .side-panel h2,
+.theme-dark .side-panel strong,
+.theme-dark .parser-title h2,
+.theme-dark .parser-filters strong,
+.theme-dark .parser-stats strong,
+.theme-dark .recommendation-item > p strong,
+.theme-dark .client-recommendation p strong,
+.theme-dark .nearest-action p strong,
+.theme-dark .stage-stat-grid strong,
+.theme-dark .order-stage-grid strong,
+.theme-dark .client-stage-grid strong,
+.theme-dark .activity-list strong,
+.theme-dark .quick-launch-grid strong {
+  color: #f4f7fb;
+}
+
+.theme-dark .stage-stat-grid span,
+.theme-dark .order-stage-grid span,
+.theme-dark .client-stage-grid span,
+.theme-dark .recommendation-item > span:last-child > b {
+  color: #aab8cb;
+}
+
+.theme-toggle {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid #d7dfe9;
+  border-radius: 10px;
+  background: #fff;
+  color: #334057;
+  cursor: pointer;
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.theme-toggle:hover { border-color: #9ab9e4; background: #f4f8ff; }
+
+@media (min-width: 1581px) {
+  .freelance-order-row {
+    grid-template-columns: minmax(330px, 1.25fr) minmax(230px, 0.82fr) minmax(300px, 0.95fr);
+  }
 }
