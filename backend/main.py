@@ -13,6 +13,8 @@ from pydantic import BaseModel, Field
 from .database import (
     client_stats,
     create_parser_run,
+    archive_all_clients,
+    archive_client,
     get_parser_settings,
     init_db,
     insert_clients,
@@ -23,6 +25,7 @@ from .database import (
     update_parser_run,
 )
 from .parser import collect_leads
+from .lead_utils import calculate_lead_score, contacts_from_lead, is_real_website
 
 
 class ParseRequest(BaseModel):
@@ -53,6 +56,7 @@ class ParserJob:
     message: str = "Подготовка парсера"
     error: str = ""
     count: int = 0
+    skipped_count: int = 0
     clients: list[dict[str, Any]] = field(default_factory=list)
 
     def snapshot(self) -> dict[str, Any]:
@@ -62,6 +66,7 @@ class ParserJob:
             "message": self.message,
             "error": self.error,
             "count": self.count,
+            "skipped_count": self.skipped_count,
             "clients": self.clients,
             "city": self.city,
             "niches": self.niches,
@@ -109,7 +114,7 @@ class ClientCreateRequest(BaseModel):
 
 @app.post("/api/clients")
 def create_client(request: ClientCreateRequest) -> dict[str, Any]:
-    stored = insert_clients([_enrich({
+    result = insert_clients([_enrich({
         "name": request.name,
         "niche": request.category,
         "city": request.city,
@@ -120,7 +125,7 @@ def create_client(request: ClientCreateRequest) -> dict[str, Any]:
         "card_url": "",
         "social_url": "",
     })])
-    match = next((client for client in stored if client["name"] == request.name and client["city"] == request.city), None)
+    match = next((client for client in result["clients"] if client["name"] == request.name and client["city"] == request.city), None)
     if match is None:
         raise HTTPException(status_code=500, detail="Не удалось сохранить клиента")
     return match
@@ -179,6 +184,19 @@ def change_client_status(client_id: int, request: ClientStatusRequest) -> dict[s
     return client
 
 
+@app.delete("/api/clients/{client_id}")
+def remove_client(client_id: int) -> dict[str, Any]:
+    if not archive_client(client_id):
+        raise HTTPException(status_code=404, detail="Клиент не найден или уже скрыт")
+    return {"ok": True, "archived_id": client_id}
+
+
+@app.delete("/api/clients")
+def clear_clients() -> dict[str, Any]:
+    archived_count = archive_all_clients()
+    return {"ok": True, "archived_count": archived_count}
+
+
 @app.post("/api/clients/parse")
 def start_parse(request: ParseRequest) -> dict[str, str]:
     niches = request.normalized_niches()
@@ -215,26 +233,44 @@ def _run_job(job: ParserJob, request: ParseRequest) -> None:
         if not leads:
             raise RuntimeError("Источники не вернули карточки. Проверьте город/нишу или повторите позже: источник мог показать CAPTCHA.")
         enriched = [_enrich(lead) for lead in leads]
-        job.clients = insert_clients(enriched)
-        job.count = len(leads)
+        stored = insert_clients(enriched)
+        job.clients = stored["clients"]
+        job.count = int(stored["inserted_count"])
+        job.skipped_count = int(stored["duplicate_count"])
         job.status = "done"
-        job.message = f"Готово: добавлено или обновлено клиентов — {len(leads)}"
-        update_parser_run(job.id, job.status, job.count, job.message)
+        job.message = f"Готово: новых — {job.count}, уже были в базе — {job.skipped_count}"
+        update_parser_run(job.id, job.status, job.count, job.message, skipped_count=job.skipped_count)
     except Exception as error:  # noqa: BLE001 - surface parser errors in the job UI
         job.status = "error"
         job.error = str(error)
         job.message = "Парсер завершился с ошибкой"
-        update_parser_run(job.id, job.status, job.count, job.message, job.error)
+        update_parser_run(job.id, job.status, job.count, job.message, job.error, job.skipped_count)
 
 
 def _enrich(lead: dict[str, Any]) -> dict[str, Any]:
     website = str(lead.get("website") or "").strip()
     phone = str(lead.get("phone") or "").strip()
-    reviews = int(lead.get("reviews") or 0)
-    score = 70 + (10 if not website else 0) + (5 if phone else 0) + (5 if reviews >= 50 else 0)
     niche = str(lead.get("niche") or "Бизнес")
-    pain = "Нет сайта — часть заявок уходит к конкурентам." if not website else "Можно усилить онлайн-заявки и автоматизацию."
-    tags = ["Сайт" if not website else "Аудит сайта", "CRM", "Автоматизация"]
+    normalized = {**lead, "website": website, "phone": phone, "niche": niche}
+    score, reasons, match_score = calculate_lead_score(normalized)
+    contacts = contacts_from_lead(normalized)
+    direct = {item["type"] for item in contacts if item["type"] in {"telegram", "whatsapp", "email"}}
+    has_real_website = is_real_website(website)
+    pain = "Нет сайта — часть заявок уходит к конкурентам." if not has_real_website else "Можно усилить онлайн-заявки и автоматизацию."
+    if direct and not has_real_website:
+        pain = "Есть канал для контакта, но нет сайта — хороший кандидат для первого сообщения."
+    tags = ["Сайт" if not has_real_website else "Аудит сайта", "CRM", "Автоматизация"]
     if phone:
         tags.append("Телефон")
-    return {**lead, "pain": pain, "match_score": min(score, 98), "tags": tags, "niche": niche}
+    if direct:
+        tags.extend(sorted({"telegram": "Telegram", "whatsapp": "WhatsApp", "email": "E-mail"}[item] for item in direct))
+    return {
+        **normalized,
+        "pain": pain,
+        "match_score": match_score,
+        "lead_score": score,
+        "lead_score_reasons": reasons,
+        "contacts": contacts,
+        "tags": list(dict.fromkeys(tags)),
+        "niche": niche,
+    }

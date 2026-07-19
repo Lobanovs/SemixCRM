@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import quote
 
+from .lead_utils import business_identity_key
+
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 LEADHUNT_DIR = Path(os.getenv("LEADHUNT_ROOT", r"C:\Users\Admin\Desktop\LeadHunt"))
@@ -77,7 +79,11 @@ def collect_2gis(city: str, niche: str, limit: int, on_status: Callable[[str], N
     url = f"https://2gis.ru/{city_code}/search/{quote(niche, safe='')}/filters/sort=name"
     cmd = _python_command() + [
         str(PARSE_RUNNER), "-i", url, "-o", str(output_path), "-f", "json",
-        "--chrome.headless", os.getenv("LEADHUNT_HEADLESS", "yes"),
+        # The maintained parser2gic workflow uses a headed Chromium session.
+        # Its runner moves the window off-screen, so this is still invisible to
+        # the user while avoiding the empty-result path 2GIS serves to headless
+        # Chromium sessions.
+        "--chrome.headless", os.getenv("LEADHUNT_HEADLESS", "no"),
         "--chrome.start-maximized", "yes",
         "--chrome.silent-browser", "yes",
         "--parser.max-records", str(max(1, min(int(limit), 200))),
@@ -142,15 +148,19 @@ def collect_yandex(city: str, niche: str, limit: int, on_status: Callable[[str],
     if not output_path.exists():
         raise RuntimeError("Парсер Яндекс Карт не создал файл результата")
     payload = json.loads(output_path.read_text(encoding="utf-8"))
-    return [
-        {
+    result: list[dict[str, Any]] = []
+    for item in payload:
+        if not isinstance(item, dict) or not _clean(item.get("name")):
+            continue
+        lead = {
             **item,
             "source": "Яндекс Карты",
             "city": item.get("city") or city,
             "niche": item.get("niche") or niche,
         }
-        for item in payload if isinstance(item, dict) and _clean(item.get("name"))
-    ][:limit]
+        lead["contacts"] = _flat_contacts(lead)
+        result.append(lead)
+    return result[:limit]
 
 
 def collect_leads(city: str, niche: str, sources: list[str], limit: int, on_status: Callable[[str], None] | None = None) -> list[dict[str, Any]]:
@@ -170,7 +180,7 @@ def collect_leads(city: str, niche: str, sources: list[str], limit: int, on_stat
             errors.append(f"{source}: {error}")
     unique: dict[str, dict[str, Any]] = {}
     for lead in collected:
-        identity = "|".join((_clean(lead.get("name")).lower(), _clean(lead.get("city")).lower(), _clean(lead.get("address")).lower()))
+        identity = business_identity_key(lead)
         if identity.strip("|"):
             unique[identity] = lead
     result = list(unique.values())[: max(1, limit * len(normalized_sources))]
@@ -203,6 +213,7 @@ def load_2gis_json(path: Path, city: str, niche: str, limit: int) -> list[dict[s
             "reviews": _integer(item.get("reviews", {}).get("general_review_count") if isinstance(item.get("reviews"), dict) else None),
             "card_url": _json_card_url(item),
             "social_url": _json_first_social(item),
+            "contacts": _json_contacts(item),
             "branch_count": _json_branch_count(item),
         }
         leads.append(lead)
@@ -231,6 +242,42 @@ def _json_contact(item: dict[str, Any], contact_type: str) -> str:
     return ""
 
 
+def _json_contacts(item: dict[str, Any]) -> list[dict[str, str]]:
+    labels = {
+        "phone": "Телефон", "email": "E-mail", "website": "Сайт",
+        "telegram": "Telegram", "whatsapp": "WhatsApp", "vkontakte": "ВКонтакте",
+        "instagram": "Instagram", "facebook": "Facebook", "youtube": "YouTube",
+        "viber": "Viber", "linkedin": "LinkedIn",
+    }
+    contacts: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for group in item.get("contact_groups") or []:
+        if not isinstance(group, dict):
+            continue
+        for raw in group.get("contacts") or []:
+            if not isinstance(raw, dict):
+                continue
+            contact_type = _clean(raw.get("type")).lower() or "other"
+            value = _clean(raw.get("url") or raw.get("text") or raw.get("value"))
+            if not value:
+                continue
+            identity_value = re.sub(r"\D+", "", value) if contact_type == "phone" else value.lower().split("?text=", 1)[0]
+            identity = (contact_type, identity_value)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            url = _clean(raw.get("url") or value)
+            if contact_type == "whatsapp":
+                url = url.split("?text=", 1)[0]
+            contacts.append({
+                "type": contact_type,
+                "label": labels.get(contact_type, "Контакт"),
+                "value": value,
+                "url": url,
+            })
+    return contacts
+
+
 def _json_first_social(item: dict[str, Any]) -> str:
     social_types = {"telegram", "vkontakte", "whatsapp", "instagram", "facebook", "youtube", "twitter", "linkedin", "pinterest"}
     for group in item.get("contact_groups") or []:
@@ -241,6 +288,22 @@ def _json_first_social(item: dict[str, Any]) -> str:
             if _clean(contact.get("type")).lower() in social_types or any(host in value.lower() for host in ("t.me", "telegram.", "vk.com", "wa.me", "whatsapp.")):
                 return value
     return ""
+
+
+def _flat_contacts(lead: dict[str, Any]) -> list[dict[str, str]]:
+    contacts: list[dict[str, str]] = []
+    phone = _clean(lead.get("phone"))
+    website = _clean(lead.get("website"))
+    social = _clean(lead.get("social_url"))
+    if phone:
+        contacts.append({"type": "phone", "label": "Телефон", "value": phone, "url": phone})
+    if website:
+        contacts.append({"type": "website", "label": "Сайт", "value": website, "url": website})
+    if social:
+        lowered = social.lower()
+        contact_type = "telegram" if "t.me/" in lowered or "telegram." in lowered else "whatsapp" if "wa.me/" in lowered or "whatsapp." in lowered else "other"
+        contacts.append({"type": contact_type, "label": "Telegram" if contact_type == "telegram" else "WhatsApp" if contact_type == "whatsapp" else "Соцсеть", "value": social, "url": social})
+    return contacts
 
 
 def _json_card_url(item: dict[str, Any]) -> str:
