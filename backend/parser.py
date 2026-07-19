@@ -17,6 +17,7 @@ LEADHUNT_DIR = Path(os.getenv("LEADHUNT_ROOT", r"C:\Users\Admin\Desktop\LeadHunt
 PARSER2GIS_DIR = LEADHUNT_DIR / "_external" / "parser-2gis"
 PARSER2GIC_DIR = Path(os.getenv("PARSER2GIC_ROOT", r"C:\Users\Admin\Desktop\parser2gic"))
 PARSE_RUNNER = PARSER2GIC_DIR / "parse_runner.py"
+YANDEX_RUNNER = ROOT_DIR / "backend" / "yandex_runner.py"
 OUTPUT_DIR = ROOT_DIR / "backend" / "data" / "parser_output"
 CITIES_FILE = PARSER2GIS_DIR / "parser_2gis" / "data" / "cities.json"
 
@@ -106,6 +107,78 @@ def collect_2gis(city: str, niche: str, limit: int, on_status: Callable[[str], N
     if not output_path.exists() or output_path.stat().st_size <= 4:
         raise RuntimeError("parser-2gis завершился без результатов. Возможно, 2GIS показал CAPTCHA.")
     return load_2gis_json(output_path, city, niche, limit)
+
+
+def collect_yandex(city: str, niche: str, limit: int, on_status: Callable[[str], None] | None = None) -> list[dict[str, Any]]:
+    if not YANDEX_RUNNER.exists():
+        raise FileNotFoundError(f"Не найден запускатель Яндекс Карт: {YANDEX_RUNNER}")
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_path = OUTPUT_DIR / f"yandex_{uuid.uuid4().hex[:10]}.json"
+    if on_status:
+        on_status(f"Открываю Яндекс Карты: {city}, {niche}")
+    command = _python_command() + [
+        str(YANDEX_RUNNER), "--city", city, "--niche", niche,
+        "--limit", str(max(1, min(limit, 50))), "--output", str(output_path),
+    ]
+    environment = os.environ.copy()
+    environment.update({
+        "PYTHONUTF8": "1",
+        "PYTHONIOENCODING": "utf-8",
+        "LEADHUNT_ROOT": str(LEADHUNT_DIR),
+        "LEADHUNT_BROWSER_HEADLESS": os.getenv("LEADHUNT_BROWSER_HEADLESS", "true"),
+    })
+    timeout = max(180, min(600, 30 + int(limit) * 15))
+    try:
+        completed = subprocess.run(
+            command, cwd=str(ROOT_DIR), env=environment, text=True, encoding="utf-8",
+            errors="replace", stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            timeout=timeout, check=False,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError(f"Парсер Яндекс Карт превысил лимит {timeout} секунд") from error
+    if completed.returncode != 0:
+        tail = "\n".join((completed.stdout or "").splitlines()[-10:])
+        raise RuntimeError(f"Парсер Яндекс Карт завершился с кодом {completed.returncode}: {tail}")
+    if not output_path.exists():
+        raise RuntimeError("Парсер Яндекс Карт не создал файл результата")
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    return [
+        {
+            **item,
+            "source": "Яндекс Карты",
+            "city": item.get("city") or city,
+            "niche": item.get("niche") or niche,
+        }
+        for item in payload if isinstance(item, dict) and _clean(item.get("name"))
+    ][:limit]
+
+
+def collect_leads(city: str, niche: str, sources: list[str], limit: int, on_status: Callable[[str], None] | None = None) -> list[dict[str, Any]]:
+    normalized_sources = [source.lower().strip() for source in sources]
+    collected: list[dict[str, Any]] = []
+    errors: list[str] = []
+    per_source_limit = max(1, limit)
+    for source in normalized_sources:
+        try:
+            if source == "2gis":
+                collected.extend(collect_2gis(city, niche, per_source_limit, on_status))
+            elif source in {"yandex", "яндекс", "яндекс карты"}:
+                collected.extend(collect_yandex(city, niche, per_source_limit, on_status))
+            else:
+                errors.append(f"Источник {source} пока не поддерживается")
+        except Exception as error:  # noqa: BLE001 - return partial results when one source is unavailable
+            errors.append(f"{source}: {error}")
+    unique: dict[str, dict[str, Any]] = {}
+    for lead in collected:
+        identity = "|".join((_clean(lead.get("name")).lower(), _clean(lead.get("city")).lower(), _clean(lead.get("address")).lower()))
+        if identity.strip("|"):
+            unique[identity] = lead
+    result = list(unique.values())[: max(1, limit * len(normalized_sources))]
+    if not result and errors:
+        raise RuntimeError("; ".join(errors))
+    if on_status and errors:
+        on_status(f"Часть источников недоступна: {'; '.join(errors)[:140]}")
+    return result
 
 
 def load_2gis_json(path: Path, city: str, niche: str, limit: int) -> list[dict[str, Any]]:

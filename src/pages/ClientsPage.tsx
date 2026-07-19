@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { FormEvent } from 'react'
 import {
   Building2,
   CalendarClock,
@@ -7,7 +8,6 @@ import {
   CircleCheck,
   Coffee,
   ExternalLink,
-  Globe2,
   MapPin,
   MessageCircle,
   PawPrint,
@@ -83,6 +83,39 @@ type ApiClient = {
   match_score?: number
 }
 
+type ParserSettings = {
+  city: string
+  niches: string[]
+  sources: string[]
+  limit: number
+  updated_at?: string
+}
+
+type ParserRun = {
+  id: string
+  started_at: string
+  finished_at?: string
+  status: 'running' | 'done' | 'error'
+  city: string
+  niche: string
+  source: string
+  limit_count: number
+  found_count: number
+  message: string
+  error?: string
+}
+
+type ApiStats = {
+  total: number
+  contacted: number
+  replied: number
+  calls: number
+  closed: number
+  found_today: number
+  new_today: number
+  stages: Record<ClientStatus, number>
+}
+
 const iconForCategory = (category: string): LucideIcon => {
   if (category.includes('Стомат')) return Building2
   if (category.includes('Салон') || category.includes('Барбер')) return Scissors
@@ -112,6 +145,29 @@ const toClient = (item: ApiClient): Client => {
   }
 }
 
+const defaultParserSettings: ParserSettings = {
+  city: 'Москва',
+  niches: ['салоны красоты', 'стоматологии', 'автосервисы'],
+  sources: ['2gis'],
+  limit: 10,
+}
+
+const emptyStats: ApiStats = {
+  total: 0,
+  contacted: 0,
+  replied: 0,
+  calls: 0,
+  closed: 0,
+  found_today: 0,
+  new_today: 0,
+  stages: { Новый: 0, Написал: 0, Ответили: 0, Созвон: 0, КП: 0, Закрыто: 0, Отказ: 0 },
+}
+
+const sourceLabel = (source: string) => source.split(',').map((item) => {
+  const normalized = item.trim().toLowerCase()
+  return normalized === '2gis' ? '2GIS' : normalized === 'yandex' ? 'Яндекс Карты' : item.trim()
+}).join(', ')
+
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>(() => {
     try {
@@ -130,6 +186,11 @@ export default function ClientsPage() {
   const [sort, setSort] = useState('Сначала релевантные')
   const [isParsing, setIsParsing] = useState(false)
   const [parserMessage, setParserMessage] = useState('')
+  const [parserSettings, setParserSettings] = useState<ParserSettings>(defaultParserSettings)
+  const [parserRuns, setParserRuns] = useState<ParserRun[]>([])
+  const [apiStats, setApiStats] = useState<ApiStats>(emptyStats)
+  const [backendConnected, setBackendConnected] = useState(false)
+  const [showParserSettings, setShowParserSettings] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
 
@@ -138,23 +199,25 @@ export default function ClientsPage() {
     window.localStorage.setItem('semix-crm-clients', JSON.stringify(serializable))
   }, [clients])
 
+  const refreshBackend = async () => {
+    const [clientsResponse, settingsResponse, runsResponse] = await Promise.all([
+      fetch(`${API_BASE}/api/clients`),
+      fetch(`${API_BASE}/api/parser/settings`),
+      fetch(`${API_BASE}/api/parser/runs?limit=8`),
+    ])
+    if (!clientsResponse.ok || !settingsResponse.ok || !runsResponse.ok) throw new Error('Backend CRM недоступен')
+    const clientsPayload = await clientsResponse.json() as { clients: ApiClient[]; stats?: ApiStats }
+    const settingsPayload = await settingsResponse.json() as ParserSettings
+    const runsPayload = await runsResponse.json() as { runs?: ParserRun[] }
+    setClients(Array.isArray(clientsPayload.clients) ? clientsPayload.clients.map(toClient) : [])
+    setApiStats(clientsPayload.stats || emptyStats)
+    setParserSettings(settingsPayload)
+    setParserRuns(runsPayload.runs || [])
+    setBackendConnected(true)
+  }
+
   useEffect(() => {
-    const loadBackendClients = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/api/clients`)
-        if (!response.ok) return
-        const payload = await response.json() as { clients?: ApiClient[] }
-        if (!payload.clients?.length) return
-        setClients((current) => {
-          const localById = new Map(current.map((client) => [client.id, client]))
-          payload.clients?.forEach((item) => localById.set(Number(item.id), toClient(item)))
-          return Array.from(localById.values())
-        })
-      } catch {
-        // The frontend remains usable with localStorage while the API is stopped.
-      }
-    }
-    void loadBackendClients()
+    void refreshBackend().catch(() => setBackendConnected(false))
   }, [])
 
   const filtered = useMemo(() => {
@@ -166,14 +229,61 @@ export default function ClientsPage() {
     if (sort === 'Сначала новые') return [...result].sort((a, b) => b.id - a.id)
     return [...result].sort((a, b) => b.match - a.match)
   }, [clients, niche, query, sort, source, status])
+  const sourceOptions = useMemo(() => Array.from(new Set(clients.map((client) => client.source))).sort(), [clients])
+  const nicheOptions = useMemo(() => Array.from(new Set(clients.map((client) => client.category))).sort(), [clients])
 
-  const counts = useMemo(() => stageOrder.map((stage) => ({ stage, value: clients.filter((client) => client.status === stage).length })), [clients])
-  const contacted = clients.filter((client) => client.status !== 'Новый').length
-  const replied = clients.filter((client) => ['Ответили', 'Созвон', 'КП', 'Закрыто'].includes(client.status)).length
-  const calls = clients.filter((client) => client.status === 'Созвон').length
-  const closed = clients.filter((client) => client.status === 'Закрыто').length
+  const derivedStats = useMemo<ApiStats>(() => {
+    const stages = Object.fromEntries(stageOrder.map((stage) => [stage, clients.filter((client) => client.status === stage).length])) as Record<ClientStatus, number>
+    return {
+      total: clients.length,
+      contacted: clients.length - stages.Новый,
+      replied: stages.Ответили + stages.Созвон + stages.КП + stages.Закрыто,
+      calls: stages.Созвон,
+      closed: stages.Закрыто,
+      found_today: 0,
+      new_today: 0,
+      stages,
+    }
+  }, [clients])
+  const stats = backendConnected ? apiStats : derivedStats
+  const counts = stageOrder.map((stage) => ({ stage, value: stats.stages[stage] || 0 }))
 
-  const updateStatus = (id: number, next: ClientStatus) => setClients((items) => items.map((client) => client.id === id ? { ...client, status: next, tone: toneByStatus[next] } : client))
+  const updateStatus = async (id: number, next: ClientStatus) => {
+    const nextStep = { Новый: 'Написать владельцу', Написал: 'Жду ответа', Ответили: 'Подготовить КП', Созвон: 'Назначить созвон', КП: 'Отправить предложение', Закрыто: 'Запустить проект', Отказ: 'Вернуться позже' }[next]
+    setClients((items) => items.map((client) => client.id === id ? { ...client, status: next, next: nextStep, tone: toneByStatus[next] } : client))
+    if (!backendConnected) return
+    try {
+      const response = await fetch(`${API_BASE}/api/clients/${id}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: next, next_step: nextStep }),
+      })
+      if (!response.ok) throw new Error('Не удалось сохранить статус')
+      await refreshBackend()
+    } catch (error) {
+      setParserMessage(error instanceof Error ? error.message : 'Не удалось сохранить статус')
+    }
+  }
+
+  const createClient = async (client: Client) => {
+    if (!backendConnected) {
+      setClients((items) => [...items, client])
+      setShowModal(false)
+      return
+    }
+    try {
+      const response = await fetch(`${API_BASE}/api/clients`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: client.name, category: client.category, city: client.location, source: client.source }),
+      })
+      if (!response.ok) throw new Error('Не удалось сохранить клиента')
+      await refreshBackend()
+      setShowModal(false)
+    } catch (error) {
+      setParserMessage(error instanceof Error ? error.message : 'Не удалось сохранить клиента')
+    }
+  }
 
   const runParser = async () => {
     if (isParsing) return
@@ -183,7 +293,7 @@ export default function ClientsPage() {
       const start = await fetch(`${API_BASE}/api/clients/parse`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ city: 'Москва', niche: 'салоны красоты', source: '2gis', limit: 10 }),
+        body: JSON.stringify(parserSettings),
       })
       const startPayload = await start.json() as { job_id?: string; error?: string }
       if (!start.ok || !startPayload.job_id) throw new Error(startPayload.error || 'Не удалось запустить парсер')
@@ -195,9 +305,9 @@ export default function ClientsPage() {
         const statusPayload = await statusResponse.json() as { status?: string; message?: string; error?: string; count?: number; clients?: ApiClient[] }
         setParserMessage(statusPayload.message || 'Парсер работает…')
         if (statusPayload.status === 'done') {
-          if (statusPayload.clients?.length) setClients(statusPayload.clients.map(toClient))
           finished = true
           setParserMessage(`Готово: добавлено или обновлено клиентов — ${statusPayload.count ?? statusPayload.clients?.length ?? 0}`)
+          await refreshBackend()
         } else if (statusPayload.status === 'error' || statusPayload.status === 'missing') {
           throw new Error(statusPayload.error || statusPayload.message || 'Парсер завершился с ошибкой')
         }
@@ -216,18 +326,18 @@ export default function ClientsPage() {
           <header className="page-title-block"><h1>Волк с Уолл-стрит</h1><p>База бизнесов для аутрича: сайты, CRM, AI-агенты и автоматизация.</p></header>
 
           <div className="metrics-grid">
-            <MetricCard icon={Building2} label="Всего клиентов" value={clients.length} hint="+32 за неделю" accent="blue" />
-            <MetricCard icon={Send} label="Написал" value={contacted} hint="27% от всех" accent="green" />
-            <MetricCard icon={MessageCircle} label="Ответили" value={replied} hint="9% от всех" accent="orange" />
-            <MetricCard icon={PhoneCall} label="Созвоны" value={calls} hint="4% от всех" accent="purple" />
-            <MetricCard icon={CircleCheck} label="Закрыто" value={closed} hint="1% от всех" accent="green" />
+            <MetricCard icon={Building2} label="Всего клиентов" value={stats.total} hint={backendConnected ? `${stats.found_today} найдено сегодня` : 'Локальный режим'} accent="blue" />
+            <MetricCard icon={Send} label="Написал" value={stats.contacted} hint={stats.total ? `${Math.round(stats.contacted / stats.total * 100)}% от всех` : '0% от всех'} accent="green" />
+            <MetricCard icon={MessageCircle} label="Ответили" value={stats.replied} hint={stats.total ? `${Math.round(stats.replied / stats.total * 100)}% от всех` : '0% от всех'} accent="orange" />
+            <MetricCard icon={PhoneCall} label="Созвоны" value={stats.calls} hint={stats.total ? `${Math.round(stats.calls / stats.total * 100)}% от всех` : '0% от всех'} accent="purple" />
+            <MetricCard icon={CircleCheck} label="Закрыто" value={stats.closed} hint={stats.total ? `${Math.round(stats.closed / stats.total * 100)}% от всех` : '0% от всех'} accent="green" />
           </div>
 
           <div className="toolbar-row clients-toolbar">
             <label className="local-search"><span className="sr-only">Поиск клиентов</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск клиентов..." /><Search size={19} /></label>
             <label className="select-control"><span className="sr-only">Статус</span><select value={status} onChange={(event) => setStatus(event.target.value as 'Все' | ClientStatus)}><option>Все</option>{statusOptions.map((item) => <option key={item}>{item}</option>)}</select></label>
-            <label className="select-control"><span className="sr-only">Источник</span><select value={source} onChange={(event) => setSource(event.target.value)}><option>Все</option><option>2GIS</option><option>Яндекс Карты</option><option>Google Maps</option><option>Telegram</option></select></label>
-            <label className="select-control"><span className="sr-only">Ниша</span><select value={niche} onChange={(event) => setNiche(event.target.value)}><option>Все</option><option>Стоматология</option><option>Салон красоты</option><option>Автосервис</option><option>Юридические услуги</option><option>Кофейня</option></select></label>
+            <label className="select-control"><span className="sr-only">Источник</span><select value={source} onChange={(event) => setSource(event.target.value)}><option>Все</option>{sourceOptions.map((item) => <option key={item}>{item}</option>)}</select></label>
+            <label className="select-control"><span className="sr-only">Ниша</span><select value={niche} onChange={(event) => setNiche(event.target.value)}><option>Все</option>{nicheOptions.map((item) => <option key={item}>{item}</option>)}</select></label>
             <label className="select-control clients-sort"><span className="sr-only">Сортировка</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option>Сначала релевантные</option><option>Сначала новые</option></select></label>
             <button className="solid-action" type="button" onClick={() => setShowModal(true)}><Plus size={19} />Добавить клиента</button>
           </div>
@@ -239,25 +349,28 @@ export default function ClientsPage() {
 
         <aside className="data-side-column">
           <SidePanel className="parser-panel clients-parser">
-            <div className="parser-title"><span className="parser-icon"><PawPrint size={21} /></span><div><h2>Парсер клиентов</h2><p>Собирает бизнесы из 2GIS, Яндекс Карт, Telegram и других источников и автоматически добавляет их в CRM.</p></div></div>
-            <div className="source-chip-row"><SourceChip icon={MapPin} text="2GIS" tone="green" /><SourceChip icon={MapPin} text="Яндекс Карты" tone="red" /><SourceChip icon={MessageCircle} text="Telegram" tone="cyan" /><SourceChip icon={Globe2} text="Google Maps" tone="green" /></div>
-            <div className="parser-stats"><span>Найдено сегодня<strong>41</strong></span><span>Новых<strong>12 <i /></strong></span></div>
-            <div className="parser-filters"><p><Search />Ниши <strong>Салоны, стоматологии, автосервисы</strong></p><p><MapPin />Город <strong>Москва / СПб</strong></p><p><Sparkles />Ключевые слова <strong>сайт, CRM, автоматизация, бот</strong></p></div>
+            <div className="parser-title"><span className="parser-icon"><PawPrint size={21} /></span><div><h2>Парсер клиентов</h2><p>Собирает публичные карточки бизнесов из 2GIS и Яндекс Карт и автоматически добавляет их в CRM.</p></div></div>
+            <div className="source-chip-row">{parserSettings.sources.includes('2gis') && <SourceChip icon={MapPin} text="2GIS" tone="green" />}{parserSettings.sources.includes('yandex') && <SourceChip icon={MapPin} text="Яндекс Карты" tone="red" />}{!parserSettings.sources.length && <span className="empty-panel-copy">Источники не выбраны</span>}</div>
+            <div className="parser-stats"><span>Найдено сегодня<strong>{stats.found_today}</strong></span><span>Новых<strong>{stats.new_today} <i /></strong></span></div>
+            <div className="parser-filters"><p><Search />Ниши <strong>{parserSettings.niches.join(', ') || 'Не настроены'}</strong></p><p><MapPin />Город <strong>{parserSettings.city}</strong></p><p><Sparkles />Источники <strong>{parserSettings.sources.map(sourceLabel).join(', ') || 'Не выбраны'}</strong></p></div>
             <button className="solid-action wide-action" type="button" onClick={runParser} disabled={isParsing}>{isParsing ? <><Sparkles className="spin" size={17} />Парсим клиентов...</> : <><Send size={17} />Запустить парсер</>}</button>
             {parserMessage && <p className="parser-feedback" role="status">{parserMessage}</p>}
-            <button className="secondary-wide-action" type="button"><Settings2 size={16} />Настроить</button>
+            <button className="secondary-wide-action" type="button" onClick={() => setShowParserSettings(true)}><Settings2 size={16} />Настроить</button>
           </SidePanel>
+
+          <SidePanel className="parser-history-panel"><div className="panel-heading-row"><h2>История запусков</h2><button className="text-link" type="button" onClick={() => void refreshBackend()}>Обновить</button></div>{parserRuns.length ? parserRuns.slice(0, 5).map((run) => <div className="parser-run-item" key={run.id}><span className={`run-status ${run.status}`} /><p><strong>{sourceLabel(run.source)} · {run.niche}</strong><span>{new Date(run.started_at).toLocaleString('ru-RU')} · {run.found_count} клиентов</span></p><StatusBadge tone={run.status === 'done' ? 'green' : run.status === 'error' ? 'red' : 'blue'}>{run.status === 'done' ? 'Готово' : run.status === 'error' ? 'Ошибка' : 'В работе'}</StatusBadge></div>) : <p className="empty-panel-copy">Запусков пока нет</p>}</SidePanel>
 
           <SidePanel className="recommendations-panel clients-recommendations"><h2>Рекомендованные клиенты</h2>{clients.slice().sort((a, b) => b.match - a.match).slice(0, 3).map((client, index) => <button type="button" className="client-recommendation" key={client.id} onClick={() => setSelectedClient(client)}><span className={`recommendation-rank ${index === 0 ? 'purple' : index === 1 ? 'blue' : 'orange'}`}>{index + 1}</span><p><strong>{client.name}</strong><span>{client.match}% match</span></p><StatusBadge tone="green">{index === 0 ? 'Высокий приоритет' : 'Стоит написать'}</StatusBadge></button>)}<button className="text-link panel-more-link" type="button">Показать все рекомендации <ExternalLink size={15} /></button></SidePanel>
 
           <SidePanel className="client-stages-panel"><h2>Этапы клиентов</h2><div className="client-stage-grid">{counts.map(({ stage, value }) => <div key={stage}><span>{stage}</span><strong>{value}</strong><i className={toneByStatus[stage]} /></div>)}</div></SidePanel>
 
-          <SidePanel className="nearest-panel clients-nearest"><h2>Ближайшие действия</h2><ClientAction icon={Send} title="Написать владельцу — Стоматология Улыбка" meta="Сегодня, 11:00" badge="Сегодня" tone="blue" /><ClientAction icon={PhoneCall} title="Созвон с владельцем — DrivePro" meta="Завтра, 14:00" badge="Завтра" tone="green" /><ClientAction icon={MessageCircle} title="Отправить КП — Партнёр" meta="21 мая, 12:00" badge="21 мая" tone="purple" /><ClientAction icon={CalendarClock} title="Напомнить о себе — Салон LIME" meta="22 мая, 10:00" badge="22 мая" tone="orange" /><button className="text-link panel-more-link" type="button">Все действия <ExternalLink size={15} /></button></SidePanel>
+          <SidePanel className="nearest-panel clients-nearest"><h2>Ближайшие действия</h2>{clients.slice(0, 4).map((client) => <ClientAction key={client.id} icon={client.status === 'Созвон' ? PhoneCall : client.status === 'КП' ? MessageCircle : CalendarClock} title={`${client.next} — ${client.name}`} meta={`${client.location} · ${client.source}`} badge={client.status} tone={toneByStatus[client.status]} />)}{!clients.length && <p className="empty-panel-copy">Добавьте клиентов через парсер</p>}<button className="text-link panel-more-link" type="button">Все действия <ExternalLink size={15} /></button></SidePanel>
         </aside>
       </div>
 
-      {showModal && <ClientModal onClose={() => setShowModal(false)} onCreate={(client) => { setClients((items) => [...items, client]); setShowModal(false) }} nextId={Math.max(...clients.map((client) => client.id)) + 1} />}
+      {showModal && <ClientModal onClose={() => setShowModal(false)} onCreate={(client) => void createClient(client)} nextId={(clients.length ? Math.max(...clients.map((client) => client.id)) : 0) + 1} />}
       {selectedClient && <ClientDetails client={selectedClient} onClose={() => setSelectedClient(null)} />}
+      {showParserSettings && <ParserSettingsModal settings={parserSettings} onClose={() => setShowParserSettings(false)} onSave={(next) => { setParserSettings(next); setShowParserSettings(false); setParserMessage('Настройки парсера сохранены') }} />}
     </div>
   )
 }
@@ -276,6 +389,43 @@ function ClientModal({ onClose, onCreate, nextId }: { onClose: () => void; onCre
   const [category, setCategory] = useState('')
   const [city, setCity] = useState('Москва')
   return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><form className="compact-modal client-modal" onSubmit={(event) => { event.preventDefault(); if (!name.trim()) return; onCreate({ id: nextId, name: name.trim(), category: category.trim() || 'Бизнес', location: city, source: 'Добавлен вручную', added: 'Сегодня', pain: 'Нужно уточнить задачи и точки роста бизнеса.', tags: ['Новый лид'], status: 'Новый', next: 'Найти контакт', match: 70, tone: 'blue', icon: Building2 }) }} onMouseDown={(event) => event.stopPropagation()}><button className="modal-close" type="button" onClick={onClose} aria-label="Закрыть"><X size={20} /></button><span className="metric-icon blue"><Building2 /></span><h2>Новый клиент</h2><label htmlFor="client-name">Название бизнеса</label><input id="client-name" autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="Например, Studio Forma" /><label htmlFor="client-category">Ниша</label><input id="client-category" value={category} onChange={(event) => setCategory(event.target.value)} placeholder="Например, стоматология" /><label htmlFor="client-city">Город</label><select id="client-city" value={city} onChange={(event) => setCity(event.target.value)}><option>Москва</option><option>Санкт-Петербург</option><option>Казань</option><option>Другой город</option></select><button className="solid-action wide-action" type="submit" disabled={!name.trim()}><Plus size={18} />Сохранить клиента</button></form></div>
+}
+
+function ParserSettingsModal({ settings, onClose, onSave }: { settings: ParserSettings; onClose: () => void; onSave: (settings: ParserSettings) => void }) {
+  const [city, setCity] = useState(settings.city)
+  const [niches, setNiches] = useState(settings.niches.join(', '))
+  const [sources, setSources] = useState(settings.sources)
+  const [limit, setLimit] = useState(settings.limit)
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const toggleSource = (source: string) => setSources((items) => items.includes(source) ? items.filter((item) => item !== source) : [...items, source])
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    const parsedNiches = niches.split(/[,\n]/).map((item) => item.trim()).filter(Boolean)
+    if (!parsedNiches.length || !sources.length) {
+      setError('Добавьте нишу и выберите хотя бы один источник')
+      return
+    }
+    setIsSaving(true)
+    setError('')
+    try {
+      const response = await fetch(`${API_BASE}/api/parser/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ city, niches: parsedNiches, sources, limit }),
+      })
+      const payload = await response.json() as ParserSettings & { detail?: string }
+      if (!response.ok) throw new Error(payload.detail || 'Не удалось сохранить настройки')
+      onSave(payload)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Не удалось сохранить настройки')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><form className="compact-modal parser-settings-modal" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}><button className="modal-close" type="button" onClick={onClose} aria-label="Закрыть"><X size={20} /></button><span className="metric-icon blue"><Settings2 /></span><h2>Настройки парсера</h2><p className="modal-subtitle">Укажите, где и сколько бизнесов искать. Несколько ниш можно разделить запятыми.</p><label htmlFor="parser-city">Город</label><input id="parser-city" value={city} onChange={(event) => setCity(event.target.value)} placeholder="Москва" /><label htmlFor="parser-niches">Ниши</label><textarea id="parser-niches" value={niches} onChange={(event) => setNiches(event.target.value)} placeholder="салоны красоты, стоматологии" /><label>Источники</label><div className="parser-source-options"><button className={sources.includes('2gis') ? 'active' : ''} type="button" onClick={() => toggleSource('2gis')}><MapPin size={16} />2GIS{sources.includes('2gis') && <Check size={15} />}</button><button className={sources.includes('yandex') ? 'active' : ''} type="button" onClick={() => toggleSource('yandex')}><MapPin size={16} />Яндекс Карты{sources.includes('yandex') && <Check size={15} />}</button></div><label htmlFor="parser-limit">Лимит на нишу и источник: <strong>{limit}</strong></label><input id="parser-limit" type="range" min="1" max="50" value={limit} onChange={(event) => setLimit(Number(event.target.value))} />{error && <p className="form-error">{error}</p>}<button className="solid-action wide-action" type="submit" disabled={isSaving}>{isSaving ? <><Sparkles className="spin" size={17} />Сохраняю…</> : <><Check size={17} />Сохранить настройки</>}</button></form></div>
 }
 
 function ClientDetails({ client, onClose }: { client: Client; onClose: () => void }) { const Icon = client.icon; return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><section className="compact-modal client-details-modal" role="dialog" aria-modal="true" aria-labelledby="client-details-title" onMouseDown={(event) => event.stopPropagation()}><button className="modal-close" type="button" onClick={onClose} aria-label="Закрыть"><X size={20} /></button><span className={`metric-icon ${client.tone}`}><Icon /></span><h2 id="client-details-title">{client.name}</h2><p className="modal-subtitle">{client.category} · {client.location} · {client.source}</p><div className="details-grid"><span>Статус<strong>{client.status}</strong></span><span>Релевантность<strong>{client.match}% match</strong></span><span>Следующий шаг<strong>{client.next}</strong></span><span>Добавлен<strong>{client.added}</strong></span></div><p className="details-pain">{client.pain}</p><div className="tag-row">{client.tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}</div><button className="solid-action wide-action" type="button" onClick={onClose}>Готово</button></section></div> }
