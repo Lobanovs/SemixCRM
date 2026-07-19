@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
+  Archive,
+  ArrowLeft,
   Building2,
   CalendarClock,
   CarFront,
@@ -24,6 +26,7 @@ import {
   Sparkles,
   Star,
   Store,
+  RotateCcw,
   Trash2,
   UsersRound,
   X,
@@ -113,6 +116,8 @@ type ApiClient = {
   website?: string
   card_url?: string
   contacts?: Contact[]
+  archived?: number
+  archived_at?: string
 }
 
 type ParserSettings = { city: string; niches: string[]; sources: string[]; limit: number; updated_at?: string }
@@ -127,9 +132,15 @@ type ParserRun = {
   limit_count: number
   found_count: number
   skipped_count?: number
+  parsed_count?: number
+  result_count?: number
+  snapshot_available?: boolean
   message: string
   error?: string
 }
+type ParserRunResult = { client_id: number | null; outcome: 'inserted' | 'duplicate'; position: number; created_at: string; snapshot: ApiClient }
+type ParserRunDetail = ParserRun & { results: ParserRunResult[] }
+type ArchivedClient = Client & { archivedAt: string }
 type ApiStats = {
   total: number
   contacted: number
@@ -165,6 +176,7 @@ const toClient = (item: ApiClient): Client => {
     tone: toneByStatus[status], icon: iconForCategory(category),
   }
 }
+const toArchivedClient = (item: ApiClient): ArchivedClient => ({ ...toClient(item), archivedAt: item.archived_at || '' })
 
 const defaultParserSettings: ParserSettings = { city: 'Москва', niches: ['салоны красоты'], sources: ['2gis'], limit: 10 }
 const emptyStats: ApiStats = {
@@ -176,6 +188,7 @@ const sourceLabel = (source: string) => source.split(',').map((item) => {
   return normalized === '2gis' ? '2GIS' : normalized === 'yandex' ? 'Яндекс Карты' : item.trim()
 }).join(', ')
 const scoreTone = (score: number): UiAccent => score >= 14 ? 'green' : score >= 8 ? 'orange' : 'blue'
+const runCount = (run: ParserRun) => run.parsed_count || (run.found_count || 0) + (run.skipped_count || 0)
 
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([])
@@ -188,6 +201,12 @@ export default function ClientsPage() {
   const [parserMessage, setParserMessage] = useState('')
   const [parserSettings, setParserSettings] = useState<ParserSettings>(defaultParserSettings)
   const [parserRuns, setParserRuns] = useState<ParserRun[]>([])
+  const [archivedClients, setArchivedClients] = useState<ArchivedClient[]>([])
+  const [pageView, setPageView] = useState<'clients' | 'history' | 'archive'>('clients')
+  const [selectedRun, setSelectedRun] = useState<ParserRunDetail | null>(null)
+  const [isRunLoading, setIsRunLoading] = useState(false)
+  const [isRestoring, setIsRestoring] = useState(false)
+  const [showRestoreAllConfirm, setShowRestoreAllConfirm] = useState(false)
   const [apiStats, setApiStats] = useState<ApiStats>(emptyStats)
   const [backendConnected, setBackendConnected] = useState(false)
   const [showParserSettings, setShowParserSettings] = useState(false)
@@ -198,7 +217,7 @@ export default function ClientsPage() {
 
   const refreshBackend = async () => {
     const [clientsResponse, settingsResponse, runsResponse] = await Promise.all([
-      fetch(`${API_BASE}/api/clients`), fetch(`${API_BASE}/api/parser/settings`), fetch(`${API_BASE}/api/parser/runs?limit=8`),
+      fetch(`${API_BASE}/api/clients`), fetch(`${API_BASE}/api/parser/settings`), fetch(`${API_BASE}/api/parser/runs?limit=20`),
     ])
     if (!clientsResponse.ok || !settingsResponse.ok || !runsResponse.ok) throw new Error('Backend CRM недоступен')
     const clientsPayload = await clientsResponse.json() as { clients: ApiClient[]; stats?: ApiStats }
@@ -208,6 +227,11 @@ export default function ClientsPage() {
     setApiStats(clientsPayload.stats || emptyStats)
     setParserSettings(settingsPayload)
     setParserRuns(runsPayload.runs || [])
+    const archivedResponse = await fetch(`${API_BASE}/api/clients/archived`)
+    if (archivedResponse.ok) {
+      const archivedPayload = await archivedResponse.json() as { clients?: ApiClient[] }
+      setArchivedClients(Array.isArray(archivedPayload.clients) ? archivedPayload.clients.map(toArchivedClient) : [])
+    }
     setBackendConnected(true)
   }
 
@@ -217,6 +241,10 @@ export default function ClientsPage() {
       setParserMessage('API недоступен. Запустите проект командой npm run dev — она поднимет frontend и backend вместе.')
     })
   }, [])
+
+  useEffect(() => {
+    window.scrollTo({ top: 0 })
+  }, [pageView])
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase('ru')
@@ -323,6 +351,55 @@ export default function ClientsPage() {
     }
   }
 
+  const openRun = async (run: ParserRun) => {
+    setIsRunLoading(true)
+    setParserMessage('')
+    try {
+      const response = await fetch(`${API_BASE}/api/parser/runs/${encodeURIComponent(run.id)}`)
+      const payload = await response.json() as ParserRunDetail & { detail?: string }
+      if (!response.ok) throw new Error(payload.detail || 'Не удалось открыть запуск')
+      setSelectedRun(payload)
+    } catch (error) {
+      setParserMessage(error instanceof Error ? error.message : 'Не удалось открыть запуск')
+    } finally {
+      setIsRunLoading(false)
+    }
+  }
+
+  const restoreArchived = async (client: ArchivedClient) => {
+    setIsRestoring(true)
+    try {
+      const response = await fetch(`${API_BASE}/api/clients/${client.id}/restore`, { method: 'POST' })
+      const payload = await response.json() as ApiClient & { detail?: string }
+      if (!response.ok) throw new Error(payload.detail || 'Не удалось восстановить клиента')
+      setParserMessage(`Клиент «${client.name}» восстановлен`)
+      await refreshBackend()
+    } catch (error) {
+      setParserMessage(error instanceof Error ? error.message : 'Не удалось восстановить клиента')
+    } finally {
+      setIsRestoring(false)
+    }
+  }
+
+  const restoreAllArchived = async () => {
+    setIsRestoring(true)
+    try {
+      const response = await fetch(`${API_BASE}/api/clients/restore-all`, { method: 'POST' })
+      const payload = await response.json() as { restored_count?: number; detail?: string }
+      if (!response.ok) throw new Error(payload.detail || 'Не удалось восстановить клиентов')
+      setShowRestoreAllConfirm(false)
+      setParserMessage(`Восстановлено клиентов: ${payload.restored_count || 0}`)
+      await refreshBackend()
+    } catch (error) {
+      setParserMessage(error instanceof Error ? error.message : 'Не удалось восстановить клиентов')
+    } finally {
+      setIsRestoring(false)
+    }
+  }
+
+  if (pageView === 'history') return <div className="data-page clients-page"><ParserHistoryView runs={parserRuns} selectedRun={selectedRun} isLoading={isRunLoading} onBack={() => { setSelectedRun(null); setPageView('clients') }} onOpenRun={(run) => void openRun(run)} /></div>
+  if (pageView === 'archive') return <div className="data-page clients-page"><ArchiveView clients={archivedClients} isRestoring={isRestoring} onBack={() => setPageView('clients')} onRestore={(client) => void restoreArchived(client)} onRestoreAll={() => setShowRestoreAllConfirm(true)} />{showRestoreAllConfirm && <ConfirmRestoreAllModal isRestoring={isRestoring} onClose={() => setShowRestoreAllConfirm(false)} onConfirm={() => void restoreAllArchived()} />}</div>
+
   return (
     <div className="data-page clients-page">
       <div className="data-page-grid">
@@ -343,6 +420,8 @@ export default function ClientsPage() {
             <label className="select-control"><span className="sr-only">Источник</span><select value={source} onChange={(event) => setSource(event.target.value)}><option>Все</option>{sourceOptions.map((item) => <option key={item}>{item}</option>)}</select></label>
             <label className="select-control"><span className="sr-only">Ниша</span><select value={niche} onChange={(event) => setNiche(event.target.value)}><option>Все</option>{nicheOptions.map((item) => <option key={item}>{item}</option>)}</select></label>
             <label className="select-control clients-sort"><span className="sr-only">Сортировка</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option>Сначала лучшие лиды</option><option>Больше отзывов</option><option>Сначала новые</option></select></label>
+            <button className="toolbar-secondary-action" type="button" onClick={() => setPageView('history')}><CalendarClock size={18} />История</button>
+            <button className="toolbar-secondary-action" type="button" onClick={() => setPageView('archive')}><Archive size={18} />Скрытые <span>{archivedClients.length}</span></button>
             <button className="solid-action" type="button" onClick={() => setShowModal(true)}><Plus size={18} />Добавить</button>
             <button className="danger-outline-action" type="button" onClick={() => setDeleteTarget({ kind: 'all' })} disabled={!clients.length}><Trash2 size={18} />Очистить</button>
           </div>
@@ -365,7 +444,7 @@ export default function ClientsPage() {
 
           <SidePanel className="lead-score-guide"><h2>Как считаются очки</h2><div className="score-guide-list"><span><b>+5</b> нет сайта</span><span><b>+4</b> Telegram, e-mail или WhatsApp</span><span><b>+3</b> больше 30 отзывов</span><span><b>+2</b> рейтинг выше 4,0</span></div><p>Также учитываются телефон, филиалы и ниша с высоким чеком. Максимум — 23 очка.</p></SidePanel>
 
-          <SidePanel className="parser-history-panel"><div className="panel-heading-row"><h2>История запусков</h2><button className="text-link" type="button" onClick={() => void refreshBackend()}>Обновить</button></div>{parserRuns.length ? parserRuns.slice(0, 5).map((run) => <div className="parser-run-item" key={run.id}><span className={`run-status ${run.status}`} /><p><strong>{sourceLabel(run.source)} · {run.niche}</strong><span>{new Date(run.started_at).toLocaleString('ru-RU')} · новых {run.found_count}{run.skipped_count ? ` · дублей ${run.skipped_count}` : ''}</span></p><StatusBadge tone={run.status === 'done' ? 'green' : run.status === 'error' ? 'red' : 'blue'}>{run.status === 'done' ? 'Готово' : run.status === 'error' ? 'Ошибка' : 'В работе'}</StatusBadge></div>) : <p className="empty-panel-copy">Запусков пока нет</p>}</SidePanel>
+          <SidePanel className="parser-history-panel"><div className="panel-heading-row"><h2>История запусков</h2><button className="text-link" type="button" onClick={() => setPageView('history')}>Открыть все</button></div>{parserRuns.length ? parserRuns.slice(0, 5).map((run) => <button type="button" className="parser-run-item" key={run.id} onClick={() => { setPageView('history'); void openRun(run) }}><span className={`run-status ${run.status}`} /><p><strong>{sourceLabel(run.source)} · {run.niche}</strong><span>{new Date(run.started_at).toLocaleString('ru-RU')} · новых {run.found_count}{run.skipped_count ? ` · дублей ${run.skipped_count}` : ''}</span></p><StatusBadge tone={run.status === 'done' ? 'green' : run.status === 'error' ? 'red' : 'blue'}>{run.status === 'done' ? 'Готово' : run.status === 'error' ? 'Ошибка' : 'В работе'}</StatusBadge></button>) : <p className="empty-panel-copy">Запусков пока нет</p>}</SidePanel>
 
           <SidePanel className="recommendations-panel clients-recommendations"><h2>Лучшие лиды</h2>{clients.slice().sort((a, b) => b.score - a.score).slice(0, 3).map((client, index) => <button type="button" className="client-recommendation" key={client.id} onClick={() => setSelectedClient(client)}><span className={`recommendation-rank ${index === 0 ? 'purple' : index === 1 ? 'blue' : 'orange'}`}>{index + 1}</span><p><strong>{client.name}</strong><span>{client.score}/{client.scoreMax} очков · {client.reviews || 0} отзывов</span></p><StatusBadge tone={scoreTone(client.score)}>{client.score >= 14 ? 'Горячий' : 'Проверить'}</StatusBadge></button>)}{!clients.length && <p className="empty-panel-copy">Запустите парсер, чтобы увидеть рекомендации</p>}</SidePanel>
 
@@ -381,6 +460,50 @@ export default function ClientsPage() {
       {deleteTarget && <ConfirmDeleteModal target={deleteTarget} isDeleting={isDeleting} onClose={() => setDeleteTarget(null)} onConfirm={() => void deleteClients()} />}
     </div>
   )
+}
+
+function ParserHistoryView({ runs, selectedRun, isLoading, onBack, onOpenRun }: { runs: ParserRun[]; selectedRun: ParserRunDetail | null; isLoading: boolean; onBack: () => void; onOpenRun: (run: ParserRun) => void }) {
+  const [query, setQuery] = useState('')
+  const [status, setStatus] = useState('Все')
+  const [source, setSource] = useState('Все')
+  const sources = Array.from(new Set(runs.flatMap((run) => run.source.split(',').map((item) => item.trim())))).filter(Boolean)
+  const filtered = runs.filter((run) => {
+    const haystack = `${run.city} ${run.niche} ${run.source} ${run.message}`.toLocaleLowerCase('ru')
+    return (!query.trim() || haystack.includes(query.trim().toLocaleLowerCase('ru'))) && (status === 'Все' || run.status === status) && (source === 'Все' || run.source.toLocaleLowerCase().includes(source.toLocaleLowerCase()))
+  })
+  return <div className="history-page-shell">
+    <div className="history-page-header"><button className="back-link" type="button" onClick={onBack}><ArrowLeft size={17} />К клиентам</button><div><p className="eyebrow-label">Wolf workspace</p><h1>История запусков парсера</h1><p>Каждый запуск хранит результат поиска, включая дубли, рейтинги, отзывы и контакты.</p></div></div>
+    <div className="history-layout">
+      <section className="history-list-card"><div className="history-toolbar"><label className="local-search"><span className="sr-only">Поиск запусков</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Город, ниша или источник" /><Search size={18} /></label><select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Статус запуска"><option>Все</option><option value="done">Готово</option><option value="running">В работе</option><option value="error">Ошибка</option></select><select value={source} onChange={(event) => setSource(event.target.value)} aria-label="Источник"> <option>Все</option>{sources.map((item) => <option key={item}>{item}</option>)}</select></div>{filtered.length ? filtered.map((run) => <button type="button" className={`history-run-card ${selectedRun?.id === run.id ? 'selected' : ''}`} key={run.id} onClick={() => onOpenRun(run)}><span className={`run-status ${run.status}`} /><div className="history-run-main"><div className="history-run-title"><strong>{sourceLabel(run.source)}</strong><span>{new Date(run.started_at).toLocaleString('ru-RU')}</span></div><h2>{run.city} · {run.niche}</h2><p>{run.message || 'Запуск парсера'}</p><div className="history-run-meta"><span><b>{runCount(run)}</b> обработано</span><span><b>{run.found_count || 0}</b> новых</span><span><b>{run.skipped_count || 0}</b> дублей</span></div></div><StatusBadge tone={run.status === 'done' ? 'green' : run.status === 'error' ? 'red' : 'blue'}>{run.status === 'done' ? 'Готово' : run.status === 'error' ? 'Ошибка' : 'В работе'}</StatusBadge></button>) : <div className="history-empty"><Archive size={28} /><h2>Запусков не найдено</h2><p>Измените фильтр или запустите парсер ещё раз.</p></div>}</section>
+      <section className="history-detail-card">{isLoading ? <div className="history-empty"><Sparkles className="spin" size={25} /><p>Загружаю снимок запуска…</p></div> : selectedRun ? <RunDetailPanel run={selectedRun} /> : <div className="history-empty"><FileClockIcon /><h2>Выберите запуск</h2><p>Нажмите на карточку слева, чтобы увидеть именно найденных клиентов.</p></div>}</section>
+    </div>
+  </div>
+}
+
+function FileClockIcon() { return <CalendarClock size={30} /> }
+
+function RunDetailPanel({ run }: { run: ParserRunDetail }) {
+  return <div className="run-detail-content"><div className="run-detail-heading"><div><p className="eyebrow-label">Снимок запуска</p><h2>{run.city} · {run.niche}</h2><p>{sourceLabel(run.source)} · {new Date(run.started_at).toLocaleString('ru-RU')}</p></div><StatusBadge tone={run.status === 'done' ? 'green' : run.status === 'error' ? 'red' : 'blue'}>{run.status === 'done' ? 'Готово' : run.status === 'error' ? 'Ошибка' : 'В работе'}</StatusBadge></div><div className="run-detail-stats"><span><strong>{runCount(run)}</strong>обработано</span><span><strong>{run.found_count || 0}</strong>новых</span><span><strong>{run.skipped_count || 0}</strong>дублей</span></div>{run.snapshot_available ? <div className="run-results-list">{run.results.map((result) => <RunResultCard key={`${run.id}-${result.position}`} result={result} />)}</div> : <div className="legacy-run-notice"><Archive size={22} /><div><strong>Снимок недоступен для этого старого запуска</strong><p>Этот запуск был создан до включения истории результатов. Новые запуски будут хранить каждого клиента, включая дубли.</p></div></div>}</div>
+}
+
+function RunResultCard({ result }: { result: ParserRunResult }) {
+  const client = toClient(result.snapshot)
+  return <article className="run-result-card"><div className="run-result-icon"><Store size={20} /></div><div className="run-result-body"><div className="run-result-title"><h3>{client.name}</h3><span className={`run-outcome ${result.outcome}`}>{result.outcome === 'inserted' ? 'Добавлен' : 'Дубликат'}</span></div><p>{client.category} · {client.location} · {client.source}</p><div className="run-result-proof"><span><Star size={14} fill="currentColor" /> {client.rating ?? '—'}</span><span><MessageSquareText size={14} /> {client.reviews ?? 0} отзывов</span><strong>{client.score}/{client.scoreMax} очков</strong></div><div className="run-result-contacts">{client.contacts.slice(0, 4).map((contact) => <ContactLink contact={contact} key={`${contact.type}-${contact.value}`} />)}{client.cardUrl && <a href={safeHref(client.cardUrl)} target="_blank" rel="noreferrer"><ExternalLink size={14} />Карточка источника</a>}</div></div></article>
+}
+
+function ArchiveView({ clients, isRestoring, onBack, onRestore, onRestoreAll }: { clients: ArchivedClient[]; isRestoring: boolean; onBack: () => void; onRestore: (client: ArchivedClient) => void; onRestoreAll: () => void }) {
+  const [query, setQuery] = useState('')
+  const filtered = clients.filter((client) => `${client.name} ${client.category} ${client.location} ${client.source}`.toLocaleLowerCase('ru').includes(query.trim().toLocaleLowerCase('ru')))
+  return <div className="archive-page-shell"><div className="archive-page-header"><button className="back-link" type="button" onClick={onBack}><ArrowLeft size={17} />К клиентам</button><div><p className="eyebrow-label">Архив базы</p><h1>Скрытые клиенты</h1><p>Очистка только убирает клиентов из рабочего списка. Здесь их можно вернуть без повторного парсинга.</p></div><button className="solid-action" type="button" onClick={onRestoreAll} disabled={!clients.length || isRestoring}><RotateCcw size={17} />Восстановить всех</button></div><div className="archive-toolbar"><label className="local-search"><span className="sr-only">Поиск скрытых клиентов</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по архиву" /><Search size={18} /></label><span className="archive-count">{clients.length} в архиве</span></div>{filtered.length ? <div className="archive-client-grid">{filtered.map((client) => <ArchiveClientCard client={client} isRestoring={isRestoring} onRestore={onRestore} key={client.id} />)}</div> : <EmptyState>{clients.length ? 'По этому запросу клиентов нет.' : 'Архив пуст. Скрытые клиенты появятся здесь после очистки списка.'}</EmptyState>}</div>
+}
+
+function ArchiveClientCard({ client, isRestoring, onRestore }: { client: ArchivedClient; isRestoring: boolean; onRestore: (client: ArchivedClient) => void }) {
+  const Icon = client.icon
+  return <article className="archive-client-card"><div className="archive-card-top"><span className={`client-logo ${client.tone}`}><Icon size={21} /></span><span className="archived-badge">Скрыт {client.archivedAt ? new Date(client.archivedAt).toLocaleDateString('ru-RU') : ''}</span></div><h2>{client.name}</h2><p>{client.category} · {client.location}</p><div className="client-proof"><span><Star size={14} fill="currentColor" />{client.rating ?? '—'}</span><span><MessageSquareText size={14} />{client.reviews ?? 0} отзывов</span><strong>{client.score}/{client.scoreMax} очков</strong></div><div className="archive-card-links">{client.cardUrl && <a href={safeHref(client.cardUrl)} target="_blank" rel="noreferrer"><ExternalLink size={14} />Источник</a>}{client.contacts.slice(0, 2).map((contact) => <ContactLink contact={contact} key={`${contact.type}-${contact.value}`} />)}</div><button className="secondary-wide-action" type="button" onClick={() => onRestore(client)} disabled={isRestoring}><RotateCcw size={16} />Восстановить</button></article>
+}
+
+function ConfirmRestoreAllModal({ isRestoring, onClose, onConfirm }: { isRestoring: boolean; onClose: () => void; onConfirm: () => void }) {
+  return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><section className="compact-modal confirm-delete-modal restore-confirm-modal" role="alertdialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><span className="metric-icon blue"><RotateCcw size={23} /></span><h2>Восстановить всех клиентов?</h2><p>Все скрытые записи снова появятся в рабочем списке. История запусков останется без изменений.</p><div className="confirm-actions"><button type="button" onClick={onClose} disabled={isRestoring}>Отмена</button><button className="solid-action" type="button" onClick={onConfirm} disabled={isRestoring}>{isRestoring ? 'Восстанавливаю…' : 'Восстановить всех'}</button></div></section></div>
 }
 
 function ClientRow({ client, onStatusChange, onDetails, onDelete }: { client: Client; onStatusChange: (id: number, status: ClientStatus) => void; onDetails: (client: Client) => void; onDelete: (client: Client) => void }) {
@@ -426,10 +549,12 @@ function ParserSettingsModal({ settings, onClose, onSave }: { settings: ParserSe
   const [niches, setNiches] = useState(settings.niches)
   const [sources, setSources] = useState(settings.sources)
   const [limit, setLimit] = useState(settings.limit)
+  const [nicheQuery, setNicheQuery] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState('')
   const toggleSource = (value: string) => setSources((items) => items.includes(value) ? items.filter((item) => item !== value) : [...items, value])
   const toggleNiche = (value: string) => setNiches((items) => items.includes(value) ? items.filter((item) => item !== value) : [...items, value])
+  const visibleNiches = businessNiches.filter((item) => item.toLocaleLowerCase('ru').includes(nicheQuery.trim().toLocaleLowerCase('ru')))
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     if (!niches.length || !sources.length) { setError('Выберите хотя бы одну нишу и один источник'); return }
@@ -448,7 +573,7 @@ function ParserSettingsModal({ settings, onClose, onSave }: { settings: ParserSe
       setIsSaving(false)
     }
   }
-  return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><form className="compact-modal parser-settings-modal" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}><button className="modal-close" type="button" onClick={onClose} aria-label="Закрыть"><X size={20} /></button><span className="metric-icon blue"><Settings2 /></span><h2>Настройки парсера</h2><p className="modal-subtitle">Выберите город и одну или несколько ниш. Ручной ввод больше не нужен.</p><label htmlFor="parser-city">Город</label><select id="parser-city" value={city} onChange={(event) => setCity(event.target.value)}>{majorRussianCities.map((item) => <option key={item}>{item}</option>)}</select><label>Ниши <strong>({niches.length} выбрано)</strong></label><div className="parser-niche-grid">{businessNiches.map((item) => <label className={niches.includes(item) ? 'active' : ''} key={item}><input type="checkbox" checked={niches.includes(item)} onChange={() => toggleNiche(item)} /><span>{item}</span>{niches.includes(item) && <Check size={15} />}</label>)}</div><label>Источники</label><div className="parser-source-options"><button className={sources.includes('2gis') ? 'active' : ''} type="button" onClick={() => toggleSource('2gis')}><MapPin size={16} />2GIS{sources.includes('2gis') && <Check size={15} />}</button><button className={sources.includes('yandex') ? 'active' : ''} type="button" onClick={() => toggleSource('yandex')}><MapPin size={16} />Яндекс Карты{sources.includes('yandex') && <Check size={15} />}</button></div><label htmlFor="parser-limit">Лимит на нишу и источник: <strong>{limit}</strong></label><input id="parser-limit" type="range" min="1" max="50" value={limit} onChange={(event) => setLimit(Number(event.target.value))} />{error && <p className="form-error">{error}</p>}<button className="solid-action wide-action" type="submit" disabled={isSaving}>{isSaving ? <><Sparkles className="spin" size={17} />Сохраняю…</> : <><Check size={17} />Сохранить настройки</>}</button></form></div>
+  return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><form className="compact-modal parser-settings-modal" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}><header className="parser-modal-header"><span className="metric-icon blue"><Settings2 /></span><div><h2>Настройки парсера</h2><p className="modal-subtitle">Выберите город, ниши и источники. Ручной ввод больше не нужен.</p></div><button className="modal-close" type="button" onClick={onClose} aria-label="Закрыть"><X size={20} /></button></header><div className="parser-modal-body"><div className="parser-modal-section"><label htmlFor="parser-city">Город</label><select id="parser-city" value={city} onChange={(event) => setCity(event.target.value)}>{majorRussianCities.map((item) => <option key={item}>{item}</option>)}</select></div><div className="parser-modal-section parser-niches-section"><div className="parser-section-heading"><label>Ниши</label><strong>{niches.length} выбрано</strong></div><label className="parser-niche-search"><span className="sr-only">Поиск ниши</span><input value={nicheQuery} onChange={(event) => setNicheQuery(event.target.value)} placeholder="Фильтр по списку ниш" /><Search size={16} /></label><div className="parser-niche-grid">{visibleNiches.map((item) => <label className={niches.includes(item) ? 'active' : ''} key={item}><input type="checkbox" checked={niches.includes(item)} onChange={() => toggleNiche(item)} /><span className="parser-checkbox-mark">{niches.includes(item) && <Check size={14} />}</span><span>{item}</span></label>)}</div></div><div className="parser-modal-section"><div className="parser-section-heading"><label>Источники</label><strong>{sources.length} выбрано</strong></div><div className="parser-source-options"><button aria-pressed={sources.includes('2gis')} className={sources.includes('2gis') ? 'active' : ''} type="button" onClick={() => toggleSource('2gis')}><MapPin size={16} />2GIS{sources.includes('2gis') && <Check size={15} />}</button><button aria-pressed={sources.includes('yandex')} className={sources.includes('yandex') ? 'active' : ''} type="button" onClick={() => toggleSource('yandex')}><MapPin size={16} />Яндекс Карты{sources.includes('yandex') && <Check size={15} />}</button></div></div><div className="parser-modal-section parser-limit-section"><label htmlFor="parser-limit">Лимит на нишу и источник: <strong>{limit}</strong></label><input id="parser-limit" type="range" min="1" max="50" value={limit} onChange={(event) => setLimit(Number(event.target.value))} /></div></div><footer className="parser-modal-footer">{error && <p className="form-error">{error}</p>}<button className="solid-action wide-action" type="submit" disabled={isSaving}>{isSaving ? <><Sparkles className="spin" size={17} />Сохраняю…</> : <><Check size={17} />Сохранить настройки</>}</button></footer></form></div>
 }
 
 function ClientDetails({ client, onClose }: { client: Client; onClose: () => void }) {
