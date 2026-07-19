@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import ProjectsPage from './pages/ProjectsPage'
 
 type Accent = 'blue' | 'green' | 'purple' | 'orange' | 'gray'
 
@@ -150,6 +151,8 @@ function App() {
             onOpen={selectSection}
             onClearSearch={() => setSearch('')}
           />
+        ) : active === 'Мои проекты' ? (
+          <ProjectsPage />
         ) : (
           <SectionPlaceholder title={active} onBack={() => selectSection('Главная')} />
         )}
