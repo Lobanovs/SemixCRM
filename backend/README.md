@@ -10,8 +10,12 @@ cd C:\Users\Admin\Desktop\SemixCRM
 py -3 -m venv backend\.venv
 backend\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
 py -3 -m playwright install chromium
-backend\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+npm run dev
 ```
+
+`npm run dev` запускает frontend на `http://127.0.0.1:5173` и backend на
+`http://127.0.0.1:8000` в одном процессе. Если API уже запущен, новый процесс
+использует его и не создаёт второй сервер.
 
 Парсер использует текущую установку `py -3` (или `LEADHUNT_PYTHON`), потому
 что прежний LeadHunt virtualenv больше невалиден. При переносе проекта можно

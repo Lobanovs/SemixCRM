@@ -217,7 +217,10 @@ export default function ClientsPage() {
   }
 
   useEffect(() => {
-    void refreshBackend().catch(() => setBackendConnected(false))
+    void refreshBackend().catch(() => {
+      setBackendConnected(false)
+      setParserMessage('API недоступен. Запустите проект командой npm run dev — она поднимет frontend и backend вместе.')
+    })
   }, [])
 
   const filtered = useMemo(() => {
@@ -313,7 +316,7 @@ export default function ClientsPage() {
         }
       }
     } catch (error) {
-      setParserMessage(error instanceof Error ? error.message : 'Не удалось связаться с backend')
+      setParserMessage(error instanceof TypeError ? 'Не удалось подключиться к API. Перезапустите проект командой npm run dev.' : error instanceof Error ? error.message : 'Не удалось связаться с backend')
     } finally {
       setIsParsing(false)
     }
