@@ -8,6 +8,7 @@ import {
   Laptop,
   Lightbulb,
   Menu,
+  PawPrint,
   Search,
   Settings,
   UserRound,
@@ -18,6 +19,7 @@ import ProjectsPage from './pages/ProjectsPage'
 import JobsPage from './pages/JobsPage'
 import FreelancePage from './pages/FreelancePage'
 import SchedulePage from './pages/SchedulePage'
+import ClientsPage from './pages/ClientsPage'
 
 type Accent = 'blue' | 'green' | 'purple' | 'orange' | 'gray'
 
@@ -29,6 +31,8 @@ type Feature = {
   icon: LucideIcon
   accent: Accent
 }
+
+const clientSectionTitle = 'Волк с Уолл-стрит'
 
 const features: Feature[] = [
   {
@@ -64,6 +68,7 @@ const features: Feature[] = [
 const menuItems = [
   { title: 'Главная', icon: Home, accent: 'blue' as Accent },
   ...features.map(({ title, icon, accent }) => ({ title, icon, accent })),
+  { title: clientSectionTitle, icon: PawPrint, accent: 'blue' as Accent },
   { title: 'Настройки', icon: Settings, accent: 'gray' as Accent },
 ]
 
@@ -162,6 +167,8 @@ function App() {
           <FreelancePage />
         ) : active === 'Расписание по дням' ? (
           <SchedulePage />
+        ) : active === clientSectionTitle ? (
+          <ClientsPage />
         ) : (
           <SectionPlaceholder title={active} onBack={() => selectSection('Главная')} />
         )}
