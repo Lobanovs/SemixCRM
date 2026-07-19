@@ -16,6 +16,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import ProjectsPage from './pages/ProjectsPage'
 import JobsPage from './pages/JobsPage'
+import FreelancePage from './pages/FreelancePage'
 
 type Accent = 'blue' | 'green' | 'purple' | 'orange' | 'gray'
 
@@ -156,6 +157,8 @@ function App() {
           <ProjectsPage />
         ) : active === 'Работа (вакансии)' ? (
           <JobsPage />
+        ) : active === 'Фриланс' ? (
+          <FreelancePage />
         ) : (
           <SectionPlaceholder title={active} onBack={() => selectSection('Главная')} />
         )}

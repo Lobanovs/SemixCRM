@@ -1874,3 +1874,230 @@ a:focus-visible {
   .opportunity-status { grid-column: auto; grid-template-columns: 1fr; align-items: flex-start; }
   .opportunity-status > .primary-row-action { min-height: 42px; }
 }
+
+/* Freelance page */
+.freelance-page .data-page-grid {
+  grid-template-columns: minmax(0, 1fr) 398px;
+  gap: 36px;
+}
+
+.freelance-toolbar {
+  grid-template-columns: minmax(175px, 1.15fr) minmax(95px, 0.63fr) minmax(100px, 0.68fr) minmax(110px, 0.72fr) minmax(180px, 1.18fr) auto;
+  gap: 8px;
+}
+
+.freelance-order-row {
+  grid-template-columns: minmax(330px, 1.35fr) minmax(245px, 0.82fr) minmax(250px, 0.82fr);
+  min-height: 137px;
+}
+
+.freelance-order-row .opportunity-identity {
+  grid-template-columns: 48px minmax(0, 1fr);
+}
+
+.freelance-order-row .opportunity-identity h2 {
+  margin-bottom: 7px;
+}
+
+.freelance-order-row .opportunity-identity p {
+  min-height: 33px;
+}
+
+.freelance-order-row .opportunity-meta {
+  gap: 11px;
+  padding-top: 19px;
+}
+
+.freelance-order-status {
+  position: relative;
+  padding-right: 175px;
+}
+
+.freelance-order-status > small {
+  margin-top: 3px;
+  color: #66748a;
+  font-size: 10px;
+}
+
+.freelance-order-status > em {
+  margin-top: 8px;
+  color: #1264e8;
+  font-size: 10px;
+  font-style: normal;
+}
+
+.freelance-order-status > em.green { color: #149444; }
+.freelance-order-status > em.orange { color: #e3660c; }
+.freelance-order-status > em.purple { color: #7c3aed; }
+
+.stacked-order-actions {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  width: 158px;
+  gap: 7px;
+}
+
+.stacked-order-actions button {
+  display: inline-flex;
+  min-height: 29px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid #d9e0e9;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.stacked-order-actions .primary-row-action {
+  border-color: #1264e8;
+  background: #1264e8;
+  color: #fff;
+}
+
+.freelance-parser .source-chip-row {
+  gap: 7px;
+}
+
+.freelance-parser .source-chip {
+  height: 28px;
+  padding: 0 10px;
+}
+
+.recommendations-panel > h2,
+.order-stages-panel > h2,
+.freelance-nearest > h2 {
+  margin-bottom: 10px;
+}
+
+.recommendation-item {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 32px minmax(0, 1fr) 122px;
+  gap: 9px;
+  align-items: center;
+  padding: 7px 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.mini-order-icon {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border-radius: 7px;
+  background: #eaf2ff;
+  color: #1264e8;
+}
+
+.mini-order-icon svg { width: 15px; height: 15px; }
+.mini-order-icon.cyan { background: #e6f8fd; color: #0891b2; }
+.mini-order-icon.purple { background: #f1eafe; color: #7c3aed; }
+.mini-order-icon.pink { background: #ffebf4; color: #e33c87; }
+
+.recommendation-item > p {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+}
+
+.recommendation-item > p strong,
+.recommendation-item > p span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recommendation-item > p strong { font-size: 10px; }
+.recommendation-item > p span { color: #536178; font-size: 10px; }
+
+.recommendation-item > span:last-child {
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.recommendation-item > span:last-child > b {
+  color: #5b687d;
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.recommendation-item .status-badge {
+  min-height: 19px;
+  padding: 0 7px;
+  font-size: 8px;
+}
+
+.panel-more-link {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.order-stage-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.order-stage-grid div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.order-stage-grid span {
+  overflow: hidden;
+  color: #667389;
+  font-size: 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.order-stage-grid strong { font-size: 14px; }
+.order-stage-grid i { height: 5px; border-radius: 2px; background: #1264e8; }
+.order-stage-grid i.orange { background: #ff7b22; }
+.order-stage-grid i.green { background: #39a95d; }
+.order-stage-grid i.purple { background: #7c3aed; }
+.order-stage-grid i.cyan { background: #18a7d9; }
+.order-stage-grid i.red { background: #e75858; }
+
+@media (max-width: 1320px) {
+  .freelance-page .data-page-grid,
+  .jobs-page .data-page-grid {
+    grid-template-columns: minmax(0, 1fr) 330px;
+    gap: 20px;
+  }
+
+  .freelance-order-row {
+    grid-template-columns: minmax(300px, 1.2fr) minmax(250px, 1fr);
+  }
+
+  .freelance-order-status {
+    grid-column: 1 / -1;
+    min-height: 106px;
+    border-top: 1px solid #e4e9f0;
+  }
+}
+
+@media (max-width: 760px) {
+  .freelance-toolbar { grid-template-columns: 1fr 1fr; }
+  .freelance-order-row { grid-template-columns: 1fr; }
+  .freelance-order-status { grid-column: auto; min-height: 180px; }
+  .freelance-order-status { padding-right: 14px; }
+  .stacked-order-actions { right: 14px; bottom: 13px; left: 14px; top: auto; width: auto; }
+  .recommendation-item { grid-template-columns: 32px minmax(0, 1fr); }
+  .recommendation-item > span:last-child { grid-column: 2; align-items: flex-start; }
+}
