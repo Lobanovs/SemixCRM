@@ -2766,3 +2766,345 @@ a:focus-visible {
   .schedule-bottom-grid { grid-template-columns: 1fr; }
   .summary-panel textarea { height: 150px; }
 }
+
+/* Unified CRM visual language */
+:root {
+  --type-page-title: 28px;
+  --type-page-subtitle: 14px;
+  --type-section-title: 15px;
+  --type-card-title: 14px;
+  --type-body: 12px;
+  --type-meta: 11px;
+  --type-caption: 10px;
+  --crm-radius: 11px;
+  --crm-panel-gap: 24px;
+}
+
+.data-page,
+.schedule-page {
+  padding: 18px 28px 24px;
+  font-size: var(--type-body);
+}
+
+.data-page-grid,
+.projects-page .data-page-grid,
+.jobs-page .data-page-grid,
+.freelance-page .data-page-grid,
+.clients-page .data-page-grid {
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: var(--crm-panel-gap);
+  max-width: 1400px;
+}
+
+.schedule-grid {
+  grid-template-columns: minmax(0, 1fr) 304px;
+  gap: var(--crm-panel-gap);
+  max-width: 1400px;
+}
+
+.schedule-main,
+.schedule-side-column {
+  margin-top: 0;
+}
+
+.schedule-main > .page-title-block h1 {
+  transform: none;
+}
+
+.page-title-block {
+  margin-bottom: 17px;
+}
+
+.page-title-block h1,
+.welcome-section h1,
+.section-placeholder h1 {
+  margin-bottom: 6px;
+  font-size: var(--type-page-title);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.55px;
+}
+
+.page-title-block p,
+.welcome-section p {
+  color: #5b6880;
+  font-size: var(--type-page-subtitle);
+  line-height: 1.5;
+}
+
+.metric-card {
+  min-height: 96px;
+  padding: 14px 16px;
+  border-radius: var(--crm-radius);
+}
+
+.metric-copy > span { font-size: 13px; line-height: 1.25; }
+.metric-copy strong { font-size: 25px; line-height: 1; }
+.metric-copy small { font-size: var(--type-meta); line-height: 1.35; }
+
+.local-search input,
+.select-control select,
+.solid-action,
+.secondary-wide-action,
+.row-actions button,
+.opportunity-buttons button,
+.stacked-order-actions button,
+.client-actions button {
+  font-size: var(--type-body);
+}
+
+.local-search,
+.select-control,
+.solid-action {
+  min-height: 36px;
+}
+
+.project-name-line h2,
+.opportunity-identity h2,
+.opportunity-identity h3,
+.client-identity h2 {
+  font-size: var(--type-card-title);
+  line-height: 1.3;
+}
+
+.project-identity p,
+.opportunity-identity p,
+.client-pain p,
+.client-category,
+.project-summary-panel > p {
+  font-size: var(--type-meta);
+  line-height: 1.5;
+}
+
+.project-meta-grid,
+.opportunity-meta > p,
+.client-source,
+.opportunity-status > strong,
+.freelance-order-status > em,
+.client-status-column > strong {
+  font-size: var(--type-caption);
+}
+
+.side-panel,
+.metric-card,
+.project-row,
+.opportunity-row,
+.client-row,
+.week-board {
+  border-radius: var(--crm-radius);
+}
+
+.panel-title-row h2,
+.side-panel > h2,
+.parser-title h2,
+.calendar-title-row h2,
+.side-panel-title-row h2,
+.past-panel > h2,
+.quick-actions-panel > h2 {
+  font-size: var(--type-section-title);
+  line-height: 1.3;
+}
+
+.parser-title p,
+.nearest-action p strong,
+.recommendation-item > p strong,
+.client-recommendation p strong {
+  font-size: var(--type-meta);
+  line-height: 1.35;
+}
+
+.nearest-action p span,
+.recommendation-item > p span,
+.client-recommendation p span,
+.parser-filters p,
+.parser-stats span {
+  font-size: var(--type-caption);
+  line-height: 1.35;
+}
+
+.status-badge {
+  min-height: 23px;
+  font-size: var(--type-caption);
+}
+
+.data-tag {
+  font-size: var(--type-caption);
+}
+
+.schedule-metrics .metric-card {
+  min-height: 96px;
+  padding: 14px 16px;
+}
+
+.day-column h3,
+.summary-panel h2,
+.goals-panel h2 {
+  font-size: var(--type-card-title);
+}
+
+.day-task,
+.day-note p,
+.goal-row,
+.upcoming-list > div > div strong,
+.past-panel > button:not(.archive-button) {
+  font-size: var(--type-caption);
+  line-height: 1.35;
+}
+
+.upcoming-list > div > div small,
+.upcoming-list p strong,
+.upcoming-list p b,
+.quick-actions-panel > div button,
+.past-panel .archive-button {
+  font-size: 9px;
+}
+
+@media (max-width: 1580px) {
+  .data-page-grid,
+  .projects-page .data-page-grid,
+  .jobs-page .data-page-grid,
+  .freelance-page .data-page-grid,
+  .clients-page .data-page-grid {
+    grid-template-columns: minmax(0, 1fr) 330px;
+    gap: 20px;
+  }
+
+  .jobs-toolbar,
+  .freelance-toolbar,
+  .clients-toolbar {
+    grid-template-columns: minmax(190px, 1.4fr) repeat(2, minmax(125px, 1fr));
+  }
+
+  .opportunity-row,
+  .freelance-order-row {
+    grid-template-columns: minmax(300px, 1.2fr) minmax(250px, 1fr);
+  }
+
+  .opportunity-status {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: auto 100px 1fr 180px;
+    gap: 10px;
+    align-items: center;
+    border-top: 1px solid #e4e9f0;
+  }
+
+  .opportunity-status > span:not(.status-badge) { margin: 0; }
+  .opportunity-status > .primary-row-action { margin: 0; }
+
+  .freelance-order-status {
+    display: grid;
+    min-height: 122px;
+    grid-template-columns: auto 72px minmax(120px, 1fr);
+    grid-template-rows: auto auto;
+    align-content: center;
+    column-gap: 10px;
+    row-gap: 8px;
+    padding-right: 190px;
+  }
+
+  .freelance-order-status > .status-badge { grid-column: 1; grid-row: 1; }
+  .freelance-order-status > small { grid-column: 2; grid-row: 1; margin: 0; }
+  .freelance-order-status > span:not(.status-badge) { grid-column: 1; grid-row: 2; margin: 0; }
+  .freelance-order-status > strong { grid-column: 2 / 4; grid-row: 2; }
+  .freelance-order-status > em { grid-column: 3; grid-row: 1; margin: 0; }
+
+  .client-row {
+    grid-template-columns: minmax(280px, 1.2fr) minmax(190px, 0.8fr);
+  }
+
+  .client-pain {
+    border-right: 0 !important;
+    border-bottom: 1px solid #e4e9f0;
+  }
+
+  .client-status-column {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: auto 1fr 1fr 150px;
+    gap: 10px;
+    align-items: center;
+    border-right: 0 !important;
+    border-top: 1px solid #e4e9f0;
+  }
+
+  .client-status-column > span:not(.status-badge) { margin: 0; }
+  .client-status-column select { margin: 0; }
+  .client-fit { grid-column: 1 / -1; border-top: 1px solid #e4e9f0; }
+  .client-actions { grid-template-columns: 1fr 1fr 1.35fr; }
+  .client-actions .primary-row-action { grid-column: auto; }
+}
+
+@media (max-width: 1180px) {
+  .data-page-grid,
+  .projects-page .data-page-grid,
+  .jobs-page .data-page-grid,
+  .freelance-page .data-page-grid,
+  .clients-page .data-page-grid,
+  .schedule-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .data-side-column,
+  .schedule-side-column {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  :root { --type-page-title: 26px; }
+
+  .data-page,
+  .schedule-page {
+    padding: 18px 14px 28px;
+  }
+
+  .data-side-column,
+  .schedule-side-column {
+    display: flex;
+  }
+
+  .jobs-toolbar,
+  .freelance-toolbar,
+  .clients-toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .jobs-toolbar .local-search,
+  .freelance-toolbar .local-search,
+  .clients-toolbar .local-search,
+  .freelance-toolbar .sort-control,
+  .clients-toolbar .clients-sort,
+  .toolbar-row > .solid-action {
+    grid-column: 1 / -1;
+  }
+
+  .opportunity-row,
+  .freelance-order-row,
+  .client-row {
+    grid-template-columns: 1fr;
+  }
+
+  .opportunity-status {
+    grid-column: auto;
+    grid-template-columns: 1fr;
+    align-items: flex-start;
+  }
+
+  .freelance-order-status {
+    display: flex;
+    min-height: 190px;
+    padding-right: 14px;
+  }
+
+  .client-status-column,
+  .client-fit {
+    grid-column: auto;
+    display: flex;
+    align-items: flex-start;
+  }
+
+  .client-actions { grid-template-columns: 1fr 1fr; }
+  .client-actions .primary-row-action { grid-column: 1 / -1; }
+}
