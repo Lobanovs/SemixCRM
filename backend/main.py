@@ -19,8 +19,13 @@ from .database import (
     init_db,
     insert_clients,
     list_clients,
+    list_archived_clients,
     list_parser_runs,
     save_parser_settings,
+    save_parser_run_results,
+    get_parser_run,
+    restore_all_clients,
+    restore_client,
     update_client_status,
     update_parser_run,
 )
@@ -103,6 +108,12 @@ def clients() -> dict[str, Any]:
     return {"clients": list_clients(), "stats": client_stats()}
 
 
+@app.get("/api/clients/archived")
+def archived_clients() -> dict[str, Any]:
+    archived = list_archived_clients()
+    return {"clients": archived, "count": len(archived)}
+
+
 class ClientCreateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=160)
     category: str = Field(default="Бизнес", max_length=120)
@@ -159,6 +170,14 @@ def parser_runs(limit: int = 20) -> dict[str, Any]:
     return {"runs": list_parser_runs(limit)}
 
 
+@app.get("/api/parser/runs/{run_id}")
+def parser_run_detail(run_id: str) -> dict[str, Any]:
+    run = get_parser_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Запуск парсера не найден")
+    return run
+
+
 class ClientStatusRequest(BaseModel):
     status: str = Field(min_length=2, max_length=30)
     next_step: str = Field(default="", max_length=160)
@@ -195,6 +214,20 @@ def remove_client(client_id: int) -> dict[str, Any]:
 def clear_clients() -> dict[str, Any]:
     archived_count = archive_all_clients()
     return {"ok": True, "archived_count": archived_count}
+
+
+@app.post("/api/clients/restore-all")
+def restore_all_archived_clients() -> dict[str, Any]:
+    restored_count = restore_all_clients()
+    return {"ok": True, "restored_count": restored_count}
+
+
+@app.post("/api/clients/{client_id}/restore")
+def restore_archived_client(client_id: int) -> dict[str, Any]:
+    client = restore_client(client_id)
+    if client is None:
+        raise HTTPException(status_code=404, detail="Скрытый клиент не найден")
+    return client
 
 
 @app.post("/api/clients/parse")
@@ -234,17 +267,18 @@ def _run_job(job: ParserJob, request: ParseRequest) -> None:
             raise RuntimeError("Источники не вернули карточки. Проверьте город/нишу или повторите позже: источник мог показать CAPTCHA.")
         enriched = [_enrich(lead) for lead in leads]
         stored = insert_clients(enriched)
-        job.clients = stored["clients"]
+        save_parser_run_results(job.id, stored["results"])
+        job.clients = [item["snapshot"] for item in stored["results"]]
         job.count = int(stored["inserted_count"])
         job.skipped_count = int(stored["duplicate_count"])
         job.status = "done"
         job.message = f"Готово: новых — {job.count}, уже были в базе — {job.skipped_count}"
-        update_parser_run(job.id, job.status, job.count, job.message, skipped_count=job.skipped_count)
+        update_parser_run(job.id, job.status, job.count, job.message, skipped_count=job.skipped_count, parsed_count=len(stored["results"]))
     except Exception as error:  # noqa: BLE001 - surface parser errors in the job UI
         job.status = "error"
         job.error = str(error)
         job.message = "Парсер завершился с ошибкой"
-        update_parser_run(job.id, job.status, job.count, job.message, job.error, job.skipped_count)
+        update_parser_run(job.id, job.status, job.count, job.message, job.error, job.skipped_count, len(job.clients))
 
 
 def _enrich(lead: dict[str, Any]) -> dict[str, Any]:

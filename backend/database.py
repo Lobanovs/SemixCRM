@@ -3,9 +3,10 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from .lead_utils import (
     LEAD_SCORE_MAX,
@@ -31,11 +32,20 @@ DEFAULT_SETTINGS = {
 STATUS_PRIORITY = {"Новый": 0, "Написал": 1, "Ответили": 2, "Созвон": 3, "КП": 4, "Закрыто": 5, "Отказ": 1}
 
 
-def _connect() -> sqlite3.Connection:
+@contextmanager
+def _connect() -> Iterator[sqlite3.Connection]:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(DB_PATH, timeout=30)
     connection.row_factory = sqlite3.Row
-    return connection
+    connection.execute("PRAGMA foreign_keys = ON")
+    try:
+        yield connection
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
 
 
 def _ensure_column(connection: sqlite3.Connection, table: str, column: str, definition: str) -> None:
@@ -115,6 +125,21 @@ def init_db() -> None:
             """
         )
         _ensure_column(connection, "parser_runs", "skipped_count", "INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(connection, "parser_runs", "parsed_count", "INTEGER NOT NULL DEFAULT 0")
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS parser_run_results (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id TEXT NOT NULL REFERENCES parser_runs(id) ON DELETE CASCADE,
+                client_id INTEGER,
+                outcome TEXT NOT NULL CHECK (outcome IN ('inserted', 'duplicate')),
+                position INTEGER NOT NULL,
+                snapshot_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(run_id, position)
+            )
+            """
+        )
         _migrate_and_deduplicate_clients(connection)
         connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS clients_dedupe_idx ON clients(dedupe_key)")
         existing = connection.execute("SELECT id FROM parser_settings WHERE id = 1").fetchone()
@@ -223,6 +248,16 @@ def _json_list(value: Any, fallback: list[Any]) -> list[Any]:
         return fallback
 
 
+def _json_object(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    try:
+        parsed = json.loads(value or "{}")
+        return parsed if isinstance(parsed, dict) else {}
+    except (TypeError, json.JSONDecodeError):
+        return {}
+
+
 def get_parser_settings() -> dict[str, Any]:
     with _connect() as connection:
         row = connection.execute("SELECT * FROM parser_settings WHERE id = 1").fetchone()
@@ -261,18 +296,104 @@ def create_parser_run(run_id: str, city: str, niche: str, source: str, limit: in
         )
 
 
-def update_parser_run(run_id: str, status: str, found_count: int, message: str, error: str = "", skipped_count: int = 0) -> None:
+def update_parser_run(
+    run_id: str,
+    status: str,
+    found_count: int,
+    message: str,
+    error: str = "",
+    skipped_count: int = 0,
+    parsed_count: int | None = None,
+) -> None:
+    total_parsed = parsed_count if parsed_count is not None else found_count + skipped_count
     with _connect() as connection:
         connection.execute(
-            "UPDATE parser_runs SET finished_at = ?, status = ?, found_count = ?, skipped_count = ?, message = ?, error = ? WHERE id = ?",
-            (datetime.now(timezone.utc).isoformat(), status, found_count, skipped_count, message, error, run_id),
+            "UPDATE parser_runs SET finished_at = ?, status = ?, found_count = ?, skipped_count = ?, parsed_count = ?, message = ?, error = ? WHERE id = ?",
+            (datetime.now(timezone.utc).isoformat(), status, found_count, skipped_count, total_parsed, message, error, run_id),
         )
 
 
 def list_parser_runs(limit: int = 20) -> list[dict[str, Any]]:
     with _connect() as connection:
-        rows = connection.execute("SELECT * FROM parser_runs ORDER BY started_at DESC LIMIT ?", (max(1, min(limit, 100)),)).fetchall()
-    return [dict(row) for row in rows]
+        rows = connection.execute(
+            """
+            SELECT parser_runs.*, COUNT(parser_run_results.id) AS result_count
+            FROM parser_runs
+            LEFT JOIN parser_run_results ON parser_run_results.run_id = parser_runs.id
+            GROUP BY parser_runs.id
+            ORDER BY parser_runs.started_at DESC
+            LIMIT ?
+            """,
+            (max(1, min(limit, 100)),),
+        ).fetchall()
+    return [_serialize_parser_run(row) for row in rows]
+
+
+def save_parser_run_results(run_id: str, results: list[dict[str, Any]]) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    rows = []
+    for position, result in enumerate(results):
+        outcome = str(result.get("outcome") or "")
+        if outcome not in {"inserted", "duplicate"}:
+            raise ValueError(f"Unknown parser result outcome: {outcome}")
+        rows.append((
+            run_id,
+            int(result["client_id"]) if result.get("client_id") is not None else None,
+            outcome,
+            position,
+            json.dumps(result.get("snapshot") or {}, ensure_ascii=False),
+            now,
+        ))
+    with _connect() as connection:
+        connection.execute("DELETE FROM parser_run_results WHERE run_id = ?", (run_id,))
+        connection.executemany(
+            """
+            INSERT INTO parser_run_results (run_id, client_id, outcome, position, snapshot_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+
+
+def get_parser_run(run_id: str) -> dict[str, Any] | None:
+    with _connect() as connection:
+        row = connection.execute(
+            """
+            SELECT parser_runs.*, COUNT(parser_run_results.id) AS result_count
+            FROM parser_runs
+            LEFT JOIN parser_run_results ON parser_run_results.run_id = parser_runs.id
+            WHERE parser_runs.id = ?
+            GROUP BY parser_runs.id
+            """,
+            (run_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        result_rows = connection.execute(
+            "SELECT client_id, outcome, position, snapshot_json, created_at FROM parser_run_results WHERE run_id = ? ORDER BY position",
+            (run_id,),
+        ).fetchall()
+    run = _serialize_parser_run(row)
+    run["results"] = [
+        {
+            "client_id": result["client_id"],
+            "outcome": result["outcome"],
+            "position": result["position"],
+            "created_at": result["created_at"],
+            "snapshot": _json_object(result["snapshot_json"]),
+        }
+        for result in result_rows
+    ]
+    return run
+
+
+def _serialize_parser_run(row: sqlite3.Row) -> dict[str, Any]:
+    run = dict(row)
+    result_count = int(run.get("result_count") or 0)
+    run["result_count"] = result_count
+    run["parsed_count"] = int(run.get("parsed_count") or 0)
+    run["snapshot_available"] = result_count > 0
+    return run
 
 
 def client_stats() -> dict[str, Any]:
@@ -319,6 +440,30 @@ def archive_all_clients() -> int:
     return max(0, cursor.rowcount)
 
 
+def list_archived_clients() -> list[dict[str, Any]]:
+    with _connect() as connection:
+        rows = connection.execute(
+            "SELECT * FROM clients WHERE archived = 1 ORDER BY archived_at DESC, id DESC"
+        ).fetchall()
+    return [_serialize(row) for row in rows]
+
+
+def restore_client(client_id: int) -> dict[str, Any] | None:
+    with _connect() as connection:
+        connection.execute(
+            "UPDATE clients SET archived = 0, archived_at = '' WHERE id = ? AND archived = 1",
+            (client_id,),
+        )
+        row = connection.execute("SELECT * FROM clients WHERE id = ? AND archived = 0", (client_id,)).fetchone()
+    return _serialize(row) if row else None
+
+
+def restore_all_clients() -> int:
+    with _connect() as connection:
+        cursor = connection.execute("UPDATE clients SET archived = 0, archived_at = '' WHERE archived = 1")
+    return max(0, cursor.rowcount)
+
+
 def _serialize(row: sqlite3.Row) -> dict[str, Any]:
     return {
         "id": row["id"], "created_at": row["created_at"], "source": row["source"], "city": row["city"],
@@ -328,7 +473,7 @@ def _serialize(row: sqlite3.Row) -> dict[str, Any]:
         "branch_count": row["branch_count"], "status": row["status"], "next_step": row["next_step"],
         "pain": row["pain"], "match_score": row["match_score"], "lead_score": row["lead_score"],
         "lead_score_max": LEAD_SCORE_MAX, "lead_score_reasons": _json_list(row["lead_score_reasons_json"], []),
-        "tags": _json_list(row["tags_json"], []),
+        "tags": _json_list(row["tags_json"], []), "archived": int(row["archived"] or 0), "archived_at": row["archived_at"] or "",
     }
 
 
@@ -345,8 +490,9 @@ def insert_clients(leads: list[dict[str, Any]]) -> dict[str, Any]:
     inserted_count = 0
     duplicate_count = 0
     inserted_ids: list[int] = []
+    results: list[dict[str, Any]] = []
     with _connect() as connection:
-        for incoming in leads:
+        for position, incoming in enumerate(leads):
             lead = dict(incoming)
             lead["contacts"] = contacts_from_lead(lead)
             score, reasons, match_score = calculate_lead_score(lead)
@@ -358,6 +504,7 @@ def insert_clients(leads: list[dict[str, Any]]) -> dict[str, Any]:
             if existing is not None:
                 duplicate_count += 1
                 _update_existing(connection, existing, lead, key)
+                results.append({"client_id": int(existing["id"]), "outcome": "duplicate", "position": position, "snapshot": _snapshot_from_lead(lead, int(existing["id"]))})
                 continue
 
             cursor = connection.execute(
@@ -379,12 +526,26 @@ def insert_clients(leads: list[dict[str, Any]]) -> dict[str, Any]:
                 ),
             )
             inserted_count += 1
-            inserted_ids.append(int(cursor.lastrowid))
+            client_id = int(cursor.lastrowid)
+            inserted_ids.append(client_id)
+            results.append({"client_id": client_id, "outcome": "inserted", "position": position, "snapshot": _snapshot_from_lead(lead, client_id)})
 
     return {
         "clients": list_clients(), "inserted_count": inserted_count,
-        "duplicate_count": duplicate_count, "inserted_ids": inserted_ids,
+        "duplicate_count": duplicate_count, "inserted_ids": inserted_ids, "results": results,
     }
+
+
+def _snapshot_from_lead(lead: dict[str, Any], client_id: int) -> dict[str, Any]:
+    snapshot = dict(lead)
+    snapshot["id"] = client_id
+    snapshot["category"] = snapshot.get("category") or snapshot.get("niche") or "Business"
+    snapshot["status"] = snapshot.get("status") or next(iter(STATUS_PRIORITY))
+    snapshot["next_step"] = snapshot.get("next_step") or ""
+    snapshot["contacts"] = contacts_from_lead(snapshot)
+    snapshot["lead_score_reasons"] = list(snapshot.get("lead_score_reasons") or [])
+    snapshot["tags"] = list(snapshot.get("tags") or [])
+    return snapshot
 
 
 def _find_existing(connection: sqlite3.Connection, lead: dict[str, Any], key: str) -> sqlite3.Row | None:
