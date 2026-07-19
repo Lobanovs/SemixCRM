@@ -1,0 +1,6 @@
+# Keep these ranges compatible with the current Python runtime while avoiding
+# a source build of pydantic-core on new Python releases.
+fastapi>=0.128,<1
+uvicorn[standard]>=0.34,<1
+pydantic>=2.12,<3
+httpx>=0.28,<1

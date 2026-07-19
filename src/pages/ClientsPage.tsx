@@ -66,6 +66,22 @@ const toneByStatus: Record<ClientStatus, UiAccent> = {
 }
 
 const stageOrder: ClientStatus[] = ['Новый', 'Написал', 'Ответили', 'Созвон', 'КП', 'Закрыто', 'Отказ']
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://127.0.0.1:8000'
+
+type ApiClient = {
+  id: number
+  name: string
+  niche?: string
+  category?: string
+  city?: string
+  source?: string
+  created_at?: string
+  pain?: string
+  tags?: string[]
+  status?: string
+  next_step?: string
+  match_score?: number
+}
 
 const iconForCategory = (category: string): LucideIcon => {
   if (category.includes('Стомат')) return Building2
@@ -73,6 +89,27 @@ const iconForCategory = (category: string): LucideIcon => {
   if (category.includes('Авто')) return CarFront
   if (category.includes('Коф')) return Coffee
   return Store
+}
+
+const toClient = (item: ApiClient): Client => {
+  const category = item.category || item.niche || 'Бизнес'
+  const status = statusOptions.includes(item.status as ClientStatus) ? item.status as ClientStatus : 'Новый'
+  const date = item.created_at ? new Date(item.created_at).toLocaleDateString('ru-RU') : 'Сегодня'
+  return {
+    id: Number(item.id),
+    name: item.name,
+    category,
+    location: item.city || '—',
+    source: item.source || '2GIS',
+    added: date,
+    pain: item.pain || 'Нужно уточнить задачи и точки роста бизнеса.',
+    tags: item.tags?.length ? item.tags : ['Новый лид'],
+    status,
+    next: item.next_step || 'Написать владельцу',
+    match: Number(item.match_score) || 70,
+    tone: toneByStatus[status],
+    icon: iconForCategory(category),
+  }
 }
 
 export default function ClientsPage() {
@@ -92,6 +129,7 @@ export default function ClientsPage() {
   const [niche, setNiche] = useState('Все')
   const [sort, setSort] = useState('Сначала релевантные')
   const [isParsing, setIsParsing] = useState(false)
+  const [parserMessage, setParserMessage] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
 
@@ -99,6 +137,25 @@ export default function ClientsPage() {
     const serializable = clients.map(({ icon: _icon, ...client }) => client)
     window.localStorage.setItem('semix-crm-clients', JSON.stringify(serializable))
   }, [clients])
+
+  useEffect(() => {
+    const loadBackendClients = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/clients`)
+        if (!response.ok) return
+        const payload = await response.json() as { clients?: ApiClient[] }
+        if (!payload.clients?.length) return
+        setClients((current) => {
+          const localById = new Map(current.map((client) => [client.id, client]))
+          payload.clients?.forEach((item) => localById.set(Number(item.id), toClient(item)))
+          return Array.from(localById.values())
+        })
+      } catch {
+        // The frontend remains usable with localStorage while the API is stopped.
+      }
+    }
+    void loadBackendClients()
+  }, [])
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase('ru')
@@ -118,13 +175,38 @@ export default function ClientsPage() {
 
   const updateStatus = (id: number, next: ClientStatus) => setClients((items) => items.map((client) => client.id === id ? { ...client, status: next, tone: toneByStatus[next] } : client))
 
-  const runParser = () => {
+  const runParser = async () => {
     if (isParsing) return
     setIsParsing(true)
-    window.setTimeout(() => {
-      setClients((items) => [...items, { id: 7, name: 'Клиника Nova', category: 'Стоматология', location: 'Москва', source: '2GIS', added: 'Сегодня', pain: 'Боль: нет современной страницы услуг и записи через сайт.', tags: ['Сайт', 'CRM', 'Онлайн-запись'], status: 'Новый', next: 'Написать владельцу', match: 84, tone: 'purple', icon: Building2 }, { id: 8, name: 'Барбершоп North', category: 'Барбершоп', location: 'Санкт-Петербург', source: 'Яндекс Карты', added: 'Сегодня', pain: 'Боль: заявки приходят в разные чаты, нет единой базы клиентов.', tags: ['CRM', 'Telegram', 'Чат-бот'], status: 'Новый', next: 'Найти контакт', match: 76, tone: 'green', icon: Scissors }])
+    setParserMessage('Подключаю LeadHunt и запускаю поиск в 2GIS…')
+    try {
+      const start = await fetch(`${API_BASE}/api/clients/parse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ city: 'Москва', niche: 'салоны красоты', source: '2gis', limit: 10 }),
+      })
+      const startPayload = await start.json() as { job_id?: string; error?: string }
+      if (!start.ok || !startPayload.job_id) throw new Error(startPayload.error || 'Не удалось запустить парсер')
+
+      let finished = false
+      while (!finished) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1000))
+        const statusResponse = await fetch(`${API_BASE}/api/clients/jobs/${startPayload.job_id}`)
+        const statusPayload = await statusResponse.json() as { status?: string; message?: string; error?: string; count?: number; clients?: ApiClient[] }
+        setParserMessage(statusPayload.message || 'Парсер работает…')
+        if (statusPayload.status === 'done') {
+          if (statusPayload.clients?.length) setClients(statusPayload.clients.map(toClient))
+          finished = true
+          setParserMessage(`Готово: добавлено или обновлено клиентов — ${statusPayload.count ?? statusPayload.clients?.length ?? 0}`)
+        } else if (statusPayload.status === 'error' || statusPayload.status === 'missing') {
+          throw new Error(statusPayload.error || statusPayload.message || 'Парсер завершился с ошибкой')
+        }
+      }
+    } catch (error) {
+      setParserMessage(error instanceof Error ? error.message : 'Не удалось связаться с backend')
+    } finally {
       setIsParsing(false)
-    }, 850)
+    }
   }
 
   return (
@@ -162,6 +244,7 @@ export default function ClientsPage() {
             <div className="parser-stats"><span>Найдено сегодня<strong>41</strong></span><span>Новых<strong>12 <i /></strong></span></div>
             <div className="parser-filters"><p><Search />Ниши <strong>Салоны, стоматологии, автосервисы</strong></p><p><MapPin />Город <strong>Москва / СПб</strong></p><p><Sparkles />Ключевые слова <strong>сайт, CRM, автоматизация, бот</strong></p></div>
             <button className="solid-action wide-action" type="button" onClick={runParser} disabled={isParsing}>{isParsing ? <><Sparkles className="spin" size={17} />Парсим клиентов...</> : <><Send size={17} />Запустить парсер</>}</button>
+            {parserMessage && <p className="parser-feedback" role="status">{parserMessage}</p>}
             <button className="secondary-wide-action" type="button"><Settings2 size={16} />Настроить</button>
           </SidePanel>
 

@@ -1,0 +1,1 @@
+"""Semix CRM backend package."""
