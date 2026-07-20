@@ -725,6 +725,7 @@ def archive_freelance_order(order_id: int) -> bool:
 def freelance_stats() -> dict[str, Any]:
     with _connect() as connection:
         rows = connection.execute("SELECT status, discovered_at FROM freelance_orders WHERE archived = 0").fetchall()
+        archived_count = int(connection.execute("SELECT COUNT(*) FROM freelance_orders WHERE archived = 1").fetchone()[0])
     today = datetime.now(timezone.utc).date().isoformat()
     stages = {status: 0 for status in FREELANCE_STATUSES}
     for row in rows:
@@ -736,6 +737,7 @@ def freelance_stats() -> dict[str, Any]:
         "replied": stages["Ответили"],
         "in_progress": stages["В работе"],
         "new_today": sum(1 for row in rows if str(row["discovered_at"]).startswith(today)),
+        "archived": archived_count,
         "stages": stages,
     }
 
@@ -748,8 +750,9 @@ def get_freelance_settings() -> dict[str, Any]:
             "sources": list(FREELANCE_SOURCES), "keywords": [], "excluded_keywords": [], "categories": [],
             "min_budget": 0, "interval_seconds": 60, "sniper_enabled": False, "telegram_enabled": False,
         }
+    saved_sources = [source for source in _freelance_json_list(row["sources_json"]) if source in FREELANCE_SOURCES]
     return {
-        "sources": _freelance_json_list(row["sources_json"]), "keywords": _freelance_json_list(row["keywords_json"]),
+        "sources": saved_sources or list(FREELANCE_SOURCES), "keywords": _freelance_json_list(row["keywords_json"]),
         "excluded_keywords": _freelance_json_list(row["excluded_keywords_json"]), "categories": _freelance_json_list(row["categories_json"]),
         "min_budget": int(row["min_budget"] or 0), "interval_seconds": int(row["interval_seconds"] or 60),
         "sniper_enabled": bool(row["sniper_enabled"]), "telegram_enabled": bool(row["telegram_enabled"]),
@@ -786,7 +789,7 @@ def record_source_check(status: dict[str, Any]) -> None:
 def list_source_statuses() -> list[dict[str, Any]]:
     with _connect() as connection:
         rows = connection.execute("SELECT * FROM freelance_source_checks ORDER BY source").fetchall()
-    return [{**dict(row), "auth_required": bool(row["auth_required"])} for row in rows]
+    return [{**dict(row), "auth_required": bool(row["auth_required"])} for row in rows if row["source"] in FREELANCE_SOURCES]
 
 
 def record_freelance_run(run: dict[str, Any], order_ids: list[int] | None = None) -> int:

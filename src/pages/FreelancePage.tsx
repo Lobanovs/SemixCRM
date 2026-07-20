@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import {
   AlertCircle,
+  Archive,
   Bot,
   BriefcaseBusiness,
   Check,
@@ -8,7 +9,6 @@ import {
   CirclePlay,
   Clock3,
   ExternalLink,
-  FileCode2,
   Filter,
   Folder,
   Globe2,
@@ -16,6 +16,7 @@ import {
   MessageSquare,
   PanelsTopLeft,
   Plus,
+  RotateCcw,
   Search,
   Send,
   Settings2,
@@ -27,12 +28,12 @@ import { EmptyState, MetricCard, SidePanel, StatusBadge, Tag } from '../componen
 import type { UiAccent } from '../components/DashboardUi'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
-const sourceKeys = ['kwork', 'fl', 'freelance_ru', 'workzilla', 'freelancehunt', 'profi', 'youdo'] as const
+const sourceKeys = ['kwork', 'fl', 'freelance_ru', 'workzilla', 'profi', 'youdo'] as const
 const browserSourceKeys = ['workzilla', 'profi', 'youdo'] as const
 type SourceKey = (typeof sourceKeys)[number]
 const statuses = ['Новый', 'Написал', 'Откликнулся', 'Ответили', 'Созвон', 'В работе', 'Завершён', 'Отказ']
-const accents: Record<string, UiAccent> = { kwork: 'green', fl: 'blue', freelance_ru: 'purple', workzilla: 'cyan', freelancehunt: 'orange', profi: 'pink', youdo: 'blue', manual: 'gray' }
-const icons: Record<string, typeof Send> = { kwork: Send, fl: BriefcaseBusiness, freelance_ru: PanelsTopLeft, workzilla: Bot, freelancehunt: FileCode2, profi: UsersRound, youdo: Globe2, manual: Folder }
+const accents: Record<string, UiAccent> = { kwork: 'green', fl: 'blue', freelance_ru: 'purple', workzilla: 'cyan', profi: 'pink', youdo: 'blue', manual: 'gray' }
+const icons: Record<string, typeof Send> = { kwork: Send, fl: BriefcaseBusiness, freelance_ru: PanelsTopLeft, workzilla: Bot, profi: UsersRound, youdo: Globe2, manual: Folder }
 
 type FreelanceOrder = {
   id: number
@@ -58,17 +59,17 @@ type FreelanceOrder = {
   archived: boolean
 }
 
-type FreelanceStats = { total: number; responded: number; replied: number; in_progress: number; new_today: number; stages: Record<string, number> }
+type FreelanceStats = { total: number; responded: number; replied: number; in_progress: number; new_today: number; archived: number; stages: Record<string, number> }
 type SourceStatus = { source: string; status: string; checked_at?: string; order_count?: number; error?: string; auth_required?: boolean }
 type FreelanceSettings = { sources: string[]; keywords: string[]; excluded_keywords: string[]; categories: string[]; min_budget: number; interval_seconds: number; sniper_enabled: boolean; telegram_enabled: boolean }
 type SniperStatus = { status: string; sources: Record<string, SourceStatus>; interval_seconds: number }
 type FreelanceRun = { id: number; started_at: string; finished_at: string; status: string; inserted_count: number; duplicate_count: number; source_count: number; order_count: number; sources: Record<string, SourceStatus> }
 
-const emptyStats: FreelanceStats = { total: 0, responded: 0, replied: 0, in_progress: 0, new_today: 0, stages: {} }
+const emptyStats: FreelanceStats = { total: 0, responded: 0, replied: 0, in_progress: 0, new_today: 0, archived: 0, stages: {} }
 const emptySettings: FreelanceSettings = { sources: [], keywords: [], excluded_keywords: [], categories: [], min_budget: 0, interval_seconds: 60, sniper_enabled: false, telegram_enabled: false }
 
 function sourceLabel(source: string) {
-  return ({ kwork: 'Kwork', fl: 'FL.ru', freelance_ru: 'Freelance.ru', workzilla: 'Workzilla', freelancehunt: 'Freelancehunt', profi: 'Profi.ru', youdo: 'YouDo', manual: 'Вручную' } as Record<string, string>)[source] ?? source
+  return ({ kwork: 'Kwork', fl: 'FL.ru', freelance_ru: 'Freelance.ru', workzilla: 'Workzilla', profi: 'Profi.ru', youdo: 'YouDo', manual: 'Вручную' } as Record<string, string>)[source] ?? source
 }
 
 function formatBudget(order: FreelanceOrder) {
@@ -105,13 +106,14 @@ export default function FreelancePage() {
   const [runHistory, setRunHistory] = useState<FreelanceRun[]>([])
   const [selectedRun, setSelectedRun] = useState<{ run: FreelanceRun; orders: FreelanceOrder[] } | null>(null)
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
 
-  const loadData = async (showLoader = false) => {
+  const loadData = async (showLoader = false, archivedView = showArchived) => {
     if (showLoader) setLoading(true)
     setError('')
     try {
       const [ordersResponse, settingsResponse, sourceResponse, sniperResponse] = await Promise.all([
-        fetch(`${API_BASE}/api/freelance/orders`),
+        fetch(`${API_BASE}/api/freelance/orders${archivedView ? '?archived=true' : ''}`),
         fetch(`${API_BASE}/api/freelance/settings`),
         fetch(`${API_BASE}/api/freelance/sources`),
         fetch(`${API_BASE}/api/freelance/sniper/status`),
@@ -121,7 +123,7 @@ export default function FreelancePage() {
       setOrders(orderData.orders ?? [])
       setStats(orderData.stats ?? emptyStats)
       setSettings(await settingsResponse.json())
-      setSourceStatuses((await sourceResponse.json()).sources ?? [])
+      setSourceStatuses(((await sourceResponse.json()).sources ?? []).filter((item: SourceStatus) => sourceKeys.includes(item.source as SourceKey)))
       setSniper(await sniperResponse.json())
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Не удалось загрузить раздел «Фриланс»')
@@ -130,7 +132,7 @@ export default function FreelancePage() {
     }
   }
 
-  useEffect(() => { void loadData(true) }, [])
+  useEffect(() => { void loadData(true, showArchived) }, [showArchived])
 
   const categories = useMemo(() => ['Все', ...Array.from(new Set(orders.flatMap((order) => [...order.categories, ...order.tags]))).sort((a, b) => a.localeCompare(b, 'ru'))], [orders])
   const filtered = useMemo(() => {
@@ -164,6 +166,7 @@ export default function FreelancePage() {
   const toggleSniper = () => runAction('sniper', () => fetch(`${API_BASE}/api/freelance/sniper/${sniper.status === 'running' ? 'stop' : 'start'}`, { method: 'POST' }), sniper.status === 'running' ? 'Снайпер остановлен' : 'Снайпер запущен')
   const checkNow = () => runAction('check', () => fetch(`${API_BASE}/api/freelance/sniper/check`, { method: 'POST' }), 'Проверка источников завершена')
   const archiveOrder = (orderId: number) => runAction(`archive-${orderId}`, () => fetch(`${API_BASE}/api/freelance/orders/${orderId}`, { method: 'DELETE' }), 'Заказ скрыт')
+  const restoreOrder = (orderId: number) => runAction(`restore-${orderId}`, () => fetch(`${API_BASE}/api/freelance/orders/${orderId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ archived: false }) }), 'Заказ возвращён в активные')
   const openAuth = (source: string) => runAction(`auth-${source}`, () => fetch(`${API_BASE}/api/freelance/sources/${source}/auth`, { method: 'POST' }), `Окно входа ${sourceLabel(source)} открыто`)
   const openHistory = async () => {
     setShowHistoryModal(true)
@@ -198,7 +201,7 @@ export default function FreelancePage() {
   }
 
   const stages = Object.entries(stats.stages).filter(([, value]) => value > 0)
-  const sourceErrors = sourceStatuses.filter((item) => item.status === 'error' || item.auth_required)
+  const sourceErrors = sourceStatuses.filter((item) => sourceKeys.includes(item.source as SourceKey) && (item.status === 'error' || item.auth_required))
 
   return (
     <div className="data-page freelance-page">
@@ -213,6 +216,11 @@ export default function FreelancePage() {
             <MetricCard icon={BriefcaseBusiness} label="В работе" value={stats.in_progress} hint={stats.total ? `${Math.round((stats.in_progress / stats.total) * 100)}% от всех` : '0% от всех'} accent="purple" />
           </div>
 
+          <div className="freelance-view-tabs" role="tablist" aria-label="Списки заказов">
+            <button className={!showArchived ? 'active' : ''} type="button" role="tab" aria-selected={!showArchived} onClick={() => setShowArchived(false)}><Folder size={17} />Активные <span>{stats.total}</span></button>
+            <button className={showArchived ? 'active' : ''} type="button" role="tab" aria-selected={showArchived} onClick={() => setShowArchived(true)}><Archive size={17} />Скрытые <span>{stats.archived}</span></button>
+          </div>
+
           <div className="toolbar-row freelance-toolbar">
             <label className="local-search"><span className="sr-only">Поиск заказов</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск заказов..." /><Search size={19} /></label>
             <label className="select-control"><span className="sr-only">Статус</span><select value={status} onChange={(event) => setStatus(event.target.value)}><option>Все</option>{statuses.map((item) => <option key={item}>{item}</option>)}</select></label>
@@ -224,7 +232,7 @@ export default function FreelancePage() {
 
           {error && <div className="page-feedback error" role="alert"><AlertCircle size={17} />{error}</div>}
           {feedback && <div className="page-feedback success" role="status"><Check size={17} />{feedback}</div>}
-          {loading ? <div className="freelance-loading" role="status"><LoaderCircle className="spin" size={24} />Загружаю сохранённые заказы…</div> : <div className="opportunity-list freelance-list">{filtered.length ? filtered.map((order) => <OrderRow key={order.id} order={order} busy={busy === `order-${order.id}` || busy === `archive-${order.id}`} onUpdate={updateOrder} onArchive={archiveOrder} />) : <EmptyState>{orders.length ? 'По выбранным фильтрам заказы не найдены.' : 'Заказов пока нет. Запустите проверку источников или добавьте заказ вручную.'}</EmptyState>}</div>}
+          {loading ? <div className="freelance-loading" role="status"><LoaderCircle className="spin" size={24} />Загружаю сохранённые заказы…</div> : <div className="opportunity-list freelance-list">{filtered.length ? filtered.map((order) => <OrderRow key={order.id} order={order} archived={showArchived} busy={busy === `order-${order.id}` || busy === `archive-${order.id}` || busy === `restore-${order.id}`} onUpdate={updateOrder} onArchive={archiveOrder} onRestore={restoreOrder} />) : <EmptyState>{orders.length ? 'По выбранным фильтрам заказы не найдены.' : showArchived ? 'Скрытых заказов нет. Здесь появятся карточки, которые вы убрали из активного списка.' : 'Заказов пока нет. Запустите проверку источников или добавьте заказ вручную.'}</EmptyState>}</div>}
         </section>
 
         <aside className="data-side-column">
@@ -260,9 +268,9 @@ function SourceIcon({ source }: { source: string }) {
   return <Icon size={20} />
 }
 
-function OrderRow({ order, busy, onUpdate, onArchive }: { order: FreelanceOrder; busy: boolean; onUpdate: (id: number, changes: Record<string, unknown>) => void; onArchive: (id: number) => void }) {
+function OrderRow({ order, archived, busy, onUpdate, onArchive, onRestore }: { order: FreelanceOrder; archived: boolean; busy: boolean; onUpdate: (id: number, changes: Record<string, unknown>) => void; onArchive: (id: number) => void; onRestore: (id: number) => void }) {
   const accent = accents[order.source] ?? 'blue'
-  return <article className="opportunity-row freelance-order-row"><div className="opportunity-identity"><span className={`project-logo ${accent}`}><SourceIcon source={order.source} /></span><div><div className="freelance-order-title"><h2>{order.title}</h2><StatusBadge tone={order.relevance >= 70 ? 'green' : order.relevance >= 40 ? 'orange' : 'gray'}>{order.relevance}% match</StatusBadge></div><p>{order.description || 'Описание не предоставлено источником.'}</p><div className="tag-row">{[sourceLabel(order.source), ...order.categories, ...order.tags].filter(Boolean).slice(0, 5).map((tag) => <Tag key={tag}>{tag}</Tag>)}</div></div></div><div className="opportunity-meta"><p><BriefcaseBusiness />Бюджет <strong>{formatBudget(order)}</strong></p><p><Sparkles />Источник <strong>{sourceLabel(order.source)}</strong></p><p><Clock3 />Добавлено <strong>{formatDate(order.published_at || order.discovered_at)}</strong></p>{order.customer && <p><UsersRound />Заказчик <strong>{order.customer}</strong></p>}</div><div className="opportunity-status freelance-order-status"><StatusBadge tone={order.status === 'Отказ' ? 'red' : order.status === 'В работе' ? 'green' : order.status === 'Ответили' ? 'orange' : 'blue'}>{order.status}</StatusBadge><span>Следующий шаг</span><strong>{order.next_step}</strong><label className="status-select-label"><span className="sr-only">Статус заказа {order.title}</span><select value={order.status} onChange={(event) => onUpdate(order.id, { status: event.target.value })} disabled={busy}>{statuses.map((item) => <option key={item}>{item}</option>)}</select></label><div className="stacked-order-actions"><button type="button" onClick={() => order.url && window.open(order.url, '_blank', 'noopener,noreferrer')} disabled={!order.url}><span>{order.url ? 'Открыть источник' : 'Ссылка отсутствует'}</span>{order.url && <ExternalLink size={14} />}</button><button className="primary-row-action" type="button" onClick={() => onUpdate(order.id, { status: order.status === 'Новый' ? 'Написал' : order.status })} disabled={busy}>{busy ? <LoaderCircle className="spin" size={14} /> : <ChevronRight size={15} />}Следующий шаг</button><button className="danger-row-action" type="button" onClick={() => onArchive(order.id)} disabled={busy}><X size={14} />Скрыть</button></div></div></article>
+  return <article className={`opportunity-row freelance-order-row ${archived ? 'archived-order' : ''}`}><div className="opportunity-identity"><span className={`project-logo ${accent}`}><SourceIcon source={order.source} /></span><div><div className="freelance-order-title"><h2>{order.title}</h2><StatusBadge tone={order.relevance >= 70 ? 'green' : order.relevance >= 40 ? 'orange' : 'gray'}>{order.relevance}% match</StatusBadge></div><p>{order.description || 'Описание не предоставлено источником.'}</p><div className="tag-row">{[sourceLabel(order.source), ...order.categories, ...order.tags].filter(Boolean).slice(0, 5).map((tag) => <Tag key={tag}>{tag}</Tag>)}</div></div></div><div className="opportunity-meta"><p><BriefcaseBusiness />Бюджет <strong>{formatBudget(order)}</strong></p><p><Sparkles />Источник <strong>{sourceLabel(order.source)}</strong></p><p><Clock3 />Добавлено <strong>{formatDate(order.published_at || order.discovered_at)}</strong></p>{order.customer && <p><UsersRound />Заказчик <strong>{order.customer}</strong></p>}</div><div className="opportunity-status freelance-order-status"><StatusBadge tone={archived ? 'gray' : order.status === 'Отказ' ? 'red' : order.status === 'В работе' ? 'green' : order.status === 'Ответили' ? 'orange' : 'blue'}>{archived ? 'Скрыт' : order.status}</StatusBadge><span>Следующий шаг</span><strong>{order.next_step}</strong><label className="status-select-label"><span className="sr-only">Статус заказа {order.title}</span><select value={order.status} onChange={(event) => onUpdate(order.id, { status: event.target.value })} disabled={busy}>{statuses.map((item) => <option key={item}>{item}</option>)}</select></label><div className="stacked-order-actions"><button type="button" onClick={() => order.url && window.open(order.url, '_blank', 'noopener,noreferrer')} disabled={!order.url}><span>{order.url ? 'Открыть источник' : 'Ссылка отсутствует'}</span>{order.url && <ExternalLink size={14} />}</button>{archived ? <button className="restore-row-action" type="button" onClick={() => onRestore(order.id)} disabled={busy}>{busy ? <LoaderCircle className="spin" size={14} /> : <RotateCcw size={14} />}Вернуть в активные</button> : <><button className="primary-row-action" type="button" onClick={() => onUpdate(order.id, { status: order.status === 'Новый' ? 'Написал' : order.status })} disabled={busy}>{busy ? <LoaderCircle className="spin" size={14} /> : <ChevronRight size={15} />}Следующий шаг</button><button className="danger-row-action" type="button" onClick={() => onArchive(order.id)} disabled={busy}><X size={14} />Скрыть</button></>}</div></div></article>
 }
 
 function ParserSource({ text, tone, active, status }: { text: string; tone: UiAccent; active: boolean; status?: SourceStatus }) {

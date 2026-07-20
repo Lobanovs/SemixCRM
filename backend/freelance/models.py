@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
-FREELANCE_SOURCES = ("kwork", "fl", "freelance_ru", "workzilla", "freelancehunt", "profi", "youdo")
+FREELANCE_SOURCES = ("kwork", "fl", "freelance_ru", "workzilla", "profi", "youdo")
 FREELANCE_STATUSES = ("Новый", "Написал", "Откликнулся", "Ответили", "Созвон", "В работе", "Завершён", "Отказ")
 
 

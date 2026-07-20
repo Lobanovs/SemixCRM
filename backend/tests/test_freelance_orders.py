@@ -47,6 +47,17 @@ class FreelanceOrderTests(unittest.TestCase):
         self.assertEqual([], database.list_freelance_orders(FreelanceOrderFilters()))
         self.assertEqual(0, database.freelance_stats()["total"])
 
+    def test_archived_orders_are_separate_and_can_be_restored(self) -> None:
+        created = database.create_freelance_order(FreelanceOrder(source="fl", external_id="hidden-1", title="Hidden order"))
+        self.assertTrue(database.archive_freelance_order(created["id"]))
+        self.assertEqual([], database.list_freelance_orders(FreelanceOrderFilters()))
+        hidden = database.list_freelance_orders(FreelanceOrderFilters(include_archived=True))
+        self.assertEqual(["Hidden order"], [item["title"] for item in hidden])
+        self.assertEqual(1, database.freelance_stats()["archived"])
+        restored = database.update_freelance_order(created["id"], archived=False)
+        self.assertFalse(restored["archived"])
+        self.assertEqual(["Hidden order"], [item["title"] for item in database.list_freelance_orders(FreelanceOrderFilters())])
+
 
 if __name__ == "__main__":
     unittest.main()

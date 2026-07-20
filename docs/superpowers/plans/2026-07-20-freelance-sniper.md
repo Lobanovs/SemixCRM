@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the hardcoded Freelance page with a persisted order CRM, seven source adapters, a local sniper worker, and single-recipient Telegram notifications.
+**Goal:** Replace the hardcoded Freelance page with a persisted order CRM, six source adapters, a local sniper worker, and single-recipient Telegram notifications.
 
 **Architecture:** The backend normalizes all sources into one `FreelanceOrder` model. Public/API adapters use HTTP, authenticated sources use a persistent Chromium profile, and a shared service deduplicates, scores, persists, and notifies. FastAPI exposes CRUD, source health, settings, and sniper controls; the React page reads only these endpoints.
 
@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - The sniper works only while the local Semix CRM backend is running.
-- Seven sources are independently enabled: Kwork, FL.ru, Freelance.ru, Workzilla, Freelancehunt, Profi.ru, YouDo.
+- Six sources are independently enabled: Kwork, FL.ru, Freelance.ru, Workzilla, Profi.ru, YouDo.
 - The implementation never bypasses CAPTCHA, access restrictions, or platform protections.
 - Credentials are never stored in source code; browser cookies remain in a local Chromium profile.
 - `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ALLOWED_CHAT_ID` are read only from environment variables.
@@ -30,7 +30,7 @@ Create these focused modules:
 - `backend/freelance/models.py` — dataclasses, enums, and adapter result types.
 - `backend/freelance/scoring.py` — deterministic relevance scoring.
 - `backend/freelance/adapters/base.py` — adapter protocol and shared HTTP/browser helpers.
-- `backend/freelance/adapters/public.py` — Kwork, FL.ru, Freelance.ru, and Freelancehunt adapters.
+- `backend/freelance/adapters/public.py` — Kwork, FL.ru, and Freelance.ru adapters.
 - `backend/freelance/adapters/browser.py` — Workzilla, Profi.ru, and YouDo adapters using persistent Chromium.
 - `backend/freelance/adapters/registry.py` — source registry and adapter construction.
 - `backend/freelance/telegram.py` — single-recipient Telegram notifier.
@@ -186,7 +186,6 @@ git commit -m "feat: persist freelance orders"
 - Create: `backend/freelance/adapters/browser.py`
 - Create: `backend/freelance/adapters/registry.py`
 - Create: `backend/tests/fixtures/freelance/fl_projects.html`
-- Create: `backend/tests/fixtures/freelance/freelancehunt_projects.json`
 - Create: `backend/tests/fixtures/freelance/kwork_projects.html`
 - Create: `backend/tests/fixtures/freelance/freelance_ru_projects.html`
 - Create: `backend/tests/test_freelance_adapters.py`
@@ -195,7 +194,7 @@ git commit -m "feat: persist freelance orders"
 **Interfaces:**
 - `SourceAdapter.source -> str`, `SourceAdapter.requires_browser -> bool`, `SourceAdapter.collect(settings) -> AdapterResult`.
 - `AdapterResult(source, status, orders, checked_at, error, auth_required)`.
-- Registry keys are exactly `kwork`, `fl`, `freelance_ru`, `workzilla`, `freelancehunt`, `profi`, `youdo`.
+- Registry keys are exactly `kwork`, `fl`, `freelance_ru`, `workzilla`, `profi`, `youdo`.
 
 - [ ] **Step 1: Add failing fixture tests for public adapters and registry coverage.**
 
@@ -209,7 +208,7 @@ def test_fl_fixture_extracts_real_fields(self):
 
 def test_registry_contains_all_requested_sources(self):
     self.assertEqual(
-        {"kwork", "fl", "freelance_ru", "workzilla", "freelancehunt", "profi", "youdo"},
+        {"kwork", "fl", "freelance_ru", "workzilla", "profi", "youdo"},
         set(adapter_registry()),
     )
 
@@ -234,7 +233,7 @@ beautifulsoup4>=4.13,<5
 playwright>=1.54,<2
 ```
 
-Implement public adapters with `httpx.Client`, a descriptive User-Agent, a 20-second timeout, and BeautifulSoup selectors from the checked-in fixtures. Implement Freelancehunt through its documented projects endpoint and parse the JSON response. Implement browser adapters through `sync_playwright().chromium.launch_persistent_context(user_data_dir=...)`; never accept a password argument.
+Implement public adapters with `httpx.Client`, a descriptive User-Agent, a 20-second timeout, and BeautifulSoup selectors from the checked-in fixtures. Implement browser adapters through `sync_playwright().chromium.launch_persistent_context(user_data_dir=...)`; never accept a password argument.
 
 - [ ] **Step 4: Run fixture tests and verify the registry.**
 

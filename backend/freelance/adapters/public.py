@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 from dataclasses import replace
 from html import unescape
-from typing import Any, Callable
+from typing import Any
 
 from bs4 import BeautifulSoup
-import httpx
 
-from ..models import AdapterResult, FreelanceOrder, FreelanceSettings
+from ..models import FreelanceOrder
 from .base import PublicHttpAdapter, absolute_url, now_iso, order_from_card, source_url
 
 
@@ -36,7 +34,6 @@ class FlAdapter(PublicHttpAdapter):
                 f"{self.source}-{card.get('data-project-id')}" if card.get("data-project-id") else "",
             ))
         return orders
-
 
 class KworkAdapter(PublicHttpAdapter):
     source = "kwork"
@@ -136,61 +133,4 @@ class FreelanceRuAdapter(PublicHttpAdapter):
                 f"freelance_ru-{match.group(1)}",
             )
             orders.append(replace(order, published_at=published.get_text(" ", strip=True) if published else ""))
-        return orders
-
-
-class FreelancehuntAdapter(PublicHttpAdapter):
-    source = "freelancehunt"
-    url = source_url("freelancehunt", "https://api.freelancehunt.com/v2/projects")
-
-    def __init__(self, client_factory: Callable[..., httpx.Client] | None = None, token: str | None = None) -> None:
-        super().__init__(client_factory=client_factory)
-        self.token = os.getenv("FREELANCEHUNT_API_TOKEN", "") if token is None else token
-
-    def fetch_json(self) -> dict[str, Any]:
-        with self.client_factory(headers={"User-Agent": "SemixCRM/1.0", "Accept": "application/json", "Accept-Language": "ru", "Authorization": f"Bearer {self.token}"}, follow_redirects=True, timeout=20) as client:
-            response = client.get(self.url)
-            response.raise_for_status()
-            return response.json()
-
-    def collect(self, settings: FreelanceSettings) -> AdapterResult:
-        if not self.token:
-            return AdapterResult(self.source, "auth_required", checked_at=now_iso(), error="Добавьте FREELANCEHUNT_API_TOKEN в .env", auth_required=True)
-        try:
-            payload = self.fetch_json()
-            orders = self.parse_json(payload)
-            return AdapterResult(self.source, "done" if orders else "empty", tuple(orders), now_iso())
-        except httpx.HTTPStatusError as error:
-            if error.response.status_code in (401, 403):
-                return AdapterResult(self.source, "auth_required", checked_at=now_iso(), error="Проверьте FREELANCEHUNT_API_TOKEN", auth_required=True)
-            return AdapterResult(self.source, "error", checked_at=now_iso(), error=f"HTTP {error.response.status_code}")
-        except (httpx.HTTPError, json.JSONDecodeError, ValueError) as error:
-            return AdapterResult(self.source, "error", checked_at=now_iso(), error=f"Ошибка API: {error}")
-
-    def parse_json(self, payload: dict[str, Any]) -> list[FreelanceOrder]:
-        data = payload.get("data") if isinstance(payload, dict) else []
-        orders: list[FreelanceOrder] = []
-        for item in data if isinstance(data, list) else []:
-            attributes = item.get("attributes") or {}
-            external_id = str(item.get("id") or "").strip()
-            title = str(attributes.get("name") or "").strip()
-            if not external_id or not title:
-                continue
-            budget = attributes.get("budget") if isinstance(attributes.get("budget"), dict) else {}
-            amount = budget.get("amount")
-            link = (item.get("links") or {}).get("web") or attributes.get("url") or f"https://freelancehunt.com/project/{external_id}.html"
-            skills = attributes.get("skills") if isinstance(attributes.get("skills"), list) else []
-            categories = tuple(str(skill.get("name") or skill.get("title") or "").strip() for skill in skills if isinstance(skill, dict) and (skill.get("name") or skill.get("title")))
-            orders.append(FreelanceOrder(
-                source=self.source,
-                external_id=external_id,
-                title=title,
-                description=str(attributes.get("description_html") or attributes.get("description") or ""),
-                url=str(link),
-                categories=categories,
-                budget_min=int(amount) if str(amount).isdigit() else None,
-                budget_text=str(amount or ""),
-                currency=str(budget.get("currency") or "UAH"),
-                discovered_at=now_iso(),
-            ))
         return orders

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import unittest
-import json
 from pathlib import Path
+from unittest.mock import patch
 
 from backend.freelance.adapters.browser import WorkzillaAdapter
-from backend.freelance.adapters.public import FlAdapter, FreelanceRuAdapter, FreelancehuntAdapter, KworkAdapter
+from backend.freelance.adapters.public import FlAdapter, FreelanceRuAdapter, KworkAdapter
 from backend.freelance.adapters.registry import adapter_registry, build_adapters
+from backend.freelance.browser_profile import PersistentBrowserSession
 from backend.freelance.models import FreelanceSettings
 
 
@@ -39,21 +40,9 @@ class FreelanceAdapterTests(unittest.TestCase):
         self.assertEqual(100000, result[0].budget_min)
         self.assertEqual(("Веб-разработка и IT",), result[0].categories)
 
-    def test_freelancehunt_fixture_extracts_api_project(self) -> None:
-        payload = json.loads((FIXTURES / "freelancehunt_projects.json").read_text(encoding="utf-8"))
-        result = FreelancehuntAdapter(token="test-token").parse_json(payload)
-        self.assertEqual("1493532", result[0].external_id)
-        self.assertEqual("https://freelancehunt.com/project/1493532.html", result[0].url)
-        self.assertEqual(91000, result[0].budget_min)
-
-    def test_freelancehunt_requires_api_token(self) -> None:
-        result = FreelancehuntAdapter(token="").collect(FreelanceSettings())
-        self.assertEqual("auth_required", result.status)
-        self.assertTrue(result.auth_required)
-
-    def test_registry_contains_all_requested_sources(self) -> None:
+    def test_registry_contains_only_supported_sources(self) -> None:
         self.assertEqual(
-            {"kwork", "fl", "freelance_ru", "workzilla", "freelancehunt", "profi", "youdo"},
+            {"kwork", "fl", "freelance_ru", "workzilla", "profi", "youdo"},
             set(adapter_registry()),
         )
 
@@ -98,6 +87,59 @@ class FreelanceAdapterTests(unittest.TestCase):
         self.assertIs(factory, adapters["profi"].browser_factory)
         self.assertIs(factory, adapters["youdo"].browser_factory)
         self.assertFalse(adapters["fl"].requires_browser)
+
+    def test_persistent_session_prefers_detected_chrome_executable(self) -> None:
+        class FakeContext:
+            def close(self):
+                return None
+
+        class FakeChromium:
+            def __init__(self):
+                self.options = None
+
+            def launch_persistent_context(self, **options):
+                self.options = options
+                return FakeContext()
+
+        class FakePlaywright:
+            def __init__(self):
+                self.chromium = FakeChromium()
+
+            def stop(self):
+                return None
+
+        fake_playwright = FakePlaywright()
+        starter = type("Starter", (), {"start": lambda self: fake_playwright})()
+        with patch("backend.freelance.browser_profile.sync_playwright", return_value=starter), patch(
+            "backend.freelance.browser_profile.browser_profile_path", return_value=Path("C:/profile")
+        ), patch(
+            "backend.freelance.browser_profile.find_chrome_executable", return_value=Path("C:/Program Files/Google/Chrome/Application/chrome.exe")
+        ):
+            session = PersistentBrowserSession()
+            self.assertEqual("C:/Program Files/Google/Chrome/Application/chrome.exe", fake_playwright.chromium.options["executable_path"])
+            self.assertNotIn("channel", fake_playwright.chromium.options)
+            session.close()
+
+    def test_missing_browser_runtime_returns_actionable_error(self) -> None:
+        class FakeChromium:
+            def launch_persistent_context(self, **_options):
+                raise Exception("Executable doesn't exist at C:/missing/chrome.exe")
+
+        class FakePlaywright:
+            chromium = FakeChromium()
+
+            def stop(self):
+                return None
+
+        fake_playwright = FakePlaywright()
+        starter = type("Starter", (), {"start": lambda self: fake_playwright})()
+        with patch("backend.freelance.browser_profile.sync_playwright", return_value=starter), patch(
+            "backend.freelance.browser_profile.browser_profile_path", return_value=Path("C:/profile")
+        ), patch("backend.freelance.browser_profile.find_chrome_executable", return_value=None), patch(
+            "backend.freelance.browser_profile.browser_channel", return_value=None
+        ):
+            with self.assertRaisesRegex(RuntimeError, "playwright install chromium"):
+                PersistentBrowserSession()
 
 
 if __name__ == "__main__":

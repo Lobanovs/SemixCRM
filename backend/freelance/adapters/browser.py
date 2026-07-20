@@ -30,7 +30,10 @@ class BrowserAdapter:
     def collect(self, settings: FreelanceSettings) -> AdapterResult:
         if self.browser_factory is None:
             return AdapterResult(self.source, "auth_required", checked_at=now_iso(), error="Откройте авторизацию в браузере", auth_required=True)
-        browser = self.browser_factory()
+        try:
+            browser = self.browser_factory()
+        except Exception as error:  # noqa: BLE001 - local browser runtime may be absent
+            return AdapterResult(self.source, "error", checked_at=now_iso(), error=str(error))
         if browser is None:
             return AdapterResult(self.source, "auth_required", checked_at=now_iso(), error="Откройте авторизацию в браузере", auth_required=True)
         try:

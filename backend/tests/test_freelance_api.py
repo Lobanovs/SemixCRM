@@ -41,6 +41,18 @@ class FreelanceApiTests(unittest.TestCase):
         self.assertEqual(200, updated.status_code)
         self.assertEqual("Написал", updated.json()["status"])
 
+    def test_archived_query_lists_hidden_orders_and_put_restores_them(self) -> None:
+        created = self.client.post("/api/freelance/orders", json={"source": "manual", "title": "Archived order"})
+        order_id = created.json()["id"]
+        self.assertEqual(200, self.client.delete(f"/api/freelance/orders/{order_id}").status_code)
+        hidden = self.client.get("/api/freelance/orders?archived=true")
+        self.assertEqual(200, hidden.status_code)
+        self.assertEqual(["Archived order"], [item["title"] for item in hidden.json()["orders"]])
+        restored = self.client.put(f"/api/freelance/orders/{order_id}", json={"archived": False})
+        self.assertEqual(200, restored.status_code)
+        self.assertFalse(restored.json()["archived"])
+        self.assertEqual([], self.client.get("/api/freelance/orders?archived=true").json()["orders"])
+
     def test_sniper_controls_are_idempotent(self) -> None:
         self.assertEqual("running", self.client.post("/api/freelance/sniper/start").json()["status"])
         self.assertEqual("running", self.client.post("/api/freelance/sniper/start").json()["status"])

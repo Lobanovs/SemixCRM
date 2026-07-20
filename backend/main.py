@@ -167,7 +167,7 @@ class FreelanceOrderUpdateRequest(BaseModel):
 
 
 class FreelanceSettingsRequest(BaseModel):
-    sources: list[str] = Field(min_length=1, max_length=7)
+    sources: list[str] = Field(min_length=1, max_length=6)
     keywords: list[str] = Field(default_factory=list, max_length=50)
     excluded_keywords: list[str] = Field(default_factory=list, max_length=50)
     categories: list[str] = Field(default_factory=list, max_length=30)
@@ -204,8 +204,9 @@ def freelance_orders(
     category: str = Query(default="", max_length=80),
     min_budget: int | None = Query(default=None, ge=0),
     sort: str = Query(default="relevance", max_length=20),
+    archived: bool = Query(default=False),
 ) -> dict[str, Any]:
-    orders = list_freelance_orders(FreelanceOrderFilters(query=query, source=source, status=status, category=category, min_budget=min_budget, sort=sort))
+    orders = list_freelance_orders(FreelanceOrderFilters(query=query, source=source, status=status, category=category, min_budget=min_budget, sort=sort, include_archived=archived))
     return {"orders": orders, "stats": freelance_stats(), "sources": list_source_statuses()}
 
 

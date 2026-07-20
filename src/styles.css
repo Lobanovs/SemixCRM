@@ -3767,6 +3767,13 @@ a:focus-visible {
 }
 
 /* Freelance data-backed states */
+.freelance-view-tabs { display: inline-flex; gap: 4px; margin: 14px 0 4px; padding: 4px; border: 1px solid #dbe3ed; border-radius: 10px; background: #f5f8fc; }
+.freelance-view-tabs button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 7px; padding: 0 14px; border: 0; border-radius: 7px; color: #62718a; background: transparent; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; transition: color .18s ease, background-color .18s ease, box-shadow .18s ease; }
+.freelance-view-tabs button:hover { color: #1264e8; background: rgba(255,255,255,.7); }
+.freelance-view-tabs button:focus-visible { outline: 3px solid rgba(18,100,232,.22); outline-offset: 2px; }
+.freelance-view-tabs button.active { color: #1264e8; background: #fff; box-shadow: 0 1px 5px rgba(35,57,86,.1); }
+.freelance-view-tabs button span { display: inline-grid; min-width: 22px; height: 22px; place-items: center; padding: 0 6px; border-radius: 11px; color: #60708a; background: #e8eef6; font-size: 11px; }
+.freelance-view-tabs button.active span { color: #fff; background: #1264e8; }
 .freelance-order-title { display: flex; min-width: 0; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .freelance-order-title h2 { min-width: 0; margin: 0; }
 .freelance-order-title .status-badge { flex: 0 0 auto; }
@@ -3775,6 +3782,9 @@ a:focus-visible {
 .freelance-order-row .status-select-label { display: block; margin-top: 8px; }
 .status-select-label select { width: 100%; min-height: 33px; padding: 0 8px; border: 1px solid #d9e0e9; border-radius: 6px; color: #33415a; background: #fff; cursor: pointer; font: inherit; font-size: 11px; }
 .stacked-order-actions .danger-row-action { border-color: #efc4cb; color: #ad4151; background: #fff7f8; }
+.stacked-order-actions .restore-row-action { border-color: #b9ddc5; color: #137f43; background: #f1fbf4; }
+.stacked-order-actions .restore-row-action:hover { border-color: #38a963; background: #e6f7eb; }
+.freelance-order-row.archived-order { border-color: #d5dde8; background: #fafbfd; }
 .stacked-order-actions button:disabled { cursor: not-allowed; opacity: .5; }
 .source-chip.inactive { filter: grayscale(1); opacity: .45; }
 .source-chip.active { box-shadow: 0 0 0 1px rgba(18, 100, 232, .08); }
@@ -3823,6 +3833,14 @@ a:focus-visible {
 .theme-dark .freelance-order-modal select,
 .theme-dark .freelance-order-modal textarea,
 .theme-dark .freelance-settings-modal input { border-color: #40536a; color: #e8eef7; background: #1a293c; }
+.theme-dark .freelance-view-tabs { border-color: #40536a; background: #121d2b; }
+.theme-dark .freelance-view-tabs button { color: #a9b7c9; }
+.theme-dark .freelance-view-tabs button:hover { color: #9bc4ff; background: #1b2c42; }
+.theme-dark .freelance-view-tabs button.active { color: #9bc4ff; background: #20324a; box-shadow: none; }
+.theme-dark .freelance-view-tabs button span { color: #b6c4d5; background: #2a3b50; }
+.theme-dark .freelance-view-tabs button.active span { color: #fff; background: #246fe2; }
+.theme-dark .stacked-order-actions .restore-row-action { border-color: #35694a; color: #9de0b3; background: #193725; }
+.theme-dark .freelance-order-row.archived-order { border-color: #34465b; background: #162131; }
 .theme-dark .page-feedback { border-color: #365a84; color: #b5d3f8; background: #172c47; }
 .theme-dark .page-feedback.error { border-color: #75414a; color: #f0aab4; background: #2c1e27; }
 .theme-dark .page-feedback.success { border-color: #326847; color: #9de0b3; background: #193725; }
@@ -3868,6 +3886,7 @@ a:focus-visible {
   .freelance-order-row .stacked-order-actions button { min-height: 40px; }
   .freelance-toolbar { grid-template-columns: 1fr 1fr; }
   .freelance-toolbar .local-search, .freelance-toolbar .sort-control, .freelance-toolbar .solid-action { grid-column: 1 / -1; }
+  .freelance-view-tabs { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
   .freelance-source-options { grid-template-columns: 1fr; }
   .freelance-settings-modal { width: calc(100vw - 20px); max-height: calc(100vh - 20px); }
   .freelance-settings-modal .parser-modal-body, .freelance-settings-modal .parser-modal-footer { padding-right: 14px; padding-left: 14px; }

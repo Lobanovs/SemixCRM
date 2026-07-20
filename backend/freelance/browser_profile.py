@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import threading
 from pathlib import Path
 from typing import Any
+
+from playwright.sync_api import sync_playwright
 
 
 AUTH_URLS = {
@@ -32,12 +35,39 @@ def browser_channel() -> str | None:
     return value or None
 
 
+def find_chrome_executable() -> Path | None:
+    """Return a locally installed Chromium browser without requiring a Playwright download."""
+
+    local_app_data = os.getenv("LOCALAPPDATA", "").strip()
+    candidates = [
+        os.getenv("FREELANCE_CHROME_PATH", "").strip(),
+        str(Path(local_app_data) / "Google/Chrome/Application/chrome.exe") if local_app_data else "",
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        shutil.which("chrome") or "",
+        shutil.which("google-chrome") or "",
+        shutil.which("chromium") or "",
+    ]
+    for candidate in candidates:
+        if candidate and Path(candidate).is_file():
+            return Path(candidate).resolve()
+    return None
+
+
+def _missing_browser_error(error: Exception) -> RuntimeError:
+    message = str(error)
+    if "Executable doesn't exist" in message or "browserType.launch" in message or "Chromium distribution" in message:
+        return RuntimeError(
+            "Браузер для парсера не найден. Установите Google Chrome или выполните "
+            "backend\\.venv\\Scripts\\python.exe -m playwright install chromium"
+        )
+    return RuntimeError(f"Не удалось запустить браузер парсера: {message}")
+
+
 class PersistentBrowserSession:
     """Own a Playwright persistent context in the thread that created it."""
 
     def __init__(self, *, headless: bool = True) -> None:
-        from playwright.sync_api import sync_playwright
-
         self._playwright = sync_playwright().start()
         options: dict[str, Any] = {
             "user_data_dir": str(browser_profile_path()),
@@ -45,21 +75,25 @@ class PersistentBrowserSession:
             "locale": "ru-RU",
             "viewport": {"width": 1440, "height": 1000},
         }
-        channel = browser_channel()
-        if channel:
-            options["channel"] = channel
+        executable = find_chrome_executable()
+        if executable:
+            options["executable_path"] = executable.as_posix()
+        else:
+            channel = browser_channel()
+            if channel:
+                options["channel"] = channel
         try:
             self._context = self._playwright.chromium.launch_persistent_context(**options)
-        except Exception:
+        except Exception as first_error:
             if "channel" not in options:
                 self._playwright.stop()
-                raise
+                raise _missing_browser_error(first_error) from first_error
             options.pop("channel", None)
             try:
                 self._context = self._playwright.chromium.launch_persistent_context(**options)
-            except Exception:
+            except Exception as fallback_error:
                 self._playwright.stop()
-                raise
+                raise _missing_browser_error(fallback_error) from fallback_error
         self._closed = False
 
     def new_page(self):

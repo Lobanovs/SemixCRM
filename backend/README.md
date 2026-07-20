@@ -50,8 +50,8 @@ TELEGRAM_BOT_TOKEN=
 TELEGRAM_ALLOWED_CHAT_ID=800395558
 FREELANCE_BROWSER_PROFILE=backend/data/freelance_browser
 FREELANCE_BROWSER_CHANNEL=chrome
+FREELANCE_CHROME_PATH=
 FREELANCE_POLL_INTERVAL_SECONDS=60
-FREELANCEHUNT_API_TOKEN=
 ```
 
 Токен Telegram читается только из `.env` и используется только для указанного
@@ -59,17 +59,20 @@ FREELANCEHUNT_API_TOKEN=
 отозвать и выпустить заново через BotFather. Не добавляйте секреты, cookies или
 SQLite-файлы в Git.
 
-Источники Kwork, FL.ru и Freelance.ru читаются из публичных лент. Freelancehunt
-использует официальный API и требует личный API-токен площадки в
-`FREELANCEHUNT_API_TOKEN`. Workzilla, Profi.ru и YouDo используют постоянный
-локальный Chromium-профиль. В интерфейсе нажмите «Настроить» → «Открыть вход»,
+Источники Kwork, FL.ru и Freelance.ru читаются из публичных лент. Workzilla,
+Profi.ru и YouDo используют постоянный локальный Chromium-профиль. CRM сначала
+ищет установленный Google Chrome. При необходимости путь можно указать через
+`FREELANCE_CHROME_PATH` или установить Chromium командой
+`backend\.venv\Scripts\python.exe -m playwright install chromium`.
+В интерфейсе нажмите «Настроить» → «Открыть вход»,
 войдите вручную и закройте окно. Пароли не передаются CRM, CAPTCHA и ограничения
 доступа не обходятся. URL ленты можно переопределить переменными
 `FREELANCE_WORKZILLA_URL`, `FREELANCE_PROFI_URL` и `FREELANCE_YOUDO_URL`.
 
 Основные API раздела:
 
-- `GET/POST /api/freelance/orders` — список и ручное добавление заказов;
+- `GET/POST /api/freelance/orders` — активные заказы и ручное добавление;
+- `GET /api/freelance/orders?archived=true` — отдельный список скрытых заказов;
 - `PUT/DELETE /api/freelance/orders/{id}` — статус, заметка и скрытие;
 - `GET/PUT /api/freelance/settings` — источники, ключевые слова, бюджет и режимы;
 - `POST /api/freelance/sniper/start|stop|check` — управление снайпером;
