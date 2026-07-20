@@ -19,6 +19,7 @@ from .lead_utils import (
     normalize_domain,
     normalize_phone,
 )
+from .freelance.models import FREELANCE_SOURCES, FREELANCE_STATUSES, FreelanceOrder, FreelanceOrderFilters, FreelanceSettings
 
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
@@ -179,7 +180,79 @@ def init_db() -> None:
             )
             """
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS freelance_orders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source TEXT NOT NULL,
+                external_id TEXT NOT NULL,
+                dedupe_key TEXT NOT NULL UNIQUE,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                url TEXT NOT NULL DEFAULT '',
+                customer TEXT NOT NULL DEFAULT '',
+                categories_json TEXT NOT NULL DEFAULT '[]',
+                tags_json TEXT NOT NULL DEFAULT '[]',
+                budget_min INTEGER,
+                budget_max INTEGER,
+                currency TEXT NOT NULL DEFAULT 'RUB',
+                budget_text TEXT NOT NULL DEFAULT '',
+                published_at TEXT NOT NULL DEFAULT '',
+                discovered_at TEXT NOT NULL,
+                relevance INTEGER NOT NULL DEFAULT 0,
+                relevance_reasons_json TEXT NOT NULL DEFAULT '[]',
+                status TEXT NOT NULL DEFAULT 'Новый',
+                next_step TEXT NOT NULL DEFAULT 'Изучить заказ',
+                note TEXT NOT NULL DEFAULT '',
+                archived INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS freelance_settings (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                sources_json TEXT NOT NULL,
+                keywords_json TEXT NOT NULL DEFAULT '[]',
+                excluded_keywords_json TEXT NOT NULL DEFAULT '[]',
+                categories_json TEXT NOT NULL DEFAULT '[]',
+                min_budget INTEGER NOT NULL DEFAULT 0,
+                interval_seconds INTEGER NOT NULL DEFAULT 60,
+                sniper_enabled INTEGER NOT NULL DEFAULT 0,
+                telegram_enabled INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS freelance_source_checks (
+                source TEXT PRIMARY KEY,
+                status TEXT NOT NULL,
+                checked_at TEXT NOT NULL,
+                order_count INTEGER NOT NULL DEFAULT 0,
+                error TEXT NOT NULL DEFAULT '',
+                auth_required INTEGER NOT NULL DEFAULT 0
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS freelance_notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source TEXT NOT NULL,
+                external_id TEXT NOT NULL,
+                chat_id TEXT NOT NULL,
+                sent_at TEXT,
+                error TEXT NOT NULL DEFAULT '',
+                UNIQUE(source, external_id, chat_id)
+            )
+            """
+        )
         connection.execute("CREATE INDEX IF NOT EXISTS schedule_tasks_date_idx ON schedule_tasks(task_date)")
+        connection.execute("CREATE INDEX IF NOT EXISTS freelance_orders_published_idx ON freelance_orders(published_at)")
         _migrate_and_deduplicate_clients(connection)
         connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS clients_dedupe_idx ON clients(dedupe_key)")
         existing = connection.execute("SELECT id FROM parser_settings WHERE id = 1").fetchone()
@@ -474,6 +547,225 @@ def get_schedule(week_start: str) -> dict[str, Any]:
         "upcoming": upcoming,
         "past_weeks": [row["week_start"] for row in past_rows if row["week_start"]],
     }
+
+
+def _freelance_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _freelance_json_list(value: Any) -> list[str]:
+    return [str(item).strip() for item in _json_list(value, []) if str(item).strip()]
+
+
+def _freelance_key(order: FreelanceOrder) -> str:
+    source = str(order.source or "manual").strip().lower()
+    external_id = str(order.external_id or "").strip()
+    fallback = order.url.strip() or f"{order.title.strip().casefold()}|{order.published_at.strip()}"
+    return f"{source}:{external_id or fallback}"
+
+
+def _serialize_freelance_order(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
+    item = dict(row)
+    return {
+        "id": int(item["id"]),
+        "source": item["source"],
+        "external_id": item["external_id"],
+        "title": item["title"],
+        "description": item["description"] or "",
+        "url": item["url"] or "",
+        "customer": item["customer"] or "",
+        "categories": _freelance_json_list(item["categories_json"]),
+        "tags": _freelance_json_list(item["tags_json"]),
+        "budget_min": item["budget_min"],
+        "budget_max": item["budget_max"],
+        "currency": item["currency"] or "RUB",
+        "budget_text": item["budget_text"] or "",
+        "published_at": item["published_at"] or "",
+        "discovered_at": item["discovered_at"] or "",
+        "relevance": int(item["relevance"] or 0),
+        "relevance_reasons": _freelance_json_list(item["relevance_reasons_json"]),
+        "status": item["status"] or "Новый",
+        "next_step": item["next_step"] or "Изучить заказ",
+        "note": item["note"] or "",
+        "archived": bool(item["archived"]),
+    }
+
+
+def create_freelance_order(order: FreelanceOrder) -> dict[str, Any]:
+    source = str(order.source or "manual").strip().lower()
+    if not order.title.strip():
+        raise ValueError("Название заказа обязательно")
+    if source not in (*FREELANCE_SOURCES, "manual"):
+        raise ValueError("Неизвестный источник заказа")
+    status = order.status if order.status in FREELANCE_STATUSES else "Новый"
+    now = _freelance_now()
+    dedupe_key = _freelance_key(FreelanceOrder(**{**order.__dict__, "source": source}))
+    values = (
+        source, str(order.external_id or "").strip(), dedupe_key, order.title.strip(), order.description.strip(),
+        order.url.strip(), order.customer.strip(), json.dumps(list(order.categories), ensure_ascii=False),
+        json.dumps(list(order.tags), ensure_ascii=False), order.budget_min, order.budget_max, order.currency.strip() or "RUB",
+        order.budget_text.strip(), order.published_at.strip(), order.discovered_at.strip() or now, max(0, min(int(order.relevance), 100)),
+        json.dumps(list(order.relevance_reasons), ensure_ascii=False), status, order.next_step.strip() or "Изучить заказ",
+        order.note.strip(), int(order.archived), now, now,
+    )
+    with _connect() as connection:
+        existing = connection.execute("SELECT * FROM freelance_orders WHERE dedupe_key = ?", (dedupe_key,)).fetchone()
+        if existing:
+            connection.execute(
+                """UPDATE freelance_orders SET title = ?, description = ?, url = ?, customer = ?, categories_json = ?, tags_json = ?,
+                    budget_min = ?, budget_max = ?, currency = ?, budget_text = ?, published_at = ?, relevance = ?,
+                    relevance_reasons_json = ?, updated_at = ? WHERE id = ?""",
+                (values[3], values[4], values[5], values[6], values[7], values[8], values[9], values[10], values[11], values[12], values[13], values[15], values[16], now, existing["id"]),
+            )
+            row = connection.execute("SELECT * FROM freelance_orders WHERE id = ?", (existing["id"],)).fetchone()
+            return _serialize_freelance_order(row)
+        cursor = connection.execute(
+            """INSERT INTO freelance_orders (source, external_id, dedupe_key, title, description, url, customer, categories_json, tags_json,
+                budget_min, budget_max, currency, budget_text, published_at, discovered_at, relevance, relevance_reasons_json, status,
+                next_step, note, archived, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            values,
+        )
+        row = connection.execute("SELECT * FROM freelance_orders WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    return _serialize_freelance_order(row)
+
+
+def list_freelance_orders(filters: FreelanceOrderFilters) -> list[dict[str, Any]]:
+    clauses = ["archived = ?"]
+    params: list[Any] = [0 if not filters.include_archived else 1]
+    if filters.source:
+        clauses.append("source = ?")
+        params.append(filters.source.strip().lower())
+    if filters.status:
+        clauses.append("status = ?")
+        params.append(filters.status)
+    if filters.category:
+        clauses.append("(categories_json LIKE ? OR tags_json LIKE ?)")
+        needle = f"%{filters.category.strip()}%"
+        params.extend([needle, needle])
+    if filters.min_budget is not None:
+        clauses.append("COALESCE(budget_max, budget_min, 0) >= ?")
+        params.append(max(0, filters.min_budget))
+    if filters.query.strip():
+        clauses.append("(title LIKE ? OR description LIKE ? OR customer LIKE ? OR tags_json LIKE ? OR categories_json LIKE ?)")
+        needle = f"%{filters.query.strip()}%"
+        params.extend([needle] * 5)
+    order_by = {
+        "newest": "COALESCE(published_at, discovered_at) DESC, id DESC",
+        "budget": "COALESCE(budget_max, budget_min, 0) DESC, id DESC",
+        "relevance": "relevance DESC, COALESCE(published_at, discovered_at) DESC, id DESC",
+    }.get(filters.sort, "relevance DESC, COALESCE(published_at, discovered_at) DESC, id DESC")
+    with _connect() as connection:
+        rows = connection.execute(f"SELECT * FROM freelance_orders WHERE {' AND '.join(clauses)} ORDER BY {order_by}", params).fetchall()
+    return [_serialize_freelance_order(row) for row in rows]
+
+
+def get_freelance_order(order_id: int) -> dict[str, Any] | None:
+    with _connect() as connection:
+        row = connection.execute("SELECT * FROM freelance_orders WHERE id = ?", (order_id,)).fetchone()
+    return _serialize_freelance_order(row) if row else None
+
+
+def update_freelance_order(order_id: int, **changes: Any) -> dict[str, Any] | None:
+    allowed = {"status", "next_step", "note", "archived", "relevance", "relevance_reasons_json"}
+    values = {key: value for key, value in changes.items() if key in allowed and value is not None}
+    if "status" in values and values["status"] not in FREELANCE_STATUSES:
+        raise ValueError("Неизвестный статус заказа")
+    if not values:
+        return get_freelance_order(order_id)
+    if "archived" in values:
+        values["archived"] = int(bool(values["archived"]))
+    values["updated_at"] = _freelance_now()
+    assignments = ", ".join(f"{field} = ?" for field in values)
+    with _connect() as connection:
+        connection.execute(f"UPDATE freelance_orders SET {assignments} WHERE id = ?", (*values.values(), order_id))
+        row = connection.execute("SELECT * FROM freelance_orders WHERE id = ?", (order_id,)).fetchone()
+    return _serialize_freelance_order(row) if row else None
+
+
+def archive_freelance_order(order_id: int) -> bool:
+    return update_freelance_order(order_id, archived=True) is not None
+
+
+def freelance_stats() -> dict[str, Any]:
+    with _connect() as connection:
+        rows = connection.execute("SELECT status, discovered_at FROM freelance_orders WHERE archived = 0").fetchall()
+    today = datetime.now(timezone.utc).date().isoformat()
+    stages = {status: 0 for status in FREELANCE_STATUSES}
+    for row in rows:
+        if row["status"] in stages:
+            stages[row["status"]] += 1
+    return {
+        "total": len(rows),
+        "responded": stages["Откликнулся"],
+        "replied": stages["Ответили"],
+        "in_progress": stages["В работе"],
+        "new_today": sum(1 for row in rows if str(row["discovered_at"]).startswith(today)),
+        "stages": stages,
+    }
+
+
+def get_freelance_settings() -> dict[str, Any]:
+    with _connect() as connection:
+        row = connection.execute("SELECT * FROM freelance_settings WHERE id = 1").fetchone()
+    if row is None:
+        return {
+            "sources": list(FREELANCE_SOURCES), "keywords": [], "excluded_keywords": [], "categories": [],
+            "min_budget": 0, "interval_seconds": 60, "sniper_enabled": False, "telegram_enabled": False,
+        }
+    return {
+        "sources": _freelance_json_list(row["sources_json"]), "keywords": _freelance_json_list(row["keywords_json"]),
+        "excluded_keywords": _freelance_json_list(row["excluded_keywords_json"]), "categories": _freelance_json_list(row["categories_json"]),
+        "min_budget": int(row["min_budget"] or 0), "interval_seconds": int(row["interval_seconds"] or 60),
+        "sniper_enabled": bool(row["sniper_enabled"]), "telegram_enabled": bool(row["telegram_enabled"]),
+        "updated_at": row["updated_at"],
+    }
+
+
+def save_freelance_settings(settings: FreelanceSettings) -> dict[str, Any]:
+    sources = [source for source in dict.fromkeys(settings.sources) if source in FREELANCE_SOURCES]
+    if not sources:
+        raise ValueError("Выберите хотя бы один источник")
+    now = _freelance_now()
+    with _connect() as connection:
+        connection.execute(
+            """INSERT INTO freelance_settings (id, sources_json, keywords_json, excluded_keywords_json, categories_json, min_budget, interval_seconds, sniper_enabled, telegram_enabled, updated_at)
+            VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET sources_json = excluded.sources_json, keywords_json = excluded.keywords_json,
+            excluded_keywords_json = excluded.excluded_keywords_json, categories_json = excluded.categories_json, min_budget = excluded.min_budget,
+            interval_seconds = excluded.interval_seconds, sniper_enabled = excluded.sniper_enabled, telegram_enabled = excluded.telegram_enabled, updated_at = excluded.updated_at""",
+            (json.dumps(sources, ensure_ascii=False), json.dumps(list(dict.fromkeys(settings.keywords)), ensure_ascii=False), json.dumps(list(dict.fromkeys(settings.excluded_keywords)), ensure_ascii=False), json.dumps(list(dict.fromkeys(settings.categories)), ensure_ascii=False), max(0, settings.min_budget), max(30, min(settings.interval_seconds, 3600)), int(settings.sniper_enabled), int(settings.telegram_enabled), now),
+        )
+    return get_freelance_settings()
+
+
+def record_source_check(status: dict[str, Any]) -> None:
+    with _connect() as connection:
+        connection.execute(
+            """INSERT INTO freelance_source_checks (source, status, checked_at, order_count, error, auth_required) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(source) DO UPDATE SET status = excluded.status, checked_at = excluded.checked_at, order_count = excluded.order_count, error = excluded.error, auth_required = excluded.auth_required""",
+            (status["source"], status.get("status", "unknown"), status.get("checked_at") or _freelance_now(), int(status.get("order_count") or 0), status.get("error") or "", int(bool(status.get("auth_required")))),
+        )
+
+
+def list_source_statuses() -> list[dict[str, Any]]:
+    with _connect() as connection:
+        rows = connection.execute("SELECT * FROM freelance_source_checks ORDER BY source").fetchall()
+    return [{**dict(row), "auth_required": bool(row["auth_required"])} for row in rows]
+
+
+def notification_sent(source: str, external_id: str, chat_id: str) -> bool:
+    with _connect() as connection:
+        row = connection.execute("SELECT 1 FROM freelance_notifications WHERE source = ? AND external_id = ? AND chat_id = ? AND sent_at IS NOT NULL", (source, external_id, chat_id)).fetchone()
+    return row is not None
+
+
+def record_notification(source: str, external_id: str, chat_id: str, error: str = "") -> None:
+    with _connect() as connection:
+        connection.execute(
+            """INSERT INTO freelance_notifications (source, external_id, chat_id, sent_at, error) VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(source, external_id, chat_id) DO UPDATE SET sent_at = excluded.sent_at, error = excluded.error""",
+            (source, external_id, chat_id, _freelance_now() if not error else None, error),
+        )
 
 
 def get_parser_settings() -> dict[str, Any]:
