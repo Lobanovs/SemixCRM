@@ -40,6 +40,7 @@ class ParseRequest(BaseModel):
     source: str | None = Field(default=None, max_length=20)
     sources: list[str] | None = None
     limit: int = Field(default=10, ge=1, le=50)
+    start_page: int = Field(default=1, ge=1, le=999)
 
     def normalized_niches(self) -> list[str]:
         values = self.niches or ([self.niche] if self.niche else [])
@@ -57,6 +58,7 @@ class ParserJob:
     niches: list[str]
     sources: list[str]
     limit: int
+    start_page: int = 1
     status: str = "pending"
     message: str = "Подготовка парсера"
     error: str = ""
@@ -77,6 +79,7 @@ class ParserJob:
             "niches": self.niches,
             "sources": self.sources,
             "limit": self.limit,
+            "start_page": self.start_page,
         }
 
 
@@ -152,6 +155,7 @@ class ParserSettingsRequest(BaseModel):
     niches: list[str] = Field(min_length=1, max_length=20)
     sources: list[str] = Field(min_length=1, max_length=4)
     limit: int = Field(default=10, ge=1, le=50)
+    start_page: int = Field(default=1, ge=1, le=999)
 
 
 @app.put("/api/parser/settings")
@@ -160,7 +164,7 @@ def update_parser_settings(request: ParserSettingsRequest) -> dict[str, Any]:
     if any(source.lower() not in allowed_sources for source in request.sources):
         raise HTTPException(status_code=422, detail="Поддерживаются источники 2GIS и Яндекс Карты")
     try:
-        return save_parser_settings(request.city, request.niches, request.sources, request.limit)
+        return save_parser_settings(request.city, request.niches, request.sources, request.limit, request.start_page)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
@@ -238,8 +242,8 @@ def start_parse(request: ParseRequest) -> dict[str, str]:
         return {"job_id": "", "error": "Добавьте хотя бы одну нишу в настройках парсера"}
     if not sources or any(source not in {"2gis", "yandex"} for source in sources):
         return {"job_id": "", "error": "Выберите 2GIS или Яндекс Карты в настройках парсера"}
-    job = ParserJob(id=uuid.uuid4().hex, city=request.city.strip(), niches=niches, sources=sources, limit=request.limit)
-    create_parser_run(job.id, job.city, ", ".join(niches), ", ".join(sources), request.limit)
+    job = ParserJob(id=uuid.uuid4().hex, city=request.city.strip(), niches=niches, sources=sources, limit=request.limit, start_page=request.start_page)
+    create_parser_run(job.id, job.city, ", ".join(niches), ", ".join(sources), request.limit, request.start_page)
     with jobs_lock:
         jobs[job.id] = job
     threading.Thread(target=_run_job, args=(job, request), daemon=True, name=f"semix-parser-{job.id[:8]}").start()
@@ -262,7 +266,7 @@ def _run_job(job: ParserJob, request: ParseRequest) -> None:
         leads: list[dict[str, Any]] = []
         for niche in job.niches:
             job.message = f"Парсю нишу: {niche}"
-            leads.extend(collect_leads(job.city, niche, job.sources, job.limit, on_status=lambda value: setattr(job, "message", value)))
+            leads.extend(collect_leads(job.city, niche, job.sources, job.limit, on_status=lambda value: setattr(job, "message", value), start_page=job.start_page))
         if not leads:
             raise RuntimeError("Источники не вернули карточки. Проверьте город/нишу или повторите позже: источник мог показать CAPTCHA.")
         enriched = [_enrich(lead) for lead in leads]
@@ -272,7 +276,8 @@ def _run_job(job: ParserJob, request: ParseRequest) -> None:
         job.count = int(stored["inserted_count"])
         job.skipped_count = int(stored["duplicate_count"])
         job.status = "done"
-        job.message = f"Готово: новых — {job.count}, уже были в базе — {job.skipped_count}"
+        page_note = f", страница 2GIS — {job.start_page}" if job.start_page > 1 else ""
+        job.message = f"Готово: новых — {job.count}, уже были в базе — {job.skipped_count}{page_note}"
         update_parser_run(job.id, job.status, job.count, job.message, skipped_count=job.skipped_count, parsed_count=len(stored["results"]))
     except Exception as error:  # noqa: BLE001 - surface parser errors in the job UI
         job.status = "error"

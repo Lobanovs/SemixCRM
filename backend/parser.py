@@ -54,6 +54,13 @@ def resolve_city_code(city: str) -> str:
     return aliases.get(clean_city, clean_city.replace(" ", "_"))
 
 
+def build_2gis_search_url(city_code: str, niche: str, start_page: int = 1) -> str:
+    """Build the URL expected by parser-2gis for a selected start page."""
+    page = max(1, int(start_page))
+    page_segment = f"/page/{page}" if page > 1 else ""
+    return f"https://2gis.ru/{city_code}/search/{quote(niche, safe='')}{page_segment}/filters/sort=name"
+
+
 def _python_command() -> list[str]:
     configured = os.getenv("LEADHUNT_PYTHON", "").strip()
     if configured:
@@ -67,7 +74,13 @@ def _python_command() -> list[str]:
     return [sys.executable]
 
 
-def collect_2gis(city: str, niche: str, limit: int, on_status: Callable[[str], None] | None = None) -> list[dict[str, Any]]:
+def collect_2gis(
+    city: str,
+    niche: str,
+    limit: int,
+    on_status: Callable[[str], None] | None = None,
+    start_page: int = 1,
+) -> list[dict[str, Any]]:
     if not PARSE_RUNNER.exists():
         raise FileNotFoundError(f"Не найден запускатель LeadHunt: {PARSE_RUNNER}")
     if not PARSER2GIS_DIR.exists():
@@ -76,7 +89,7 @@ def collect_2gis(city: str, niche: str, limit: int, on_status: Callable[[str], N
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     output_path = OUTPUT_DIR / f"leadhunt_{uuid.uuid4().hex[:10]}.json"
     city_code = resolve_city_code(city)
-    url = f"https://2gis.ru/{city_code}/search/{quote(niche, safe='')}/filters/sort=name"
+    url = build_2gis_search_url(city_code, niche, start_page)
     cmd = _python_command() + [
         str(PARSE_RUNNER), "-i", url, "-o", str(output_path), "-f", "json",
         # The maintained parser2gic workflow uses a headed Chromium session.
@@ -90,7 +103,8 @@ def collect_2gis(city: str, niche: str, limit: int, on_status: Callable[[str], N
         "--writer.verbose", "yes",
     ]
     if on_status:
-        on_status(f"Открываю 2GIS: {city}, {niche}")
+        page_label = f", страница {max(1, int(start_page))}" if int(start_page) > 1 else ""
+        on_status(f"Открываю 2GIS: {city}, {niche}{page_label}")
     environment = os.environ.copy()
     environment.update({"PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8", "PYTHONPATH": str(PARSER2GIS_DIR)})
     timeout = max(180, min(600, 20 + int(limit) * 12))
@@ -163,7 +177,14 @@ def collect_yandex(city: str, niche: str, limit: int, on_status: Callable[[str],
     return result[:limit]
 
 
-def collect_leads(city: str, niche: str, sources: list[str], limit: int, on_status: Callable[[str], None] | None = None) -> list[dict[str, Any]]:
+def collect_leads(
+    city: str,
+    niche: str,
+    sources: list[str],
+    limit: int,
+    on_status: Callable[[str], None] | None = None,
+    start_page: int = 1,
+) -> list[dict[str, Any]]:
     normalized_sources = [source.lower().strip() for source in sources]
     collected: list[dict[str, Any]] = []
     errors: list[str] = []
@@ -171,7 +192,7 @@ def collect_leads(city: str, niche: str, sources: list[str], limit: int, on_stat
     for source in normalized_sources:
         try:
             if source == "2gis":
-                collected.extend(collect_2gis(city, niche, per_source_limit, on_status))
+                collected.extend(collect_2gis(city, niche, per_source_limit, on_status, start_page))
             elif source in {"yandex", "яндекс", "яндекс карты"}:
                 collected.extend(collect_yandex(city, niche, per_source_limit, on_status))
             else:

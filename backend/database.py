@@ -28,6 +28,7 @@ DEFAULT_SETTINGS = {
     "niches": ["салоны красоты", "стоматологии", "автосервисы"],
     "sources": ["2gis"],
     "limit": 10,
+    "start_page": 1,
 }
 STATUS_PRIORITY = {"Новый": 0, "Написал": 1, "Ответили": 2, "Созвон": 3, "КП": 4, "Закрыто": 5, "Отказ": 1}
 
@@ -102,6 +103,7 @@ def init_db() -> None:
                 niches_json TEXT NOT NULL,
                 sources_json TEXT NOT NULL,
                 limit_count INTEGER NOT NULL,
+                start_page INTEGER NOT NULL DEFAULT 1,
                 updated_at TEXT NOT NULL
             )
             """
@@ -117,6 +119,7 @@ def init_db() -> None:
                 niche TEXT NOT NULL,
                 source TEXT NOT NULL,
                 limit_count INTEGER NOT NULL,
+                start_page INTEGER NOT NULL DEFAULT 1,
                 found_count INTEGER NOT NULL DEFAULT 0,
                 skipped_count INTEGER NOT NULL DEFAULT 0,
                 message TEXT NOT NULL DEFAULT '',
@@ -126,6 +129,8 @@ def init_db() -> None:
         )
         _ensure_column(connection, "parser_runs", "skipped_count", "INTEGER NOT NULL DEFAULT 0")
         _ensure_column(connection, "parser_runs", "parsed_count", "INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(connection, "parser_settings", "start_page", "INTEGER NOT NULL DEFAULT 1")
+        _ensure_column(connection, "parser_runs", "start_page", "INTEGER NOT NULL DEFAULT 1")
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS parser_run_results (
@@ -145,12 +150,13 @@ def init_db() -> None:
         existing = connection.execute("SELECT id FROM parser_settings WHERE id = 1").fetchone()
         if existing is None:
             connection.execute(
-                "INSERT INTO parser_settings (id, city, niches_json, sources_json, limit_count, updated_at) VALUES (1, ?, ?, ?, ?, ?)",
+                "INSERT INTO parser_settings (id, city, niches_json, sources_json, limit_count, start_page, updated_at) VALUES (1, ?, ?, ?, ?, ?, ?)",
                 (
                     DEFAULT_SETTINGS["city"],
                     json.dumps(DEFAULT_SETTINGS["niches"], ensure_ascii=False),
                     json.dumps(DEFAULT_SETTINGS["sources"], ensure_ascii=False),
                     DEFAULT_SETTINGS["limit"],
+                    DEFAULT_SETTINGS["start_page"],
                     datetime.now(timezone.utc).isoformat(),
                 ),
             )
@@ -268,11 +274,12 @@ def get_parser_settings() -> dict[str, Any]:
         "niches": [str(item).strip() for item in _json_list(row["niches_json"], DEFAULT_SETTINGS["niches"]) if str(item).strip()],
         "sources": [str(item).strip() for item in _json_list(row["sources_json"], DEFAULT_SETTINGS["sources"]) if str(item).strip()],
         "limit": row["limit_count"],
+        "start_page": max(1, int(row["start_page"] or 1)),
         "updated_at": row["updated_at"],
     }
 
 
-def save_parser_settings(city: str, niches: list[str], sources: list[str], limit: int) -> dict[str, Any]:
+def save_parser_settings(city: str, niches: list[str], sources: list[str], limit: int, start_page: int = 1) -> dict[str, Any]:
     cleaned_niches = list(dict.fromkeys(item.strip() for item in niches if item.strip()))
     cleaned_sources = list(dict.fromkeys(item.strip().lower() for item in sources if item.strip()))
     if not cleaned_niches:
@@ -282,17 +289,17 @@ def save_parser_settings(city: str, niches: list[str], sources: list[str], limit
     now = datetime.now(timezone.utc).isoformat()
     with _connect() as connection:
         connection.execute(
-            "UPDATE parser_settings SET city = ?, niches_json = ?, sources_json = ?, limit_count = ?, updated_at = ? WHERE id = 1",
-            (city.strip(), json.dumps(cleaned_niches, ensure_ascii=False), json.dumps(cleaned_sources, ensure_ascii=False), max(1, min(limit, 50)), now),
+            "UPDATE parser_settings SET city = ?, niches_json = ?, sources_json = ?, limit_count = ?, start_page = ?, updated_at = ? WHERE id = 1",
+            (city.strip(), json.dumps(cleaned_niches, ensure_ascii=False), json.dumps(cleaned_sources, ensure_ascii=False), max(1, min(limit, 50)), max(1, min(int(start_page), 999)), now),
         )
     return get_parser_settings()
 
 
-def create_parser_run(run_id: str, city: str, niche: str, source: str, limit: int) -> None:
+def create_parser_run(run_id: str, city: str, niche: str, source: str, limit: int, start_page: int = 1) -> None:
     with _connect() as connection:
         connection.execute(
-            "INSERT INTO parser_runs (id, started_at, status, city, niche, source, limit_count) VALUES (?, ?, 'running', ?, ?, ?, ?)",
-            (run_id, datetime.now(timezone.utc).isoformat(), city, niche, source, limit),
+            "INSERT INTO parser_runs (id, started_at, status, city, niche, source, limit_count, start_page) VALUES (?, ?, 'running', ?, ?, ?, ?, ?)",
+            (run_id, datetime.now(timezone.utc).isoformat(), city, niche, source, limit, max(1, min(int(start_page), 999))),
         )
 
 
