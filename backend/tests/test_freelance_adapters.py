@@ -7,7 +7,7 @@ from unittest.mock import patch
 from backend.freelance.adapters.browser import WorkzillaAdapter
 from backend.freelance.adapters.public import FlAdapter, FreelanceRuAdapter, KworkAdapter
 from backend.freelance.adapters.registry import adapter_registry, build_adapters
-from backend.freelance.browser_profile import PersistentBrowserSession
+from backend.freelance.browser_profile import PersistentBrowserSession, browser_profile_path, persistent_browser_factory
 from backend.freelance.models import FreelanceSettings
 
 
@@ -140,6 +140,36 @@ class FreelanceAdapterTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(RuntimeError, "playwright install chromium"):
                 PersistentBrowserSession()
+
+    def test_browser_profiles_are_isolated_per_source(self) -> None:
+        with patch.dict("os.environ", {"FREELANCE_BROWSER_PROFILE": "C:/profiles"}), patch("pathlib.Path.mkdir"):
+            self.assertNotEqual(browser_profile_path("workzilla"), browser_profile_path("profi"))
+
+    def test_busy_browser_profile_returns_close_window_message(self) -> None:
+        class FakeChromium:
+            def launch_persistent_context(self, **_options):
+                raise Exception("BrowserType.launch_persistent_context: Target page, context or browser has been closed")
+
+        class FakePlaywright:
+            chromium = FakeChromium()
+
+            def stop(self):
+                return None
+
+        fake_playwright = FakePlaywright()
+        starter = type("Starter", (), {"start": lambda self: fake_playwright})()
+        with patch("backend.freelance.browser_profile.sync_playwright", return_value=starter), patch(
+            "backend.freelance.browser_profile.browser_profile_path", return_value=Path("C:/profile/profi")
+        ), patch(
+            "backend.freelance.browser_profile.find_chrome_executable", return_value=Path("C:/Chrome.exe")
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Закройте окно входа Profi.ru"):
+                PersistentBrowserSession(source="profi")
+
+    def test_persistent_factory_passes_source_to_session(self) -> None:
+        with patch("backend.freelance.browser_profile.PersistentBrowserSession") as session_type:
+            persistent_browser_factory("youdo")
+            session_type.assert_called_once_with(source="youdo", headless=True)
 
 
 if __name__ == "__main__":

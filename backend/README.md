@@ -85,3 +85,10 @@ Profi.ru и YouDo используют постоянный локальный C
 и не скрывает уже сохранённые заказы. Дубликаты определяются по `source` и
 внешнему ID, а уведомление Telegram записывается не более одного раза для
 разрешённого chat ID.
+
+### Browser profile isolation
+
+Each browser-based freelance source now uses its own persistent profile under `backend/data/freelance_browser`:
+`profi`, `workzilla`, and `youdo`. After upgrading, use Settings -> Open login once for each source,
+sign in, and close the login window before pressing Check now. Chrome cannot run a second process against
+the same persistent profile while the login window is open.

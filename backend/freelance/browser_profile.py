@@ -21,11 +21,15 @@ _login_processes: dict[str, subprocess.Popen[Any]] = {}
 _login_lock = threading.Lock()
 
 
-def browser_profile_path() -> Path:
+def browser_profile_path(source: str | None = None) -> Path:
     value = os.getenv("FREELANCE_BROWSER_PROFILE", "backend/data/freelance_browser")
     path = Path(value).expanduser()
     if not path.is_absolute():
         path = Path.cwd() / path
+    if source:
+        safe_source = "".join(character for character in source.strip().lower() if character.isalnum() or character in {"-", "_"})
+        if safe_source:
+            path /= safe_source
     path.mkdir(parents=True, exist_ok=True)
     return path.resolve()
 
@@ -54,23 +58,29 @@ def find_chrome_executable() -> Path | None:
     return None
 
 
-def _missing_browser_error(error: Exception) -> RuntimeError:
+def _missing_browser_error(error: Exception, source: str | None = None) -> RuntimeError:
     message = str(error)
+    compact_message = " ".join(message.split())
+    source_labels = {"workzilla": "Workzilla", "profi": "Profi.ru", "youdo": "YouDo"}
+    source_label = source_labels.get(source or "", "этой площадки")
+    if "Target page, context or browser has been closed" in message or "exitCode=21" in message:
+        return RuntimeError(f"Профиль {source_label} занят другим окном. Закройте окно входа {source_label} и повторите проверку.")
     if "Executable doesn't exist" in message or "browserType.launch" in message or "Chromium distribution" in message:
         return RuntimeError(
             "Браузер для парсера не найден. Установите Google Chrome или выполните "
             "backend\\.venv\\Scripts\\python.exe -m playwright install chromium"
         )
-    return RuntimeError(f"Не удалось запустить браузер парсера: {message}")
+    return RuntimeError(f"Не удалось запустить браузер парсера: {compact_message[:280]}")
 
 
 class PersistentBrowserSession:
     """Own a Playwright persistent context in the thread that created it."""
 
-    def __init__(self, *, headless: bool = True) -> None:
+    def __init__(self, *, source: str | None = None, headless: bool = True) -> None:
+        self._source = source
         self._playwright = sync_playwright().start()
         options: dict[str, Any] = {
-            "user_data_dir": str(browser_profile_path()),
+            "user_data_dir": str(browser_profile_path(source)),
             "headless": headless,
             "locale": "ru-RU",
             "viewport": {"width": 1440, "height": 1000},
@@ -87,13 +97,13 @@ class PersistentBrowserSession:
         except Exception as first_error:
             if "channel" not in options:
                 self._playwright.stop()
-                raise _missing_browser_error(first_error) from first_error
+                raise _missing_browser_error(first_error, source) from first_error
             options.pop("channel", None)
             try:
                 self._context = self._playwright.chromium.launch_persistent_context(**options)
             except Exception as fallback_error:
                 self._playwright.stop()
-                raise _missing_browser_error(fallback_error) from fallback_error
+                raise _missing_browser_error(fallback_error, source) from fallback_error
         self._closed = False
 
     def new_page(self):
@@ -111,8 +121,8 @@ class PersistentBrowserSession:
             self._playwright.stop()
 
 
-def persistent_browser_factory() -> PersistentBrowserSession:
-    return PersistentBrowserSession(headless=True)
+def persistent_browser_factory(source: str | None = None) -> PersistentBrowserSession:
+    return PersistentBrowserSession(source=source, headless=True)
 
 
 def open_login_window(source: str) -> dict[str, Any]:

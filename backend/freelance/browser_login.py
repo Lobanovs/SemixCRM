@@ -10,7 +10,7 @@ def main() -> int:
     url = AUTH_URLS.get(source)
     if not url:
         return 2
-    session = PersistentBrowserSession(headless=False)
+    session = PersistentBrowserSession(source=source, headless=False)
     try:
         page = session.new_page()
         page.goto(url, wait_until="domcontentloaded", timeout=60000)
