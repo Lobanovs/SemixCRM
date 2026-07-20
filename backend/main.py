@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -35,9 +35,22 @@ from .database import (
     get_schedule,
     save_schedule_note,
     save_schedule_week,
+    archive_freelance_order,
+    create_freelance_order,
+    freelance_stats,
+    get_freelance_settings,
+    get_freelance_order,
+    list_freelance_orders,
+    list_source_statuses,
+    save_freelance_settings,
+    update_freelance_order,
 )
 from .parser import collect_leads
 from .lead_utils import calculate_lead_score, contacts_from_lead, is_real_website
+from .freelance.adapters.registry import adapter_registry
+from .freelance.models import FREELANCE_SOURCES, FREELANCE_STATUSES, FreelanceOrder, FreelanceOrderFilters, FreelanceSettings
+from .freelance.sniper import FreelanceSniper
+from .freelance.telegram import TelegramNotifier
 
 
 class ParseRequest(BaseModel):
@@ -92,8 +105,21 @@ class ParserJob:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    global freelance_sniper
     init_db()
-    yield
+    settings = get_freelance_settings()
+    freelance_sniper = FreelanceSniper(
+        registry={source: adapter() for source, adapter in adapter_registry().items()},
+        notifier=TelegramNotifier(),
+        settings=_freelance_settings_from_dict(settings),
+    )
+    if settings.get("sniper_enabled"):
+        freelance_sniper.start()
+    try:
+        yield
+    finally:
+        if freelance_sniper:
+            freelance_sniper.stop()
 
 
 app = FastAPI(title="Semix CRM API", version="0.2.0", lifespan=lifespan)
@@ -106,11 +132,175 @@ app.add_middleware(
 )
 jobs: dict[str, ParserJob] = {}
 jobs_lock = threading.Lock()
+freelance_sniper: FreelanceSniper | None = None
 
 
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "semix-crm"}
+
+
+class FreelanceOrderCreateRequest(BaseModel):
+    source: str = Field(default="manual", max_length=40)
+    external_id: str = Field(default="", max_length=200)
+    title: str = Field(min_length=1, max_length=240)
+    description: str = Field(default="", max_length=5000)
+    url: str = Field(default="", max_length=1000)
+    customer: str = Field(default="", max_length=200)
+    categories: list[str] = Field(default_factory=list, max_length=20)
+    tags: list[str] = Field(default_factory=list, max_length=30)
+    budget_min: int | None = Field(default=None, ge=0)
+    budget_max: int | None = Field(default=None, ge=0)
+    currency: str = Field(default="RUB", max_length=8)
+    budget_text: str = Field(default="", max_length=120)
+    published_at: str = Field(default="", max_length=80)
+
+
+class FreelanceOrderUpdateRequest(BaseModel):
+    status: str | None = Field(default=None, max_length=30)
+    next_step: str | None = Field(default=None, max_length=160)
+    note: str | None = Field(default=None, max_length=2000)
+    archived: bool | None = None
+
+
+class FreelanceSettingsRequest(BaseModel):
+    sources: list[str] = Field(min_length=1, max_length=7)
+    keywords: list[str] = Field(default_factory=list, max_length=50)
+    excluded_keywords: list[str] = Field(default_factory=list, max_length=50)
+    categories: list[str] = Field(default_factory=list, max_length=30)
+    min_budget: int = Field(default=0, ge=0, le=100000000)
+    interval_seconds: int = Field(default=60, ge=30, le=3600)
+    sniper_enabled: bool = False
+    telegram_enabled: bool = False
+
+
+def _freelance_settings_from_dict(value: dict[str, Any]) -> FreelanceSettings:
+    return FreelanceSettings(
+        sources=tuple(value.get("sources") or FREELANCE_SOURCES),
+        keywords=tuple(value.get("keywords") or ()),
+        excluded_keywords=tuple(value.get("excluded_keywords") or ()),
+        categories=tuple(value.get("categories") or ()),
+        min_budget=int(value.get("min_budget") or 0),
+        interval_seconds=int(value.get("interval_seconds") or 60),
+        sniper_enabled=bool(value.get("sniper_enabled")),
+        telegram_enabled=bool(value.get("telegram_enabled")),
+    )
+
+
+def _require_freelance_sniper() -> FreelanceSniper:
+    if freelance_sniper is None:
+        raise HTTPException(status_code=503, detail="Снайпер ещё запускается")
+    return freelance_sniper
+
+
+@app.get("/api/freelance/orders")
+def freelance_orders(
+    query: str = Query(default="", max_length=120),
+    source: str = Query(default="", max_length=40),
+    status: str = Query(default="", max_length=30),
+    category: str = Query(default="", max_length=80),
+    min_budget: int | None = Query(default=None, ge=0),
+    sort: str = Query(default="relevance", max_length=20),
+) -> dict[str, Any]:
+    orders = list_freelance_orders(FreelanceOrderFilters(query=query, source=source, status=status, category=category, min_budget=min_budget, sort=sort))
+    return {"orders": orders, "stats": freelance_stats(), "sources": list_source_statuses()}
+
+
+@app.post("/api/freelance/orders", status_code=201)
+def add_freelance_order(request: FreelanceOrderCreateRequest) -> dict[str, Any]:
+    try:
+        order = FreelanceOrder(
+            source=request.source, external_id=request.external_id, title=request.title, description=request.description,
+            url=request.url, customer=request.customer, categories=tuple(request.categories), tags=tuple(request.tags),
+            budget_min=request.budget_min, budget_max=request.budget_max, currency=request.currency,
+            budget_text=request.budget_text, published_at=request.published_at,
+        )
+        return create_freelance_order(order)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.put("/api/freelance/orders/{order_id}")
+def edit_freelance_order(order_id: int, request: FreelanceOrderUpdateRequest) -> dict[str, Any]:
+    try:
+        order = update_freelance_order(order_id, status=request.status, next_step=request.next_step, note=request.note, archived=request.archived)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    if order is None:
+        raise HTTPException(status_code=404, detail="Заказ не найден")
+    return order
+
+
+@app.delete("/api/freelance/orders/{order_id}")
+def remove_freelance_order(order_id: int) -> dict[str, Any]:
+    if not archive_freelance_order(order_id):
+        raise HTTPException(status_code=404, detail="Заказ не найден")
+    return {"ok": True, "archived_id": order_id}
+
+
+@app.get("/api/freelance/settings")
+def freelance_settings() -> dict[str, Any]:
+    return get_freelance_settings()
+
+
+@app.put("/api/freelance/settings")
+def update_freelance_settings(request: FreelanceSettingsRequest) -> dict[str, Any]:
+    if any(source not in FREELANCE_SOURCES for source in request.sources):
+        raise HTTPException(status_code=422, detail="Неизвестный источник заказов")
+    try:
+        settings = FreelanceSettings(
+            sources=tuple(request.sources), keywords=tuple(request.keywords), excluded_keywords=tuple(request.excluded_keywords),
+            categories=tuple(request.categories), min_budget=request.min_budget, interval_seconds=request.interval_seconds,
+            sniper_enabled=request.sniper_enabled, telegram_enabled=request.telegram_enabled,
+        )
+        saved = save_freelance_settings(settings)
+        _require_freelance_sniper().set_settings(_freelance_settings_from_dict(saved))
+        return saved
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.get("/api/freelance/sources")
+def freelance_sources() -> dict[str, Any]:
+    return {"sources": list_source_statuses(), "available": list(FREELANCE_SOURCES)}
+
+
+@app.get("/api/freelance/sniper/status")
+def freelance_sniper_status() -> dict[str, Any]:
+    return _require_freelance_sniper().status()
+
+
+@app.post("/api/freelance/sniper/start")
+def start_freelance_sniper() -> dict[str, Any]:
+    sniper = _require_freelance_sniper()
+    saved = save_freelance_settings(_freelance_settings_from_dict({**get_freelance_settings(), "sniper_enabled": True}))
+    sniper.set_settings(_freelance_settings_from_dict(saved))
+    return sniper.start()
+
+
+@app.post("/api/freelance/sniper/stop")
+def stop_freelance_sniper() -> dict[str, Any]:
+    sniper = _require_freelance_sniper()
+    saved = save_freelance_settings(_freelance_settings_from_dict({**get_freelance_settings(), "sniper_enabled": False}))
+    sniper.set_settings(_freelance_settings_from_dict(saved))
+    return sniper.stop()
+
+
+@app.post("/api/freelance/sniper/check")
+def check_freelance_sniper() -> dict[str, Any]:
+    return _require_freelance_sniper().check_once()
+
+
+@app.get("/api/freelance/runs")
+def freelance_runs() -> dict[str, Any]:
+    return {"runs": list_source_statuses()}
+
+
+@app.post("/api/freelance/sources/{source}/auth")
+def freelance_source_auth(source: str) -> dict[str, str]:
+    if source not in FREELANCE_SOURCES:
+        raise HTTPException(status_code=404, detail="Источник не найден")
+    return {"source": source, "status": "auth_required", "message": "Откройте локальный профиль Chromium и войдите в аккаунт. Автоматический обход CAPTCHA не выполняется."}
 
 
 class ScheduleTaskCreateRequest(BaseModel):
