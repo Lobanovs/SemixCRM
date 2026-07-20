@@ -7,3 +7,7 @@ __pycache__/
 
 backend/.venv/
 backend/data/
+.env
+.env.*
+!.env.example
+backend/data/freelance_browser/

@@ -629,6 +629,16 @@ def create_freelance_order(order: FreelanceOrder) -> dict[str, Any]:
     return _serialize_freelance_order(row)
 
 
+def freelance_order_exists(order: FreelanceOrder) -> bool:
+    with _connect() as connection:
+        row = connection.execute("SELECT 1 FROM freelance_orders WHERE dedupe_key = ?", (_freelance_key(order),)).fetchone()
+    return row is not None
+
+
+def telegram_allowed_chat_id() -> str:
+    return os.getenv("TELEGRAM_ALLOWED_CHAT_ID", "").strip()
+
+
 def list_freelance_orders(filters: FreelanceOrderFilters) -> list[dict[str, Any]]:
     clauses = ["archived = ?"]
     params: list[Any] = [0 if not filters.include_archived else 1]
