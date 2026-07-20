@@ -42,12 +42,15 @@ from .database import (
     get_freelance_order,
     list_freelance_orders,
     list_source_statuses,
+    list_freelance_runs,
+    get_freelance_run,
     save_freelance_settings,
     update_freelance_order,
 )
 from .parser import collect_leads
 from .lead_utils import calculate_lead_score, contacts_from_lead, is_real_website
-from .freelance.adapters.registry import adapter_registry
+from .freelance.adapters.registry import build_adapters
+from .freelance.browser_profile import AUTH_URLS, open_login_window, persistent_browser_factory
 from .freelance.models import FREELANCE_SOURCES, FREELANCE_STATUSES, FreelanceOrder, FreelanceOrderFilters, FreelanceSettings
 from .freelance.sniper import FreelanceSniper
 from .freelance.telegram import TelegramNotifier
@@ -109,7 +112,7 @@ async def lifespan(_: FastAPI):
     init_db()
     settings = get_freelance_settings()
     freelance_sniper = FreelanceSniper(
-        registry={source: adapter() for source, adapter in adapter_registry().items()},
+        registry=build_adapters(browser_factory=persistent_browser_factory),
         notifier=TelegramNotifier(),
         settings=_freelance_settings_from_dict(settings),
     )
@@ -254,7 +257,12 @@ def update_freelance_settings(request: FreelanceSettingsRequest) -> dict[str, An
             sniper_enabled=request.sniper_enabled, telegram_enabled=request.telegram_enabled,
         )
         saved = save_freelance_settings(settings)
-        _require_freelance_sniper().set_settings(_freelance_settings_from_dict(saved))
+        sniper = _require_freelance_sniper()
+        sniper.set_settings(_freelance_settings_from_dict(saved))
+        if request.sniper_enabled:
+            sniper.start()
+        else:
+            sniper.stop()
         return saved
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
@@ -293,14 +301,30 @@ def check_freelance_sniper() -> dict[str, Any]:
 
 @app.get("/api/freelance/runs")
 def freelance_runs() -> dict[str, Any]:
-    return {"runs": list_source_statuses()}
+    return {"runs": list_freelance_runs()}
+
+
+@app.get("/api/freelance/runs/{run_id}")
+def freelance_run_detail(run_id: int) -> dict[str, Any]:
+    run = get_freelance_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Запуск не найден")
+    return run
 
 
 @app.post("/api/freelance/sources/{source}/auth")
-def freelance_source_auth(source: str) -> dict[str, str]:
+def freelance_source_auth(source: str) -> dict[str, Any]:
     if source not in FREELANCE_SOURCES:
         raise HTTPException(status_code=404, detail="Источник не найден")
-    return {"source": source, "status": "auth_required", "message": "Откройте локальный профиль Chromium и войдите в аккаунт. Автоматический обход CAPTCHA не выполняется."}
+    if source not in AUTH_URLS:
+        raise HTTPException(status_code=422, detail="Для этого источника отдельный вход не требуется")
+    try:
+        return {
+            **open_login_window(source),
+            "message": "Войдите в аккаунт в открывшемся окне и затем закройте окно браузера.",
+        }
+    except (OSError, RuntimeError) as error:
+        raise HTTPException(status_code=503, detail=f"Не удалось открыть Chromium: {error}") from error
 
 
 class ScheduleTaskCreateRequest(BaseModel):

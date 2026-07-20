@@ -64,8 +64,10 @@ class FreelanceSniper:
             self._stop_event.wait(self.interval_seconds)
 
     def check_once(self) -> dict[str, Any]:
+        started_at = _now()
         inserted = 0
         duplicates = 0
+        run_order_ids: list[int] = []
         source_results: dict[str, dict[str, Any]] = {}
         settings = self.settings
         for source in settings.sources:
@@ -84,6 +86,7 @@ class FreelanceSniper:
                     scored = replace(order, relevance=score, relevance_reasons=tuple(reasons))
                     was_saved = database.freelance_order_exists(scored)
                     saved = database.create_freelance_order(scored)
+                    run_order_ids.append(int(saved["id"]))
                     if was_saved:
                         duplicates += 1
                         continue
@@ -101,4 +104,8 @@ class FreelanceSniper:
         overall = "error" if statuses and all(item["status"] == "error" for item in statuses) else "partial" if any(item["status"] == "error" for item in statuses) else "done"
         with self._lock:
             self._source_statuses = source_results
-        return {"status": overall, "inserted": inserted, "duplicates": duplicates, "sources": source_results}
+        run_id = database.record_freelance_run(
+            {"started_at": started_at, "finished_at": _now(), "status": overall, "inserted": inserted, "duplicates": duplicates, "sources": source_results},
+            run_order_ids,
+        )
+        return {"run_id": run_id, "status": overall, "inserted": inserted, "duplicates": duplicates, "sources": source_results}

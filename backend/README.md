@@ -29,3 +29,56 @@ npm run dev
 - `GET /api/parser/runs` — история запусков;
 - `GET /api/clients` — клиенты и агрегированная статистика;
 - `PUT /api/clients/{client_id}/status` — изменение этапа клиента.
+
+## Фриланс и локальный снайпер
+
+Раздел «Фриланс» хранит только полученные или добавленные вами заказы в SQLite.
+Демонстрационные карточки не создаются. Снайпер работает локально, пока запущен
+backend Semix CRM, и проверяет включённые источники с заданным интервалом.
+
+Установка зависимостей и браузера:
+
+```powershell
+backend\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+backend\.venv\Scripts\python.exe -m playwright install chromium
+```
+
+Скопируйте `.env.example` в `.env` и заполните только локальные значения:
+
+```dotenv
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_ALLOWED_CHAT_ID=800395558
+FREELANCE_BROWSER_PROFILE=backend/data/freelance_browser
+FREELANCE_BROWSER_CHANNEL=chrome
+FREELANCE_POLL_INTERVAL_SECONDS=60
+FREELANCEHUNT_API_TOKEN=
+```
+
+Токен Telegram читается только из `.env` и используется только для указанного
+`TELEGRAM_ALLOWED_CHAT_ID`. Токен, ранее отправленный в чат, необходимо сначала
+отозвать и выпустить заново через BotFather. Не добавляйте секреты, cookies или
+SQLite-файлы в Git.
+
+Источники Kwork, FL.ru и Freelance.ru читаются из публичных лент. Freelancehunt
+использует официальный API и требует личный API-токен площадки в
+`FREELANCEHUNT_API_TOKEN`. Workzilla, Profi.ru и YouDo используют постоянный
+локальный Chromium-профиль. В интерфейсе нажмите «Настроить» → «Открыть вход»,
+войдите вручную и закройте окно. Пароли не передаются CRM, CAPTCHA и ограничения
+доступа не обходятся. URL ленты можно переопределить переменными
+`FREELANCE_WORKZILLA_URL`, `FREELANCE_PROFI_URL` и `FREELANCE_YOUDO_URL`.
+
+Основные API раздела:
+
+- `GET/POST /api/freelance/orders` — список и ручное добавление заказов;
+- `PUT/DELETE /api/freelance/orders/{id}` — статус, заметка и скрытие;
+- `GET/PUT /api/freelance/settings` — источники, ключевые слова, бюджет и режимы;
+- `POST /api/freelance/sniper/start|stop|check` — управление снайпером;
+- `GET /api/freelance/sources` — последнее состояние каждого источника;
+- `POST /api/freelance/sources/{source}/auth` — открыть локальное окно входа;
+- `GET /api/freelance/runs` и `/api/freelance/runs/{id}` — история запусков и
+  точный набор карточек, увиденных в выбранный момент.
+
+Каждый источник изолирован: ошибка или истёкшая сессия отображается рядом с ним
+и не скрывает уже сохранённые заказы. Дубликаты определяются по `source` и
+внешнему ID, а уведомление Telegram записывается не более одного раза для
+разрешённого chat ID.

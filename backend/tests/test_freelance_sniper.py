@@ -77,6 +77,16 @@ class FreelanceSniperTests(unittest.TestCase):
         self.assertEqual("running", sniper.start()["status"])
         self.assertEqual("stopped", sniper.stop()["status"])
 
+    def test_check_records_run_history_with_orders(self) -> None:
+        sniper = FreelanceSniper(registry={"fl": NewAdapter()}, notifier=FakeNotifier(), settings=FreelanceSettings(sources=("fl",)))
+        result = sniper.check_once()
+        self.assertEqual(1, result["inserted"])
+        runs = database.list_freelance_runs()
+        self.assertEqual(1, len(runs))
+        self.assertEqual(1, runs[0]["inserted_count"])
+        detail = database.get_freelance_run(runs[0]["id"])
+        self.assertEqual(["Новый заказ"], [item["title"] for item in detail["orders"]])
+
 
 if __name__ == "__main__":
     unittest.main()

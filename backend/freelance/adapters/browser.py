@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from typing import Any, Callable
 
 from ..models import AdapterResult, FreelanceOrder, FreelanceSettings
@@ -43,16 +42,20 @@ class BrowserAdapter:
             return AdapterResult(self.source, "done" if orders else "empty", tuple(orders), now_iso())
         except Exception as error:  # noqa: BLE001 - isolate browser source failures
             return AdapterResult(self.source, "error", checked_at=now_iso(), error=str(error))
+        finally:
+            close = getattr(browser, "close", None)
+            if callable(close):
+                close()
 
 
 class WorkzillaAdapter(BrowserAdapter):
     source = "workzilla"
-    url = os.getenv("FREELANCE_WORKZILLA_URL", "https://client.work-zilla.ru/freelancer")
+    url = os.getenv("FREELANCE_WORKZILLA_URL", "https://client.work-zilla.com/freelancer")
 
 
 class ProfiAdapter(BrowserAdapter):
     source = "profi"
-    url = os.getenv("FREELANCE_PROFI_URL", "https://profi.ru/backoffice/orders")
+    url = os.getenv("FREELANCE_PROFI_URL", "https://profi.ru/backoffice/a.php")
 
 
 class YoudoAdapter(BrowserAdapter):

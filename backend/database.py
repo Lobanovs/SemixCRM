@@ -251,6 +251,32 @@ def init_db() -> None:
             )
             """
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS freelance_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                started_at TEXT NOT NULL,
+                finished_at TEXT NOT NULL,
+                status TEXT NOT NULL,
+                inserted_count INTEGER NOT NULL DEFAULT 0,
+                duplicate_count INTEGER NOT NULL DEFAULT 0,
+                source_count INTEGER NOT NULL DEFAULT 0,
+                sources_json TEXT NOT NULL DEFAULT '[]',
+                error TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS freelance_run_orders (
+                run_id INTEGER NOT NULL REFERENCES freelance_runs(id) ON DELETE CASCADE,
+                order_id INTEGER NOT NULL REFERENCES freelance_orders(id) ON DELETE CASCADE,
+                source TEXT NOT NULL,
+                external_id TEXT NOT NULL,
+                PRIMARY KEY (run_id, order_id)
+            )
+            """
+        )
         connection.execute("CREATE INDEX IF NOT EXISTS schedule_tasks_date_idx ON schedule_tasks(task_date)")
         connection.execute("CREATE INDEX IF NOT EXISTS freelance_orders_published_idx ON freelance_orders(published_at)")
         _migrate_and_deduplicate_clients(connection)
@@ -761,6 +787,56 @@ def list_source_statuses() -> list[dict[str, Any]]:
     with _connect() as connection:
         rows = connection.execute("SELECT * FROM freelance_source_checks ORDER BY source").fetchall()
     return [{**dict(row), "auth_required": bool(row["auth_required"])} for row in rows]
+
+
+def record_freelance_run(run: dict[str, Any], order_ids: list[int] | None = None) -> int:
+    with _connect() as connection:
+        cursor = connection.execute(
+            """INSERT INTO freelance_runs (started_at, finished_at, status, inserted_count, duplicate_count, source_count, sources_json, error)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                run.get("started_at") or _freelance_now(),
+                run.get("finished_at") or _freelance_now(),
+                run.get("status") or "done",
+                int(run.get("inserted") or 0),
+                int(run.get("duplicates") or 0),
+                int(run.get("source_count") or len(run.get("sources") or {})),
+                json.dumps(run.get("sources") or {}, ensure_ascii=False),
+                run.get("error") or "",
+            ),
+        )
+        run_id = int(cursor.lastrowid)
+        for order_id in dict.fromkeys(order_ids or []):
+            row = connection.execute("SELECT source, external_id FROM freelance_orders WHERE id = ?", (order_id,)).fetchone()
+            if row:
+                connection.execute(
+                    "INSERT OR IGNORE INTO freelance_run_orders (run_id, order_id, source, external_id) VALUES (?, ?, ?, ?)",
+                    (run_id, order_id, row["source"], row["external_id"]),
+                )
+    return run_id
+
+
+def list_freelance_runs(limit: int = 50) -> list[dict[str, Any]]:
+    safe_limit = max(1, min(int(limit), 200))
+    with _connect() as connection:
+        rows = connection.execute("SELECT * FROM freelance_runs ORDER BY id DESC LIMIT ?", (safe_limit,)).fetchall()
+        counts = connection.execute("SELECT run_id, COUNT(*) AS order_count FROM freelance_run_orders GROUP BY run_id").fetchall()
+    count_by_run = {int(row["run_id"]): int(row["order_count"]) for row in counts}
+    return [{**dict(row), "sources": json.loads(row["sources_json"] or "{}"), "order_count": count_by_run.get(int(row["id"]), 0)} for row in rows]
+
+
+def get_freelance_run(run_id: int) -> dict[str, Any] | None:
+    with _connect() as connection:
+        run = connection.execute("SELECT * FROM freelance_runs WHERE id = ?", (run_id,)).fetchone()
+        if run is None:
+            return None
+        orders = connection.execute(
+            """SELECT freelance_orders.* FROM freelance_run_orders
+            JOIN freelance_orders ON freelance_orders.id = freelance_run_orders.order_id
+            WHERE freelance_run_orders.run_id = ? ORDER BY freelance_run_orders.order_id""",
+            (run_id,),
+        ).fetchall()
+    return {**dict(run), "sources": json.loads(run["sources_json"] or "{}"), "orders": [_serialize_freelance_order(row) for row in orders]}
 
 
 def notification_sent(source: str, external_id: str, chat_id: str) -> bool:
