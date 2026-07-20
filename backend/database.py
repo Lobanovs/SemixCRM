@@ -4,7 +4,7 @@ import json
 import os
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -145,6 +145,41 @@ def init_db() -> None:
             )
             """
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS schedule_tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_date TEXT NOT NULL,
+                title TEXT NOT NULL,
+                task_time TEXT NOT NULL DEFAULT '',
+                kind TEXT NOT NULL DEFAULT 'task' CHECK (kind IN ('task', 'meeting')),
+                done INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS schedule_day_notes (
+                day_date TEXT PRIMARY KEY,
+                note TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS schedule_weeks (
+                week_start TEXT PRIMARY KEY,
+                summary TEXT NOT NULL DEFAULT '',
+                goals_json TEXT NOT NULL DEFAULT '[]',
+                focus TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute("CREATE INDEX IF NOT EXISTS schedule_tasks_date_idx ON schedule_tasks(task_date)")
         _migrate_and_deduplicate_clients(connection)
         connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS clients_dedupe_idx ON clients(dedupe_key)")
         existing = connection.execute("SELECT id FROM parser_settings WHERE id = 1").fetchone()
@@ -262,6 +297,183 @@ def _json_object(value: Any) -> dict[str, Any]:
         return parsed if isinstance(parsed, dict) else {}
     except (TypeError, json.JSONDecodeError):
         return {}
+
+
+def _schedule_date(value: str) -> str:
+    try:
+        return date.fromisoformat(str(value).strip()).isoformat()
+    except (TypeError, ValueError) as error:
+        raise ValueError("Дата должна быть в формате YYYY-MM-DD") from error
+
+
+def _schedule_week_start(value: str) -> str:
+    parsed = date.fromisoformat(_schedule_date(value))
+    return (parsed - timedelta(days=parsed.weekday())).isoformat()
+
+
+def _serialize_schedule_task(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "id": int(row["id"]),
+        "date": row["task_date"],
+        "title": row["title"],
+        "time": row["task_time"] or "",
+        "kind": row["kind"] or "task",
+        "done": bool(row["done"]),
+    }
+
+
+def create_schedule_task(task_date: str, title: str, task_time: str = "", kind: str = "task") -> dict[str, Any]:
+    normalized_date = _schedule_date(task_date)
+    normalized_title = str(title or "").strip()
+    normalized_time = str(task_time or "").strip()
+    normalized_kind = str(kind or "task").strip().lower()
+    if not normalized_title:
+        raise ValueError("Введите название задачи")
+    if len(normalized_title) > 240:
+        raise ValueError("Название задачи слишком длинное")
+    if normalized_kind not in {"task", "meeting"}:
+        raise ValueError("Тип записи должен быть task или meeting")
+    if normalized_time:
+        try:
+            datetime.strptime(normalized_time, "%H:%M")
+        except ValueError as error:
+            raise ValueError("Время должно быть в формате HH:MM") from error
+    now = datetime.now(timezone.utc).isoformat()
+    with _connect() as connection:
+        cursor = connection.execute(
+            "INSERT INTO schedule_tasks (task_date, title, task_time, kind, done, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)",
+            (normalized_date, normalized_title, normalized_time, normalized_kind, now, now),
+        )
+        row = connection.execute("SELECT * FROM schedule_tasks WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    return _serialize_schedule_task(row)
+
+
+def update_schedule_task(
+    task_id: int,
+    title: str | None = None,
+    task_date: str | None = None,
+    task_time: str | None = None,
+    kind: str | None = None,
+    done: bool | None = None,
+) -> dict[str, Any] | None:
+    changes: dict[str, Any] = {}
+    if title is not None:
+        normalized_title = str(title).strip()
+        if not normalized_title:
+            raise ValueError("Введите название задачи")
+        changes["title"] = normalized_title
+    if task_date is not None:
+        changes["task_date"] = _schedule_date(task_date)
+    if task_time is not None:
+        normalized_time = str(task_time).strip()
+        if normalized_time:
+            try:
+                datetime.strptime(normalized_time, "%H:%M")
+            except ValueError as error:
+                raise ValueError("Время должно быть в формате HH:MM") from error
+        changes["task_time"] = normalized_time
+    if kind is not None:
+        normalized_kind = str(kind).strip().lower()
+        if normalized_kind not in {"task", "meeting"}:
+            raise ValueError("Тип записи должен быть task или meeting")
+        changes["kind"] = normalized_kind
+    if done is not None:
+        changes["done"] = int(done)
+    if not changes:
+        with _connect() as connection:
+            row = connection.execute("SELECT * FROM schedule_tasks WHERE id = ?", (task_id,)).fetchone()
+        return _serialize_schedule_task(row) if row else None
+    changes["updated_at"] = datetime.now(timezone.utc).isoformat()
+    assignments = ", ".join(f"{field} = ?" for field in changes)
+    with _connect() as connection:
+        connection.execute(f"UPDATE schedule_tasks SET {assignments} WHERE id = ?", (*changes.values(), task_id))
+        row = connection.execute("SELECT * FROM schedule_tasks WHERE id = ?", (task_id,)).fetchone()
+    return _serialize_schedule_task(row) if row else None
+
+
+def delete_schedule_task(task_id: int) -> bool:
+    with _connect() as connection:
+        cursor = connection.execute("DELETE FROM schedule_tasks WHERE id = ?", (task_id,))
+    return cursor.rowcount > 0
+
+
+def save_schedule_note(day_date: str, note: str) -> dict[str, str]:
+    normalized_date = _schedule_date(day_date)
+    normalized_note = str(note or "").strip()[:2000]
+    now = datetime.now(timezone.utc).isoformat()
+    with _connect() as connection:
+        if normalized_note:
+            connection.execute(
+                "INSERT INTO schedule_day_notes (day_date, note, updated_at) VALUES (?, ?, ?) ON CONFLICT(day_date) DO UPDATE SET note = excluded.note, updated_at = excluded.updated_at",
+                (normalized_date, normalized_note, now),
+            )
+        else:
+            connection.execute("DELETE FROM schedule_day_notes WHERE day_date = ?", (normalized_date,))
+    return {"date": normalized_date, "note": normalized_note}
+
+
+def save_schedule_week(week_start: str, summary: str, goals: list[dict[str, Any]], focus: str = "") -> dict[str, Any]:
+    normalized_week = _schedule_week_start(week_start)
+    cleaned_goals: list[dict[str, Any]] = []
+    for goal in goals if isinstance(goals, list) else []:
+        if not isinstance(goal, dict):
+            continue
+        title = str(goal.get("title") or "").strip()
+        if title:
+            cleaned_goals.append({"title": title[:160], "done": bool(goal.get("done"))})
+    now = datetime.now(timezone.utc).isoformat()
+    with _connect() as connection:
+        connection.execute(
+            "INSERT INTO schedule_weeks (week_start, summary, goals_json, focus, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(week_start) DO UPDATE SET summary = excluded.summary, goals_json = excluded.goals_json, focus = excluded.focus, updated_at = excluded.updated_at",
+            (normalized_week, str(summary or "").strip()[:2000], json.dumps(cleaned_goals, ensure_ascii=False), str(focus or "").strip()[:160], now),
+        )
+    return {"week_start": normalized_week, "summary": str(summary or "").strip()[:2000], "goals": cleaned_goals, "focus": str(focus or "").strip()[:160]}
+
+
+def get_schedule(week_start: str) -> dict[str, Any]:
+    normalized_week = _schedule_week_start(week_start)
+    start_date = date.fromisoformat(normalized_week)
+    end_date = start_date + timedelta(days=6)
+    upcoming_end = end_date + timedelta(days=14)
+    with _connect() as connection:
+        task_rows = connection.execute(
+            "SELECT * FROM schedule_tasks WHERE task_date BETWEEN ? AND ? ORDER BY task_date, CASE WHEN task_time = '' THEN '99:99' ELSE task_time END, id",
+            (normalized_week, end_date.isoformat()),
+        ).fetchall()
+        upcoming_rows = connection.execute(
+            "SELECT * FROM schedule_tasks WHERE task_date BETWEEN ? AND ? AND done = 0 ORDER BY task_date, CASE WHEN task_time = '' THEN '99:99' ELSE task_time END, id LIMIT 12",
+            (normalized_week, upcoming_end.isoformat()),
+        ).fetchall()
+        notes_rows = connection.execute(
+            "SELECT day_date, note FROM schedule_day_notes WHERE day_date BETWEEN ? AND ?",
+            (normalized_week, end_date.isoformat()),
+        ).fetchall()
+        week_row = connection.execute("SELECT * FROM schedule_weeks WHERE week_start = ?", (normalized_week,)).fetchone()
+        past_rows = connection.execute(
+            "SELECT DISTINCT date(task_date, '-' || ((CAST(strftime('%w', task_date) AS INTEGER) + 6) % 7) || ' days') AS week_start FROM schedule_tasks WHERE task_date < ? ORDER BY week_start DESC LIMIT 3",
+            (normalized_week,),
+        ).fetchall()
+    tasks = [_serialize_schedule_task(row) for row in task_rows]
+    upcoming = [_serialize_schedule_task(row) for row in upcoming_rows]
+    stats_total = len(tasks)
+    stats_done = sum(1 for task in tasks if task["done"])
+    return {
+        "week_start": normalized_week,
+        "week_end": end_date.isoformat(),
+        "tasks": tasks,
+        "notes": {row["day_date"]: row["note"] for row in notes_rows},
+        "summary": str(week_row["summary"] if week_row else ""),
+        "goals": _json_list(week_row["goals_json"], []) if week_row else [],
+        "focus": str(week_row["focus"] if week_row else ""),
+        "stats": {
+            "total": stats_total,
+            "done": stats_done,
+            "meetings": sum(1 for task in tasks if task["kind"] == "meeting"),
+            "completion_percent": round(stats_done / stats_total * 100) if stats_total else 0,
+        },
+        "upcoming": upcoming,
+        "past_weeks": [row["week_start"] for row in past_rows if row["week_start"]],
+    }
 
 
 def get_parser_settings() -> dict[str, Any]:

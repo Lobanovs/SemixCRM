@@ -4,6 +4,7 @@ import threading
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -28,6 +29,12 @@ from .database import (
     restore_client,
     update_client_status,
     update_parser_run,
+    create_schedule_task,
+    update_schedule_task,
+    delete_schedule_task,
+    get_schedule,
+    save_schedule_note,
+    save_schedule_week,
 )
 from .parser import collect_leads
 from .lead_utils import calculate_lead_score, contacts_from_lead, is_real_website
@@ -104,6 +111,86 @@ jobs_lock = threading.Lock()
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "semix-crm"}
+
+
+class ScheduleTaskCreateRequest(BaseModel):
+    task_date: str = Field(min_length=10, max_length=10)
+    title: str = Field(min_length=1, max_length=240)
+    task_time: str = Field(default="", max_length=5)
+    kind: str = Field(default="task", max_length=20)
+
+
+class ScheduleTaskUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, max_length=240)
+    task_date: str | None = Field(default=None, max_length=10)
+    task_time: str | None = Field(default=None, max_length=5)
+    kind: str | None = Field(default=None, max_length=20)
+    done: bool | None = None
+
+
+class ScheduleNoteRequest(BaseModel):
+    note: str = Field(default="", max_length=2000)
+
+
+class ScheduleWeekRequest(BaseModel):
+    summary: str = Field(default="", max_length=2000)
+    goals: list[dict[str, Any]] = Field(default_factory=list, max_length=30)
+    focus: str = Field(default="", max_length=160)
+
+
+def _current_week_start() -> str:
+    today = date.today()
+    return (today - timedelta(days=today.weekday())).isoformat()
+
+
+@app.get("/api/schedule")
+def schedule(week_start: str | None = None) -> dict[str, Any]:
+    try:
+        return get_schedule(week_start or _current_week_start())
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/api/schedule/tasks")
+def add_schedule_task(request: ScheduleTaskCreateRequest) -> dict[str, Any]:
+    try:
+        return create_schedule_task(request.task_date, request.title, request.task_time, request.kind)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.put("/api/schedule/tasks/{task_id}")
+def edit_schedule_task(task_id: int, request: ScheduleTaskUpdateRequest) -> dict[str, Any]:
+    try:
+        task = update_schedule_task(task_id, request.title, request.task_date, request.task_time, request.kind, request.done)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    if task is None:
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+    return task
+
+
+@app.delete("/api/schedule/tasks/{task_id}")
+def remove_schedule_task(task_id: int) -> dict[str, Any]:
+    if not delete_schedule_task(task_id):
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+    return {"ok": True, "deleted_id": task_id}
+
+
+@app.put("/api/schedule/notes/{day_date}")
+def update_schedule_note(day_date: str, request: ScheduleNoteRequest) -> dict[str, Any]:
+    try:
+        return save_schedule_note(day_date, request.note)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.put("/api/schedule/weeks/{week_start}")
+def update_schedule_week(week_start: str, request: ScheduleWeekRequest) -> dict[str, Any]:
+    try:
+        return save_schedule_week(week_start, request.summary, request.goals, request.focus)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @app.get("/api/clients")
