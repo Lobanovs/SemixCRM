@@ -12,30 +12,23 @@ from typing import Any, Callable
 from urllib.parse import quote
 
 from .lead_utils import business_identity_key
+from .parser2gis_runtime import ensure_parser2gis_command, resolve_parser2gis_city_code
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 LEADHUNT_DIR = Path(os.getenv("LEADHUNT_ROOT", r"C:\Users\Admin\Desktop\LeadHunt"))
-PARSER2GIS_DIR = LEADHUNT_DIR / "_external" / "parser-2gis"
-PARSER2GIC_DIR = Path(os.getenv("PARSER2GIC_ROOT", r"C:\Users\Admin\Desktop\parser2gic"))
-PARSE_RUNNER = PARSER2GIC_DIR / "parse_runner.py"
 YANDEX_RUNNER = ROOT_DIR / "backend" / "yandex_runner.py"
 OUTPUT_DIR = ROOT_DIR / "backend" / "data" / "parser_output"
-CITIES_FILE = PARSER2GIS_DIR / "parser_2gis" / "data" / "cities.json"
 
 
-def resolve_city_code(city: str) -> str:
+def resolve_city_code(city: str, parser_python: str | None = None) -> str:
     clean_city = city.strip().lower()
     if not clean_city:
         raise ValueError("Укажите город для парсинга")
-    if CITIES_FILE.exists():
-        try:
-            payload = json.loads(CITIES_FILE.read_text(encoding="utf-8"))
-            for item in payload if isinstance(payload, list) else []:
-                if str(item.get("name", "")).strip().lower() == clean_city and item.get("code"):
-                    return str(item["code"])
-        except (OSError, json.JSONDecodeError):
-            pass
+    if parser_python:
+        upstream_code = resolve_parser2gis_city_code(parser_python, city)
+        if upstream_code:
+            return upstream_code
     aliases = {
         "москва": "moscow",
         "санкт-петербург": "spb",
@@ -65,9 +58,7 @@ def _python_command() -> list[str]:
     configured = os.getenv("LEADHUNT_PYTHON", "").strip()
     if configured:
         return [configured]
-    # The old LeadHunt venv points to a removed Python 3.13 installation. The
-    # current Python launcher is deliberately used instead, where parser-2gis
-    # is installed and its pydantic 1.x dependency is isolated from FastAPI.
+    # The optional Yandex Maps bridge runs outside the isolated 2GIS runtime.
     launcher = shutil.which("py")
     if launcher:
         return [launcher, "-3"]
@@ -81,22 +72,15 @@ def collect_2gis(
     on_status: Callable[[str], None] | None = None,
     start_page: int = 1,
 ) -> list[dict[str, Any]]:
-    if not PARSE_RUNNER.exists():
-        raise FileNotFoundError(f"Не найден запускатель LeadHunt: {PARSE_RUNNER}")
-    if not PARSER2GIS_DIR.exists():
-        raise FileNotFoundError(f"Не найден parser-2gis: {PARSER2GIS_DIR}")
-
+    parser_command = ensure_parser2gis_command(on_status)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    output_path = OUTPUT_DIR / f"leadhunt_{uuid.uuid4().hex[:10]}.json"
-    city_code = resolve_city_code(city)
+    output_path = OUTPUT_DIR / f"2gis_{uuid.uuid4().hex[:10]}.json"
+    city_code = resolve_city_code(city, parser_command[0])
     url = build_2gis_search_url(city_code, niche, start_page)
-    cmd = _python_command() + [
-        str(PARSE_RUNNER), "-i", url, "-o", str(output_path), "-f", "json",
-        # The maintained parser2gic workflow uses a headed Chromium session.
-        # Its runner moves the window off-screen, so this is still invisible to
-        # the user while avoiding the empty-result path 2GIS serves to headless
-        # Chromium sessions.
-        "--chrome.headless", os.getenv("LEADHUNT_HEADLESS", "no"),
+    cmd = parser_command + [
+        "-i", url, "-o", str(output_path), "-f", "json",
+        # Real 2GIS checks currently send headless Chrome to CAPTCHA.
+        "--chrome.headless", os.getenv("PARSER2GIS_HEADLESS", os.getenv("LEADHUNT_HEADLESS", "no")),
         "--chrome.start-maximized", "yes",
         "--chrome.silent-browser", "yes",
         "--parser.max-records", str(max(1, min(int(limit), 200))),
@@ -106,11 +90,11 @@ def collect_2gis(
         page_label = f", страница {max(1, int(start_page))}" if int(start_page) > 1 else ""
         on_status(f"Открываю 2GIS: {city}, {niche}{page_label}")
     environment = os.environ.copy()
-    environment.update({"PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8", "PYTHONPATH": str(PARSER2GIS_DIR)})
+    environment.update({"PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"})
     timeout = max(180, min(600, 20 + int(limit) * 12))
     try:
         completed = subprocess.run(
-            cmd, cwd=str(PARSER2GIC_DIR), env=environment, text=True,
+            cmd, cwd=str(ROOT_DIR), env=environment, text=True,
             encoding="utf-8", errors="replace", stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT, timeout=timeout, check=False,
         )
@@ -126,7 +110,10 @@ def collect_2gis(
         raise RuntimeError(f"parser-2gis завершился с кодом {completed.returncode}: {tail}")
     if not output_path.exists() or output_path.stat().st_size <= 4:
         raise RuntimeError("parser-2gis завершился без результатов. Возможно, 2GIS показал CAPTCHA.")
-    return load_2gis_json(output_path, city, niche, limit)
+    leads = load_2gis_json(output_path, city, niche, limit)
+    if not leads:
+        raise RuntimeError("parser-2gis не вернул карточки. Оставьте PARSER2GIS_HEADLESS=no и повторите запуск.")
+    return leads
 
 
 def collect_yandex(city: str, niche: str, limit: int, on_status: Callable[[str], None] | None = None) -> list[dict[str, Any]]:

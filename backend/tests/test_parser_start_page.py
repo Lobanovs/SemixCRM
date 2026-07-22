@@ -54,12 +54,18 @@ class ParserStartPageTests(unittest.TestCase):
         def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
             captured["command"] = command
             output_path = Path(command[command.index("-o") + 1])
-            output_path.write_text('{"items": []}', encoding="utf-8")
+            output_path.write_text('[{"name": "Тестовая компания"}]', encoding="utf-8")
             return subprocess.CompletedProcess(command, 0, stdout="Готово")
 
-        with patch.object(parser, "OUTPUT_DIR", Path(self.temp_dir.name)), patch.object(parser.subprocess, "run", side_effect=fake_run):
+        with (
+            patch.object(parser, "OUTPUT_DIR", Path(self.temp_dir.name)),
+            patch.object(parser, "ensure_parser2gis_command", return_value=["parser-2gis"], create=True),
+            patch.object(parser, "resolve_parser2gis_city_code", return_value="novosibirsk"),
+            patch.object(parser.subprocess, "run", side_effect=fake_run),
+        ):
             parser.collect_2gis("Новосибирск", "стоматологии", 10, start_page=4)
 
+        self.assertEqual("parser-2gis", captured["command"][0])
         input_url = captured["command"][captured["command"].index("-i") + 1]
         self.assertIn("/page/4/filters/sort=name", input_url)
 

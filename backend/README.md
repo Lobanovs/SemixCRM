@@ -17,9 +17,16 @@ npm run dev
 `http://127.0.0.1:8000` в одном процессе. Если API уже запущен, новый процесс
 использует его и не создаёт второй сервер.
 
-Парсер использует текущую установку `py -3` (или `LEADHUNT_PYTHON`), потому
-что прежний LeadHunt virtualenv больше невалиден. При переносе проекта можно
-переопределить `LEADHUNT_ROOT`, `PARSER2GIC_ROOT` и `LEADHUNT_HEADLESS`.
+При первом запуске источника 2GIS backend создаёт отдельное окружение
+`backend/data/parser2gis-runtime` и устанавливает туда `parser-2gis==1.2.1`.
+Так Pydantic 1.x парсера не конфликтует с Pydantic 2.x основного API. Внешний
+каталог `parser2gic` больше не нужен. Для сбора требуется Google Chrome;
+headless-режим по умолчанию отключён, поскольку 2GIS может показать CAPTCHA.
+
+Каталог окружения можно изменить через `PARSER2GIS_RUNTIME_DIR`. Переменная
+`PARSER2GIS_PYTHON` указывает готовый Python с установленным upstream-пакетом,
+а `PARSER2GIS_HEADLESS` управляет режимом Chrome. `LEADHUNT_ROOT` и
+`LEADHUNT_PYTHON` относятся только к источнику Яндекс Карт.
 
 Основные endpoints:
 
@@ -52,6 +59,9 @@ FREELANCE_BROWSER_PROFILE=backend/data/freelance_browser
 FREELANCE_BROWSER_CHANNEL=chrome
 FREELANCE_CHROME_PATH=
 FREELANCE_POLL_INTERVAL_SECONDS=60
+PARSER2GIS_RUNTIME_DIR=backend/data/parser2gis-runtime
+PARSER2GIS_PYTHON=
+PARSER2GIS_HEADLESS=no
 ```
 
 Токен Telegram читается только из `.env` и используется только для указанного
