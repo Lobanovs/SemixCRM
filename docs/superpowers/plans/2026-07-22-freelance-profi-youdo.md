@@ -1,6 +1,6 @@
 # Profi.ru and YouDo Freelance Parsing Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Completed steps use checked boxes (`- [x]`) for tracking.
 
 **Goal:** Remove Workzilla, make Profi.ru and YouDo parsing honest and functional with saved Chrome sessions, harden public adapters, and show five generated source badges in the desktop freelance UI.
 
@@ -40,7 +40,7 @@
 - Produces: `AUTH_URLS` with only `profi` and `youdo`.
 - Produces: `adapter_registry()` with the same five source keys.
 
-- [ ] **Step 1: Write failing source-list and legacy-settings tests**
+- [x] **Step 1: Write failing source-list and legacy-settings tests**
 
 ```python
 def test_registry_contains_only_supported_sources(self) -> None:
@@ -55,13 +55,13 @@ def test_workzilla_auth_endpoint_is_removed(self) -> None:
     self.assertEqual(404, response.status_code)
 ```
 
-- [ ] **Step 2: Run the focused tests and verify RED**
+- [x] **Step 2: Run the focused tests and verify RED**
 
 Run: `backend\.venv\Scripts\python.exe -m unittest backend.tests.test_freelance_adapters backend.tests.test_freelance_api backend.tests.test_freelance_orders -v`
 
 Expected: failures show Workzilla still exists in the model, registry, and auth route.
 
-- [ ] **Step 3: Remove Workzilla and reduce the API source limit**
+- [x] **Step 3: Remove Workzilla and reduce the API source limit**
 
 ```python
 FREELANCE_SOURCES = ("kwork", "fl", "freelance_ru", "profi", "youdo")
@@ -77,13 +77,13 @@ class FreelanceSettingsRequest(BaseModel):
 
 Delete `WorkzillaAdapter`, its registry import/entry, and Workzilla-specific test expectations. Keep database filtering based on `FREELANCE_SOURCES`; do not delete profile directories or rows.
 
-- [ ] **Step 4: Run the focused tests and verify GREEN**
+- [x] **Step 4: Run the focused tests and verify GREEN**
 
 Run the command from Step 2.
 
 Expected: all selected tests pass.
 
-- [ ] **Step 5: Commit and push**
+- [x] **Step 5: Commit and push**
 
 ```powershell
 git add backend/freelance/models.py backend/freelance/adapters/browser.py backend/freelance/adapters/registry.py backend/freelance/browser_profile.py backend/main.py backend/tests/test_freelance_adapters.py backend/tests/test_freelance_api.py backend/tests/test_freelance_orders.py
@@ -103,7 +103,7 @@ git push origin main
 - Produces: `BrowserAdapter._collect_once(settings, *, headless: bool) -> AdapterResult`.
 - Produces: `persistent_browser_factory(source: str | None = None, headless: bool = True) -> PersistentBrowserSession`.
 
-- [ ] **Step 1: Write failing classification and factory tests**
+- [x] **Step 1: Write failing classification and factory tests**
 
 ```python
 def test_login_page_with_http_200_is_auth_required(self) -> None:
@@ -123,13 +123,13 @@ def test_persistent_factory_forwards_headless_mode(self) -> None:
         session_type.assert_called_once_with(source="youdo", headless=False)
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run: `backend\.venv\Scripts\python.exe -m unittest backend.tests.test_freelance_adapters -v`
 
 Expected: missing explicit page-state handling and unsupported `headless` factory argument.
 
-- [ ] **Step 3: Implement the shared state flow**
+- [x] **Step 3: Implement the shared state flow**
 
 ```python
 @dataclass(frozen=True)
@@ -146,13 +146,13 @@ Make `_create_browser(headless=True)` support injected factories accepting zero,
 
 For `PersistentBrowserSession(headless=False)`, add Chrome launch args `--start-minimized` without changing the login helper behavior.
 
-- [ ] **Step 4: Run tests and verify GREEN**
+- [x] **Step 4: Run tests and verify GREEN**
 
 Run the command from Step 2.
 
 Expected: all adapter tests pass.
 
-- [ ] **Step 5: Commit and push**
+- [x] **Step 5: Commit and push**
 
 ```powershell
 git add backend/freelance/adapters/browser.py backend/freelance/browser_profile.py backend/tests/test_freelance_adapters.py
@@ -172,11 +172,11 @@ git push origin main
 - Produces: `ProfiAdapter.parse_html(html: str, page_url: str) -> list[FreelanceOrder]`.
 - Produces: source-specific `classify_page` and dynamic-feed expansion.
 
-- [ ] **Step 1: Inspect only structural metadata from the saved profile**
+- [x] **Step 1: Inspect only structural metadata from the saved profile**
 
 Close the exact login helper processes if they still own the profiles, then run a diagnostic that prints only final URL, title, HTTP status, selector counts, link path patterns, and non-sensitive class names. Do not print text, cookies, request headers, or HTML.
 
-- [ ] **Step 2: Create sanitized fixtures and failing parser tests**
+- [x] **Step 2: Create sanitized fixtures and failing parser tests**
 
 ```python
 def test_profi_fixture_extracts_order_fields(self) -> None:
@@ -192,23 +192,23 @@ def test_profi_confirmed_empty_fixture_is_empty(self) -> None:
     self.assertEqual("empty", state.status)
 ```
 
-- [ ] **Step 3: Run the two tests and verify RED**
+- [x] **Step 3: Run the two tests and verify RED**
 
 Run: `backend\.venv\Scripts\python.exe -m unittest backend.tests.test_freelance_adapters.FreelanceAdapterTests.test_profi_fixture_extracts_order_fields backend.tests.test_freelance_adapters.FreelanceAdapterTests.test_profi_confirmed_empty_fixture_is_empty -v`
 
 Expected: missing `parse_html`/`classify_html` behavior.
 
-- [ ] **Step 4: Implement Profi selectors from observed structure**
+- [x] **Step 4: Implement Profi selectors from observed structure**
 
 Use BeautifulSoup against page content. Derive `external_id` from the stable order URL or data attribute, resolve relative links with `absolute_url`, and pass normalized title/description/budget/category through `order_from_card`. Expand the feed until external IDs stop growing for three checks or the safety limit is reached.
 
-- [ ] **Step 5: Run the full adapter tests and verify GREEN**
+- [x] **Step 5: Run the full adapter tests and verify GREEN**
 
 Run: `backend\.venv\Scripts\python.exe -m unittest backend.tests.test_freelance_adapters -v`
 
 Expected: all tests pass.
 
-- [ ] **Step 6: Commit and push**
+- [x] **Step 6: Commit and push**
 
 ```powershell
 git add backend/freelance/adapters/browser.py backend/tests/test_freelance_adapters.py backend/tests/fixtures/freelance/profi_orders.html backend/tests/fixtures/freelance/profi_empty.html
@@ -228,7 +228,7 @@ git push origin main
 - Produces: `YoudoAdapter.parse_html(html: str, page_url: str) -> list[FreelanceOrder]`.
 - Produces: `YoudoAdapter.collect(settings) -> AdapterResult`, headless first and headed once only after `blocked`.
 
-- [ ] **Step 1: Write failing block/fallback/parser tests**
+- [x] **Step 1: Write failing block/fallback/parser tests**
 
 ```python
 def test_youdo_403_is_blocked(self) -> None:
@@ -248,17 +248,17 @@ def test_youdo_fixture_extracts_task_fields(self) -> None:
     self.assertTrue(order.external_id.startswith("youdo-"))
 ```
 
-- [ ] **Step 2: Run the tests and verify RED**
+- [x] **Step 2: Run the tests and verify RED**
 
 Run the three named tests with `python -m unittest ... -v`.
 
 Expected: 403 is not classified and no headed fallback exists.
 
-- [ ] **Step 3: Inspect headed YouDo structure without printing content**
+- [x] **Step 3: Inspect headed YouDo structure without printing content**
 
 Use the saved profile with `headless=False` and collect only status, URL, title, stable task-link patterns, selector counts, and class names. Build synthetic fixtures by hand from that structure.
 
-- [ ] **Step 4: Implement classification, parsing, and fallback**
+- [x] **Step 4: Implement classification, parsing, and fallback**
 
 ```python
 def collect(self, settings: FreelanceSettings) -> AdapterResult:
@@ -270,13 +270,13 @@ def collect(self, settings: FreelanceSettings) -> AdapterResult:
 
 Classify 401/403/429, access-restricted titles, challenge markers, and CAPTCHA as `blocked`. Do not retry `auth_required`, `empty`, `done`, or generic parser errors.
 
-- [ ] **Step 5: Run full adapter tests and verify GREEN**
+- [x] **Step 5: Run full adapter tests and verify GREEN**
 
 Run: `backend\.venv\Scripts\python.exe -m unittest backend.tests.test_freelance_adapters -v`
 
 Expected: all tests pass.
 
-- [ ] **Step 6: Commit and push**
+- [x] **Step 6: Commit and push**
 
 ```powershell
 git add backend/freelance/adapters/browser.py backend/tests/test_freelance_adapters.py backend/tests/fixtures/freelance/youdo_tasks.html backend/tests/fixtures/freelance/youdo_empty.html
@@ -293,7 +293,7 @@ git push origin main
 **Interfaces:**
 - Produces: `PublicHttpAdapter(..., max_attempts: int = 2, retry_delay: float = 0.25, sleeper: Callable[[float], None] = time.sleep)`.
 
-- [ ] **Step 1: Write a failing timeout-then-success test**
+- [x] **Step 1: Write a failing timeout-then-success test**
 
 ```python
 def test_public_adapter_retries_one_timeout(self) -> None:
@@ -303,23 +303,23 @@ def test_public_adapter_retries_one_timeout(self) -> None:
     self.assertEqual(2, client_factory.calls)
 ```
 
-- [ ] **Step 2: Run the test and verify RED**
+- [x] **Step 2: Run the test and verify RED**
 
 Run the named unittest.
 
 Expected: constructor arguments or retry behavior are missing.
 
-- [ ] **Step 3: Implement bounded retry**
+- [x] **Step 3: Implement bounded retry**
 
 Retry only `httpx.TimeoutException` and `httpx.NetworkError`; preserve the current HTTP status and parse error messages. Use at most two total attempts.
 
-- [ ] **Step 4: Run adapter tests and verify GREEN**
+- [x] **Step 4: Run adapter tests and verify GREEN**
 
 Run: `backend\.venv\Scripts\python.exe -m unittest backend.tests.test_freelance_adapters -v`
 
 Expected: all tests pass.
 
-- [ ] **Step 5: Commit and push**
+- [x] **Step 5: Commit and push**
 
 ```powershell
 git add backend/freelance/adapters/base.py backend/tests/test_freelance_adapters.py
@@ -341,7 +341,7 @@ git push origin main
 **Interfaces:**
 - Produces: `FREELANCE_SOURCE_KEYS`, `BROWSER_SOURCE_KEYS`, `FreelanceSourceKey`, and `FREELANCE_SOURCE_META`.
 
-- [ ] **Step 1: Write the failing metadata test**
+- [x] **Step 1: Write the failing metadata test**
 
 ```typescript
 import { FREELANCE_SOURCE_KEYS, FREELANCE_SOURCE_META } from './freelanceSources'
@@ -353,19 +353,19 @@ it('defines five distinct source badges without Workzilla', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test and verify RED**
+- [x] **Step 2: Run the test and verify RED**
 
 Run: `npm run test:frontend -- src/pages/freelanceSources.test.ts`
 
 Expected: module does not exist.
 
-- [ ] **Step 3: Generate the assets with the built-in image tool**
+- [x] **Step 3: Generate the assets with the built-in image tool**
 
 Issue one generation call per badge. Shared prompt constraints: square flat/minimal app badge, clean geometric symbol, no photorealism, no 3D, no watermark, no tiny text, strong silhouette, Semix CRM light-dashboard use. Use green K/marketplace for Kwork, blue FL/briefcase for FL.ru, purple project cards for Freelance.ru, raspberry specialist-client symbol for Profi.ru, and blue-orange completed-task symbol for YouDo.
 
 Copy final outputs into `src/assets/freelance`, resize to 192×192, encode WebP, and visually inspect all five files.
 
-- [ ] **Step 4: Implement the metadata module**
+- [x] **Step 4: Implement the metadata module**
 
 ```typescript
 export const FREELANCE_SOURCE_KEYS = ['kwork', 'fl', 'freelance_ru', 'profi', 'youdo'] as const
@@ -380,7 +380,7 @@ export const FREELANCE_SOURCE_META = {
 } as const
 ```
 
-- [ ] **Step 5: Run the metadata test and production build**
+- [x] **Step 5: Run the metadata test and production build**
 
 Run: `npm run test:frontend -- src/pages/freelanceSources.test.ts`
 
@@ -388,7 +388,7 @@ Run: `npm run build`
 
 Expected: both commands exit 0.
 
-- [ ] **Step 6: Commit and push**
+- [x] **Step 6: Commit and push**
 
 ```powershell
 git add src/assets/freelance src/pages/freelanceSources.ts src/pages/freelanceSources.test.ts
@@ -407,7 +407,7 @@ git push origin main
 - Consumes: `FREELANCE_SOURCE_KEYS`, `BROWSER_SOURCE_KEYS`, and `FREELANCE_SOURCE_META`.
 - Produces: source cards with image, label, state, count/time, recovery action, and no Workzilla controls.
 
-- [ ] **Step 1: Write failing UI tests**
+- [x] **Step 1: Write failing UI tests**
 
 ```typescript
 it('shows five named source badges and no Workzilla', async () => {
@@ -427,23 +427,23 @@ it('offers login for auth_required and retry for error', async () => {
 
 Mock every endpoint loaded by `FreelancePage`: orders, stats, settings, source statuses, sniper status, and run history when requested.
 
-- [ ] **Step 2: Run the tests and verify RED**
+- [x] **Step 2: Run the tests and verify RED**
 
 Run: `npm run test:frontend -- src/pages/FreelancePage.test.tsx`
 
 Expected: Workzilla is present and generated badge/status actions are absent.
 
-- [ ] **Step 3: Implement source metadata rendering and recovery actions**
+- [x] **Step 3: Implement source metadata rendering and recovery actions**
 
 Replace local source arrays/mappings with `freelanceSources.ts`. Add a reusable `SourceMark` image component and `SourceStatusCard`. Map statuses to Russian labels: `done → Готово`, `empty → Нет новых`, `auth_required → Требуется вход`, `blocked → Доступ ограничен`, `error → Ошибка`.
 
 Use `openAuth` for Profi/YouDo login or blocked recovery and `checkNow` for retry. Keep text and status icon in addition to color, `role="alert"` for errors, and `aria-live="polite"` for checks.
 
-- [ ] **Step 4: Add focused desktop CSS**
+- [x] **Step 4: Add focused desktop CSS**
 
 Add `.freelance-source-card`, `.source-mark`, `.source-state`, `.source-recovery-action`, dark-theme rules, 44 px actions, visible focus rings, reserved image dimensions, and a one-column fallback below the existing breakpoint. Do not add new raw colors when an existing Semix token/class can express the state.
 
-- [ ] **Step 5: Run focused and full frontend verification**
+- [x] **Step 5: Run focused and full frontend verification**
 
 Run: `npm run test:frontend -- src/pages/FreelancePage.test.tsx src/pages/freelanceSources.test.ts`
 
@@ -453,7 +453,7 @@ Run: `npm run build`
 
 Expected: all commands exit 0.
 
-- [ ] **Step 6: Commit and push**
+- [x] **Step 6: Commit and push**
 
 ```powershell
 git add src/pages/FreelancePage.tsx src/pages/FreelancePage.test.tsx src/styles.css
@@ -470,11 +470,11 @@ git push origin main
 **Interfaces:**
 - Produces: accurate five-source documentation and checked plan boxes.
 
-- [ ] **Step 1: Update README source lists and environment variables**
+- [x] **Step 1: Update README source lists and environment variables**
 
 Change the architecture diagram and freelance table from six sources to five, remove `FREELANCE_WORKZILLA_URL`, explain YouDo headed fallback, and retain the manual login/profile-safety instructions.
 
-- [ ] **Step 2: Run the full automated suite**
+- [x] **Step 2: Run the full automated suite**
 
 Run: `backend\.venv\Scripts\python.exe -m unittest discover -s backend/tests -v`
 
@@ -484,15 +484,15 @@ Run: `npm run build`
 
 Expected: zero failures and build exit 0.
 
-- [ ] **Step 3: Run live adapters without printing order contents**
+- [x] **Step 3: Run live adapters without printing order contents**
 
 For each source output only source, status, count, error, missing-title count, missing-URL count, and missing-description count. Confirm Kwork/FL.ru/Freelance.ru directly. Confirm Profi.ru using the saved profile. Confirm YouDo headless behavior and its headed fallback.
 
-- [ ] **Step 4: Exercise the API and frontend**
+- [x] **Step 4: Exercise the API and frontend**
 
 Run one manual `/api/freelance/sniper/check`, inspect `/api/freelance/sources`, and verify every status is honest. In the desktop UI verify settings save, five badges render, Workzilla is absent, login/retry actions work, and no horizontal overflow appears in light and dark themes.
 
-- [ ] **Step 5: Mark completed checkboxes, inspect final diff, commit, and push**
+- [x] **Step 5: Mark completed checkboxes, inspect final diff, commit, and push**
 
 ```powershell
 git add README.md docs/superpowers/plans/2026-07-22-freelance-profi-youdo.md

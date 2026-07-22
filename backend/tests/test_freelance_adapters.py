@@ -439,7 +439,7 @@ class FreelanceAdapterTests(unittest.TestCase):
 
     def test_browser_profiles_are_isolated_per_source(self) -> None:
         with patch.dict("os.environ", {"FREELANCE_BROWSER_PROFILE": "C:/profiles"}), patch("pathlib.Path.mkdir"):
-            self.assertNotEqual(browser_profile_path("workzilla"), browser_profile_path("profi"))
+            self.assertNotEqual(browser_profile_path("youdo"), browser_profile_path("profi"))
 
     def test_busy_browser_profile_returns_close_window_message(self) -> None:
         class FakeChromium:

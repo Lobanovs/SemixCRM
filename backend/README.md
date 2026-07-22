@@ -59,6 +59,7 @@ FREELANCE_BROWSER_PROFILE=backend/data/freelance_browser
 FREELANCE_BROWSER_CHANNEL=chrome
 FREELANCE_CHROME_PATH=
 FREELANCE_POLL_INTERVAL_SECONDS=60
+FREELANCE_YOUDO_MAX_TASKS=500
 PARSER2GIS_RUNTIME_DIR=backend/data/parser2gis-runtime
 PARSER2GIS_PYTHON=
 PARSER2GIS_HEADLESS=no
@@ -69,15 +70,17 @@ PARSER2GIS_HEADLESS=no
 отозвать и выпустить заново через BotFather. Не добавляйте секреты, cookies или
 SQLite-файлы в Git.
 
-Источники Kwork, FL.ru и Freelance.ru читаются из публичных лент. Workzilla,
-Profi.ru и YouDo используют постоянный локальный Chromium-профиль. CRM сначала
+Источники Kwork, FL.ru и Freelance.ru читаются из публичных лент. Profi.ru и
+YouDo используют отдельные постоянные локальные Chromium-профили. CRM сначала
 ищет установленный Google Chrome. При необходимости путь можно указать через
 `FREELANCE_CHROME_PATH` или установить Chromium командой
 `backend\.venv\Scripts\python.exe -m playwright install chromium`.
-В интерфейсе нажмите «Настроить» → «Открыть вход»,
+В интерфейсе нажмите «Настроить» → «Войти»,
 войдите вручную и закройте окно. Пароли не передаются CRM, CAPTCHA и ограничения
-доступа не обходятся. URL ленты можно переопределить переменными
-`FREELANCE_WORKZILLA_URL`, `FREELANCE_PROFI_URL` и `FREELANCE_YOUDO_URL`.
+доступа не обходятся. URL страниц можно переопределить переменными
+`FREELANCE_PROFI_URL` и `FREELANCE_YOUDO_URL`. YouDo при блокировке headless-запроса
+повторяется в видимом свёрнутом Chrome; лимит карточек задаёт
+`FREELANCE_YOUDO_MAX_TASKS` (по умолчанию 500).
 
 Основные API раздела:
 
@@ -98,7 +101,8 @@ Profi.ru и YouDo используют постоянный локальный C
 
 ### Browser profile isolation
 
-Each browser-based freelance source now uses its own persistent profile under `backend/data/freelance_browser`:
-`profi`, `workzilla`, and `youdo`. After upgrading, use Settings -> Open login once for each source,
-sign in, and close the login window before pressing Check now. Chrome cannot run a second process against
-the same persistent profile while the login window is open.
+Each browser-based freelance source uses its own persistent profile under
+`backend/data/freelance_browser`: `profi` and `youdo`. After upgrading, use
+Settings -> Sign in once for each source, sign in, and close the login window
+before pressing Check now. Chrome cannot run a second process against the same
+persistent profile while the login window is open.
