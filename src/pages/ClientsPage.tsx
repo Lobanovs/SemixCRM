@@ -11,19 +11,16 @@ import {
   Coffee,
   ExternalLink,
   Globe2,
-  ListOrdered,
   Mail,
   MapPin,
   MessageCircle,
   MessageSquareText,
-  PawPrint,
   Phone,
   PhoneCall,
   Plus,
   Search,
   Scissors,
   Send,
-  Settings2,
   Sparkles,
   Star,
   Store,
@@ -35,6 +32,9 @@ import {
 import { EmptyState, MetricCard, SidePanel, StatusBadge, Tag } from '../components/DashboardUi'
 import type { UiAccent } from '../components/DashboardUi'
 import type { LucideIcon } from 'lucide-react'
+import ParserControlPanel from './ParserControlPanel'
+import { API_BASE, persistParserSettings, startParserWithSettings } from './parserSettings'
+import type { ParserSettings } from './parserSettings'
 
 type ClientStatus = 'Новый' | 'Написал' | 'Ответили' | 'Созвон' | 'КП' | 'Закрыто' | 'Отказ'
 type Contact = { type: string; label: string; value: string; url?: string }
@@ -67,8 +67,6 @@ type Client = {
 
 const statusOptions: ClientStatus[] = ['Новый', 'Написал', 'Ответили', 'Созвон', 'КП', 'Закрыто', 'Отказ']
 const stageOrder = statusOptions
-const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://127.0.0.1:8000'
-
 const majorRussianCities = [
   'Москва', 'Санкт-Петербург', 'Новосибирск', 'Екатеринбург', 'Казань', 'Нижний Новгород',
   'Красноярск', 'Челябинск', 'Самара', 'Уфа', 'Ростов-на-Дону', 'Краснодар', 'Омск',
@@ -121,7 +119,6 @@ type ApiClient = {
   archived_at?: string
 }
 
-type ParserSettings = { city: string; niches: string[]; sources: string[]; limit: number; start_page: number; updated_at?: string }
 type ParserRun = {
   id: string
   started_at: string
@@ -200,8 +197,12 @@ export default function ClientsPage() {
   const [niche, setNiche] = useState('Все')
   const [sort, setSort] = useState('Сначала лучшие лиды')
   const [isParsing, setIsParsing] = useState(false)
+  const [isSavingParserSettings, setIsSavingParserSettings] = useState(false)
+  const [isParserSettingsReady, setIsParserSettingsReady] = useState(false)
   const [parserMessage, setParserMessage] = useState('')
+  const [parserFeedbackKind, setParserFeedbackKind] = useState<'status' | 'error'>('status')
   const [parserSettings, setParserSettings] = useState<ParserSettings>(defaultParserSettings)
+  const [savedParserSettings, setSavedParserSettings] = useState<ParserSettings>(defaultParserSettings)
   const [parserRuns, setParserRuns] = useState<ParserRun[]>([])
   const [archivedClients, setArchivedClients] = useState<ArchivedClient[]>([])
   const [pageView, setPageView] = useState<'clients' | 'history' | 'archive'>('clients')
@@ -211,7 +212,6 @@ export default function ClientsPage() {
   const [showRestoreAllConfirm, setShowRestoreAllConfirm] = useState(false)
   const [apiStats, setApiStats] = useState<ApiStats>(emptyStats)
   const [backendConnected, setBackendConnected] = useState(false)
-  const [showParserSettings, setShowParserSettings] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<{ kind: 'one'; client: Client } | { kind: 'all' } | null>(null)
@@ -228,6 +228,8 @@ export default function ClientsPage() {
     setClients(Array.isArray(clientsPayload.clients) ? clientsPayload.clients.map(toClient) : [])
     setApiStats(clientsPayload.stats || emptyStats)
     setParserSettings(settingsPayload)
+    setSavedParserSettings(settingsPayload)
+    setIsParserSettingsReady(true)
     setParserRuns(runsPayload.runs || [])
     const archivedResponse = await fetch(`${API_BASE}/api/clients/archived`)
     if (archivedResponse.ok) {
@@ -240,6 +242,8 @@ export default function ClientsPage() {
   useEffect(() => {
     void refreshBackend().catch(() => {
       setBackendConnected(false)
+      setIsParserSettingsReady(false)
+      setParserFeedbackKind('error')
       setParserMessage('API недоступен. Запустите проект командой npm run dev — она поднимет frontend и backend вместе.')
     })
   }, [])
@@ -303,20 +307,45 @@ export default function ClientsPage() {
     }
   }
 
-  const runParser = async () => {
-    if (isParsing) return
-    setIsParsing(true)
-    setParserMessage('Запускаю поиск реальных компаний…')
+  const saveParserSettings = async () => {
+    if (!isParserSettingsReady || isSavingParserSettings || isParsing) return
+    setIsSavingParserSettings(true)
+    setParserFeedbackKind('status')
+    setParserMessage('Сохраняю настройки парсера…')
     try {
-      const start = await fetch(`${API_BASE}/api/clients/parse`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(parserSettings),
+      const saved = await persistParserSettings(parserSettings)
+      setParserSettings(saved)
+      setSavedParserSettings(saved)
+      setBackendConnected(true)
+      const successMessage = 'Настройки сохранены. Следующий запуск использует новые параметры.'
+      setParserMessage(successMessage)
+      window.setTimeout(() => setParserMessage((message) => message === successMessage ? '' : message), 4000)
+    } catch (error) {
+      setParserFeedbackKind('error')
+      setParserMessage(error instanceof TypeError ? 'Не удалось подключиться к API. Запустите проект командой npm run dev.' : error instanceof Error ? error.message : 'Не удалось сохранить настройки парсера')
+    } finally {
+      setIsSavingParserSettings(false)
+    }
+  }
+
+  const runParser = async () => {
+    if (!isParserSettingsReady || isParsing || isSavingParserSettings) return
+    setIsParsing(true)
+    setParserFeedbackKind('status')
+    setParserMessage('Сохраняю настройки перед запуском…')
+    try {
+      const { jobId } = await startParserWithSettings(parserSettings, {
+        onPersist: (saved) => {
+          setParserSettings(saved)
+          setSavedParserSettings(saved)
+          setBackendConnected(true)
+          setParserMessage('Настройки сохранены. Запускаю поиск компаний…')
+        },
       })
-      const startPayload = await start.json() as { job_id?: string; error?: string }
-      if (!start.ok || !startPayload.job_id) throw new Error(startPayload.error || 'Не удалось запустить парсер')
       let finished = false
       while (!finished) {
         await new Promise((resolve) => window.setTimeout(resolve, 1000))
-        const statusResponse = await fetch(`${API_BASE}/api/clients/jobs/${startPayload.job_id}`)
+        const statusResponse = await fetch(`${API_BASE}/api/clients/jobs/${jobId}`)
         const payload = await statusResponse.json() as { status?: string; message?: string; error?: string; count?: number; skipped_count?: number }
         setParserMessage(payload.message || 'Парсер работает…')
         if (payload.status === 'done') {
@@ -328,6 +357,7 @@ export default function ClientsPage() {
         }
       }
     } catch (error) {
+      setParserFeedbackKind('error')
       setParserMessage(error instanceof TypeError ? 'Не удалось подключиться к API. Перезапустите проект командой npm run dev.' : error instanceof Error ? error.message : 'Не удалось связаться с backend')
     } finally {
       setIsParsing(false)
@@ -435,13 +465,21 @@ export default function ClientsPage() {
 
         <aside className="data-side-column">
           <SidePanel className="parser-panel clients-parser">
-            <div className="parser-title"><span className="parser-icon"><PawPrint size={21} /></span><div><h2>Парсер клиентов</h2><p>Собирает публичные карточки и добавляет только новые компании — дубли пропускаются.</p></div></div>
-            <div className="source-chip-row">{parserSettings.sources.includes('2gis') && <SourceChip icon={MapPin} text="2GIS" tone="green" />}{parserSettings.sources.includes('yandex') && <SourceChip icon={MapPin} text="Яндекс Карты" tone="red" />}</div>
-            <div className="parser-stats"><span>Найдено сегодня<strong>{stats.found_today}</strong></span><span>Новых<strong>{stats.new_today} <i /></strong></span></div>
-            <div className="parser-filters"><p><Search />Ниши <strong>{parserSettings.niches.join(', ') || 'Не настроены'}</strong></p><p><MapPin />Город <strong>{parserSettings.city}</strong></p><p><Sparkles />Источники <strong>{parserSettings.sources.map(sourceLabel).join(', ')}</strong></p>{parserSettings.sources.includes('2gis') && <p><ListOrdered />Старт 2GIS <strong>Страница {parserSettings.start_page || 1}</strong></p>}</div>
-            <button className="solid-action wide-action" type="button" onClick={runParser} disabled={isParsing}>{isParsing ? <><Sparkles className="spin" size={17} />Парсим клиентов...</> : <><Send size={17} />Запустить парсер</>}</button>
-            {parserMessage && <p className="parser-feedback" role="status">{parserMessage}</p>}
-            <button className="secondary-wide-action" type="button" onClick={() => setShowParserSettings(true)}><Settings2 size={16} />Настроить</button>
+            <ParserControlPanel
+              settings={parserSettings}
+              savedSettings={savedParserSettings}
+              cities={majorRussianCities}
+              availableNiches={businessNiches}
+              foundToday={stats.found_today}
+              newToday={stats.new_today}
+              isSaving={isSavingParserSettings}
+              isParsing={isParsing}
+              isReady={isParserSettingsReady}
+              feedback={parserMessage ? { kind: parserFeedbackKind, text: parserMessage } : null}
+              onChange={setParserSettings}
+              onSave={() => void saveParserSettings()}
+              onRun={() => void runParser()}
+            />
           </SidePanel>
 
           <SidePanel className="lead-score-guide"><h2>Как считаются очки</h2><div className="score-guide-list"><span><b>+5</b> нет сайта</span><span><b>+4</b> Telegram, e-mail или WhatsApp</span><span><b>+3</b> больше 30 отзывов</span><span><b>+2</b> рейтинг выше 4,0</span></div><p>Также учитываются телефон, филиалы и ниша с высоким чеком. Максимум — 23 очка.</p></SidePanel>
@@ -458,7 +496,6 @@ export default function ClientsPage() {
 
       {showModal && <ClientModal onClose={() => setShowModal(false)} onCreate={(client) => void createClient(client)} nextId={(clients.length ? Math.max(...clients.map((client) => client.id)) : 0) + 1} />}
       {selectedClient && <ClientDetails client={selectedClient} onClose={() => setSelectedClient(null)} />}
-      {showParserSettings && <ParserSettingsModal settings={parserSettings} onClose={() => setShowParserSettings(false)} onSave={(next) => { setParserSettings(next); setShowParserSettings(false); setParserMessage('Настройки парсера сохранены') }} />}
       {deleteTarget && <ConfirmDeleteModal target={deleteTarget} isDeleting={isDeleting} onClose={() => setDeleteTarget(null)} onConfirm={() => void deleteClients()} />}
     </div>
   )
@@ -544,39 +581,6 @@ function ClientModal({ onClose, onCreate, nextId }: { onClose: () => void; onCre
     onCreate({ id: nextId, name: name.trim(), category, location: city, address: '', source: 'Добавлен вручную', added: 'Сегодня', pain: 'Нужно уточнить задачи и точки роста бизнеса.', tags: ['Новый лид'], status: 'Новый', next: 'Найти контакт', match: 0, score: 3, scoreMax: 23, scoreReasons: ['Ниша с высоким чеком +3'], rating: null, reviews: null, phone: '', website: '', cardUrl: '', contacts: [], tone: 'blue', icon: Building2 })
   }
   return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><form className="compact-modal client-modal" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}><button className="modal-close" type="button" onClick={onClose} aria-label="Закрыть"><X size={20} /></button><span className="metric-icon blue"><Building2 /></span><h2>Новый клиент</h2><label htmlFor="client-name">Название бизнеса</label><input id="client-name" autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="Например, Studio Forma" /><label htmlFor="client-category">Ниша</label><select id="client-category" value={category} onChange={(event) => setCategory(event.target.value)}>{businessNiches.map((item) => <option key={item}>{item}</option>)}</select><label htmlFor="client-city">Город</label><select id="client-city" value={city} onChange={(event) => setCity(event.target.value)}>{majorRussianCities.map((item) => <option key={item}>{item}</option>)}</select><button className="solid-action wide-action" type="submit" disabled={!name.trim()}><Plus size={18} />Сохранить клиента</button></form></div>
-}
-
-function ParserSettingsModal({ settings, onClose, onSave }: { settings: ParserSettings; onClose: () => void; onSave: (settings: ParserSettings) => void }) {
-  const [city, setCity] = useState(settings.city)
-  const [niches, setNiches] = useState(settings.niches)
-  const [sources, setSources] = useState(settings.sources)
-  const [limit, setLimit] = useState(settings.limit)
-  const [startPage, setStartPage] = useState(settings.start_page || 1)
-  const [nicheQuery, setNicheQuery] = useState('')
-  const [isSaving, setIsSaving] = useState(false)
-  const [error, setError] = useState('')
-  const toggleSource = (value: string) => setSources((items) => items.includes(value) ? items.filter((item) => item !== value) : [...items, value])
-  const toggleNiche = (value: string) => setNiches((items) => items.includes(value) ? items.filter((item) => item !== value) : [...items, value])
-  const visibleNiches = businessNiches.filter((item) => item.toLocaleLowerCase('ru').includes(nicheQuery.trim().toLocaleLowerCase('ru')))
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
-    if (!niches.length || !sources.length) { setError('Выберите хотя бы одну нишу и один источник'); return }
-    setIsSaving(true)
-    setError('')
-    try {
-      const response = await fetch(`${API_BASE}/api/parser/settings`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ city, niches, sources, limit, start_page: startPage }),
-      })
-      const payload = await response.json() as ParserSettings & { detail?: string }
-      if (!response.ok) throw new Error(payload.detail || 'Не удалось сохранить настройки')
-      onSave(payload)
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Не удалось сохранить настройки')
-    } finally {
-      setIsSaving(false)
-    }
-  }
-  return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><form className="compact-modal parser-settings-modal" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}><header className="parser-modal-header"><span className="metric-icon blue"><Settings2 /></span><div><h2>Настройки парсера</h2><p className="modal-subtitle">Выберите город, ниши, источники и страницу старта 2GIS.</p></div><button className="modal-close" type="button" onClick={onClose} aria-label="Закрыть"><X size={20} /></button></header><div className="parser-modal-body"><div className="parser-modal-section"><label htmlFor="parser-city">Город</label><select id="parser-city" value={city} onChange={(event) => setCity(event.target.value)}>{majorRussianCities.map((item) => <option key={item}>{item}</option>)}</select></div><div className="parser-modal-section parser-niches-section"><div className="parser-section-heading"><label>Ниши</label><strong>{niches.length} выбрано</strong></div><label className="parser-niche-search"><span className="sr-only">Поиск ниши</span><input value={nicheQuery} onChange={(event) => setNicheQuery(event.target.value)} placeholder="Фильтр по списку ниш" /><Search size={16} /></label><div className="parser-niche-grid">{visibleNiches.map((item) => <label className={niches.includes(item) ? 'active' : ''} key={item}><input type="checkbox" checked={niches.includes(item)} onChange={() => toggleNiche(item)} /><span className="parser-checkbox-mark">{niches.includes(item) && <Check size={14} />}</span><span>{item}</span></label>)}</div></div><div className="parser-modal-section"><div className="parser-section-heading"><label>Источники</label><strong>{sources.length} выбрано</strong></div><div className="parser-source-options"><button aria-pressed={sources.includes('2gis')} className={sources.includes('2gis') ? 'active' : ''} type="button" onClick={() => toggleSource('2gis')}><MapPin size={16} />2GIS{sources.includes('2gis') && <Check size={15} />}</button><button aria-pressed={sources.includes('yandex')} className={sources.includes('yandex') ? 'active' : ''} type="button" onClick={() => toggleSource('yandex')}><MapPin size={16} />Яндекс Карты{sources.includes('yandex') && <Check size={15} />}</button></div></div><div className="parser-modal-section parser-page-section"><div><label htmlFor="parser-start-page">Начать со страницы 2GIS</label><p>Например, укажите 4 — парсер пройдёт пагинацию и начнёт собирать клиентов со страницы 4.</p></div><div className="parser-page-control"><button type="button" onClick={() => setStartPage((page) => Math.max(1, page - 1))} disabled={startPage <= 1} aria-label="Предыдущая страница">−</button><input id="parser-start-page" type="number" min="1" max="999" step="1" value={startPage} onChange={(event) => setStartPage(Math.max(1, Math.min(999, Number(event.target.value) || 1)))} /><button type="button" onClick={() => setStartPage((page) => Math.min(999, page + 1))} aria-label="Следующая страница">+</button></div></div><div className="parser-page-preview"><ListOrdered size={16} /><span>Старт следующего запуска</span><strong>Страница {startPage}</strong></div><div className="parser-modal-section parser-limit-section"><label htmlFor="parser-limit">Лимит на нишу и источник: <strong>{limit}</strong></label><input id="parser-limit" type="range" min="1" max="50" value={limit} onChange={(event) => setLimit(Number(event.target.value))} /></div></div><footer className="parser-modal-footer">{error && <p className="form-error">{error}</p>}<button className="solid-action wide-action" type="submit" disabled={isSaving}>{isSaving ? <><Sparkles className="spin" size={17} />Сохраняю…</> : <><Check size={17} />Сохранить настройки</>}</button></footer></form></div>
 }
 
 function ClientDetails({ client, onClose }: { client: Client; onClose: () => void }) {
