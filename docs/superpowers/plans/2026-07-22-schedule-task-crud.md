@@ -30,7 +30,7 @@
 - Consumes: `create_schedule_task`, `update_schedule_task`, `delete_schedule_task`.
 - Produces: proven persistence and HTTP behavior for task CRUD.
 
-- [ ] **Step 1: Add failing database/API coverage**
+- [x] **Step 1: Add failing database/API coverage**
 
 Add a database test that creates a task, updates all editable fields, deletes it, and verifies the week is empty. Add API tests that verify `PUT /api/schedule/tasks/{id}`, `DELETE /api/schedule/tasks/{id}`, and `404` for a missing task.
 
@@ -42,21 +42,21 @@ self.assertTrue(database.delete_schedule_task(int(task["id"])))
 self.assertEqual([], database.get_schedule("2026-07-20")["tasks"])
 ```
 
-- [ ] **Step 2: Run focused tests and verify the new tests detect any missing behavior**
+- [x] **Step 2: Run focused tests and verify the new tests detect any missing behavior**
 
 Run: `backend\.venv\Scripts\python.exe -m unittest backend.tests.test_schedule backend.tests.test_schedule_api -v`
 
 Expected: new CRUD assertions pass against the existing backend; any uncovered API mismatch fails before frontend work.
 
-- [ ] **Step 3: Make only backend fixes required by the tests**
+- [x] **Step 3: Make only backend fixes required by the tests**
 
 Keep the existing route signatures. A successful delete returns `{"ok": true, "deleted_id": task_id}`; missing update/delete returns HTTP 404.
 
-- [ ] **Step 4: Run focused tests and verify GREEN**
+- [x] **Step 4: Run focused tests and verify GREEN**
 
 Run the command from Step 2. Expected: all selected tests pass.
 
-- [ ] **Step 5: Commit and push**
+- [x] **Step 5: Commit and push**
 
 ```powershell
 git add backend/tests/test_schedule.py backend/tests/test_schedule_api.py backend/main.py backend/database.py
@@ -74,7 +74,7 @@ git push origin main
 - Produces: `TaskModal({ defaultDate, task, onClose, onSaved, onDeleted })`.
 - Produces: `WeekColumn` callbacks `onCreate(date)`, `onEdit(task)`, and `onToggle(task)`.
 
-- [ ] **Step 1: Write failing frontend tests for day click and creation**
+- [x] **Step 1: Write failing frontend tests for day click and creation**
 
 Mock `GET /api/schedule` and `POST /api/schedule/tasks`. Assert that clicking `Добавить задачу на 22.07` opens a dialog with date `2026-07-22`, and submitting sends:
 
@@ -87,21 +87,21 @@ expect(JSON.parse(String(createCall?.[1]?.body))).toEqual({
 })
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run: `npm.cmd run test:frontend -- src/pages/SchedulePage.test.tsx`
 
 Expected: the day create control/dialog behavior is missing.
 
-- [ ] **Step 3: Implement selected-day creation and modal modes**
+- [x] **Step 3: Implement selected-day creation and modal modes**
 
 Add `editingTask: Task | null` plus a modal date state. `openCreate(date)` selects the date and opens an empty modal; `openEdit(task)` opens populated edit mode. Creation uses POST, edit uses PUT with `title`, `task_date`, `task_time`, and `kind`.
 
-- [ ] **Step 4: Run focused tests and verify GREEN**
+- [x] **Step 4: Run focused tests and verify GREEN**
 
 Run the command from Step 2. Expected: creation tests pass.
 
-- [ ] **Step 5: Commit and push**
+- [x] **Step 5: Commit and push**
 
 ```powershell
 git add src/pages/SchedulePage.tsx src/pages/SchedulePage.test.tsx
@@ -120,21 +120,21 @@ git push origin main
 - Completion PUT body: `{ done: boolean }`.
 - Delete endpoint: `DELETE /api/schedule/tasks/{id}`.
 
-- [ ] **Step 1: Write failing edit, completion, delete, and error tests**
+- [x] **Step 1: Write failing edit, completion, delete, and error tests**
 
 Assert that task-card click opens populated edit mode; checkbox click sends only `{ done: true }`; first delete click shows confirmation; second sends DELETE; failed PUT/DELETE renders a modal `role="alert"` and keeps the dialog open.
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run: `npm.cmd run test:frontend -- src/pages/SchedulePage.test.tsx`
 
 Expected: independent controls, confirmation, and modal error behavior are absent.
 
-- [ ] **Step 3: Implement minimal behavior and CSS**
+- [x] **Step 3: Implement minimal behavior and CSS**
 
 Use `SquarePen` for edit, `Trash2` for delete, `Plus` for day creation, semantic button labels, visible focus styles, at least 40 px interactive targets, and existing light/dark theme colors. Keep task title and time readable in narrow columns.
 
-- [ ] **Step 4: Run all automated verification**
+- [x] **Step 4: Run all automated verification**
 
 Run:
 
@@ -146,11 +146,11 @@ npm.cmd run build
 
 Expected: zero test failures and build exit 0.
 
-- [ ] **Step 5: Verify the live frontend**
+- [x] **Step 5: Verify the live frontend**
 
 Against `http://127.0.0.1:5173/`, create a temporary task by clicking a day, edit its fields, toggle completion, delete it with confirmation, verify it disappears, and confirm no horizontal overflow in light and dark themes.
 
-- [ ] **Step 6: Mark this plan complete, commit, and push**
+- [x] **Step 6: Mark this plan complete, commit, and push**
 
 ```powershell
 git add src/pages/SchedulePage.tsx src/pages/SchedulePage.test.tsx src/styles.css docs/superpowers/plans/2026-07-22-schedule-task-crud.md

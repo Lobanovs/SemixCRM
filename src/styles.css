@@ -3748,6 +3748,47 @@ a:focus-visible {
 .schedule-modal-fields input,
 .schedule-modal-fields select { width: 100%; margin-top: 6px; }
 .form-error { margin: 10px 0 0; color: #b23e4d; font-size: 12px; }
+.week-column > header { display: block; }
+.day-add-button { display: grid; width: 100%; min-height: 40px; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 6px; align-items: center; padding: 4px 5px; border: 0; border-radius: 7px; color: inherit; background: transparent; cursor: pointer; text-align: left; transition: color .18s ease, background-color .18s ease; }
+.day-add-button:hover { color: #1264e8; background: #f2f7ff; }
+.day-add-button svg { color: #1264e8; opacity: 0; transition: opacity .18s ease; }
+.day-add-button:hover svg,
+.day-add-button:focus-visible svg { opacity: 1; }
+.day-task { min-height: 40px; grid-template-columns: 24px minmax(0, 1fr); gap: 3px; align-items: stretch; }
+.task-toggle { display: grid; min-height: 40px; place-items: start center; padding: 9px 0 0; border: 0; border-radius: 6px; color: inherit; background: transparent; cursor: pointer; }
+.task-toggle:hover { background: #edf4ff; }
+.task-edit { display: grid; min-width: 0; min-height: 40px; grid-template-columns: minmax(0, 1fr) auto; gap: 5px; align-items: start; padding: 6px 5px; border: 0; border-radius: 6px; color: inherit; background: transparent; cursor: pointer; text-align: left; transition: background-color .18s ease; }
+.task-edit:hover { background: #f2f7ff; }
+.task-edit > span { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.task-edit strong { overflow-wrap: anywhere; }
+.task-edit > svg { margin-top: 2px; color: #7890ac; opacity: .45; transition: opacity .18s ease, color .18s ease; }
+.task-edit:hover > svg,
+.task-edit:focus-visible > svg { color: #1264e8; opacity: 1; }
+.day-task.done .task-edit strong { color: #8a96a8; text-decoration: line-through; }
+.day-add-inline,
+.day-empty-action { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 5px; border: 1px dashed transparent; border-radius: 7px; color: #687b95; background: transparent; cursor: pointer; font: inherit; font-size: 10px; font-weight: 650; transition: border-color .18s ease, color .18s ease, background-color .18s ease; }
+.day-add-inline { margin-top: 1px; opacity: .7; }
+.day-add-inline:hover,
+.day-empty-action:hover { border-color: #a9c9f2; color: #1264e8; background: #f5f9ff; opacity: 1; }
+.day-empty-action { width: 100%; min-height: 54px; padding: 5px; }
+.day-add-button:focus-visible,
+.task-toggle:focus-visible,
+.task-edit:focus-visible,
+.day-add-inline:focus-visible,
+.day-empty-action:focus-visible,
+.task-modal-actions button:focus-visible,
+.task-delete-confirm button:focus-visible { outline: 3px solid rgba(18, 100, 232, .22); outline-offset: 2px; }
+.task-modal-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+.task-modal-actions .solid-action { min-width: 190px; }
+.task-delete-button { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 7px; margin-right: auto; padding: 0 12px; border: 1px solid #e5c5ca; border-radius: 8px; color: #b23e4d; background: #fff; cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; }
+.task-delete-button:hover { border-color: #d996a0; background: #fff6f7; }
+.task-delete-confirm { padding: 12px; border: 1px solid #efc8ce; border-radius: 9px; background: #fff7f8; }
+.task-delete-confirm p { margin: 0 0 10px; color: #8f3542; font-size: 12px; font-weight: 650; line-height: 1.45; }
+.task-delete-confirm > div { display: flex; justify-content: flex-end; gap: 8px; }
+.task-delete-confirm button { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 6px; padding: 0 12px; border: 1px solid #d7dfe9; border-radius: 7px; color: #42516a; background: #fff; cursor: pointer; font: inherit; font-size: 11px; font-weight: 700; }
+.task-delete-confirm .danger-action { border-color: #c84859; color: #fff; background: #c84859; }
+.task-delete-confirm button:disabled,
+.task-modal-actions button:disabled { cursor: wait; opacity: .6; }
 .theme-dark .schedule-loading,
 .theme-dark .schedule-error,
 .theme-dark .day-note textarea,
@@ -3760,10 +3801,25 @@ a:focus-visible {
 .theme-dark .calendar-cells button.selected-week-day { color: #9bc4ff; background: #17345e; }
 .theme-dark .calendar-cells button.selected-day { color: #fff; background: #246fe2; }
 .theme-dark .form-error { color: #f0aab4; }
+.theme-dark .day-add-button:hover,
+.theme-dark .task-toggle:hover,
+.theme-dark .task-edit:hover,
+.theme-dark .day-add-inline:hover,
+.theme-dark .day-empty-action:hover { color: #9bc4ff; background: #1b304a; }
+.theme-dark .day-task.done .task-edit strong { color: #718097; }
+.theme-dark .task-delete-button { border-color: #70404a; color: #f0aab4; background: #1d293a; }
+.theme-dark .task-delete-button:hover,
+.theme-dark .task-delete-confirm { border-color: #75414a; background: #2c1e27; }
+.theme-dark .task-delete-confirm p { color: #f0aab4; }
+.theme-dark .task-delete-confirm button { border-color: #405067; color: #d7e2f0; background: #1d293a; }
+.theme-dark .task-delete-confirm .danger-action { border-color: #d45465; color: #fff; background: #b84050; }
 
 @media (max-width: 760px) {
   .schedule-toast { right: 14px; bottom: 14px; left: 14px; text-align: center; }
   .schedule-modal-fields { grid-template-columns: 1fr; gap: 0; }
+  .task-modal-actions { align-items: stretch; flex-direction: column-reverse; }
+  .task-modal-actions .solid-action,
+  .task-delete-button { width: 100%; }
 }
 
 /* Freelance data-backed states */

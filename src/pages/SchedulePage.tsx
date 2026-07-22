@@ -9,7 +9,9 @@ import {
   FileText,
   ListChecks,
   Plus,
+  SquarePen,
   Target,
+  Trash2,
   X,
 } from 'lucide-react'
 import { MetricCard, SidePanel } from '../components/DashboardUi'
@@ -88,7 +90,7 @@ export default function SchedulePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
-  const [showTaskModal, setShowTaskModal] = useState(false)
+  const [taskModal, setTaskModal] = useState<{ date: string; task: Task | null } | null>(null)
   const [showGoalModal, setShowGoalModal] = useState(false)
   const [notice, setNotice] = useState('')
 
@@ -178,8 +180,16 @@ export default function SchedulePage() {
     const nextGoals = (data?.goals ?? []).map((goal, goalIndex) => goalIndex === index ? { ...goal, done: !goal.done } : goal)
     await saveWeek(nextGoals)
   }
-  const taskCreated = async (task: Task) => {
-    setShowTaskModal(false)
+  const openCreateTask = (date = selectedDate >= weekStart && selectedDate <= addDays(weekStart, 6) ? selectedDate : weekStart) => {
+    setSelectedDate(date)
+    setTaskModal({ date, task: null })
+  }
+  const openEditTask = (task: Task) => {
+    setSelectedDate(task.date)
+    setTaskModal({ date: task.date, task })
+  }
+  const taskSaved = async (task: Task, mode: 'created' | 'updated') => {
+    setTaskModal(null)
     const target = mondayOf(task.date)
     if (target !== weekStart) {
       setWeekStart(target)
@@ -187,7 +197,13 @@ export default function SchedulePage() {
     } else {
       await loadSchedule()
     }
-    setNotice('Задача добавлена')
+    setNotice(mode === 'created' ? 'Задача добавлена' : 'Задача обновлена')
+    window.setTimeout(() => setNotice(''), 2200)
+  }
+  const taskDeleted = async () => {
+    setTaskModal(null)
+    await loadSchedule()
+    setNotice('Задача удалена')
     window.setTimeout(() => setNotice(''), 2200)
   }
 
@@ -203,7 +219,7 @@ export default function SchedulePage() {
               <button type="button" aria-label="Следующая неделя" onClick={() => changeWeek(1)}><ChevronRight /></button>
               <button className="today-button" type="button" onClick={goToday}><CalendarDays size={16} />Сегодня</button>
             </div>
-            <button className="solid-action" type="button" onClick={() => setShowTaskModal(true)}><Plus size={19} />Добавить задачу</button>
+            <button className="solid-action" type="button" onClick={() => openCreateTask()}><Plus size={19} />Добавить задачу</button>
           </div>
           {loading && <div className="schedule-loading" role="status">Загружаем сохранённое расписание…</div>}
           {error && <div className="schedule-error" role="alert">{error}<button type="button" onClick={() => void loadSchedule()}>Повторить</button></div>}
@@ -214,7 +230,7 @@ export default function SchedulePage() {
               <MetricCard icon={CalendarDays} label="Важные встречи" value={data.stats.meetings} hint="Встречи в этой неделе" accent="purple" />
               <MetricCard icon={Target} label="Фокус недели" value={data.focus || '—'} hint={data.focus ? 'Сохранённый фокус' : 'Фокус пока не задан'} accent="orange" />
             </div>
-            <div className="week-board">{days.map((day) => <WeekColumn day={day} onToggle={toggleTask} onSaveNote={saveNote} key={day.date} />)}</div>
+            <div className="week-board">{days.map((day) => <WeekColumn day={day} onCreate={openCreateTask} onEdit={openEditTask} onToggle={toggleTask} onSaveNote={saveNote} key={day.date} />)}</div>
             <div className="schedule-bottom-grid">
               <section className="summary-panel">
                 <div className="summary-panel-title"><div><h2>Итоги недели</h2><p>Подведите итоги недели: успехи, проблемы, идеи и выводы</p></div><span>{summary.length} / 2000</span></div>
@@ -235,22 +251,23 @@ export default function SchedulePage() {
           <SidePanel className="calendar-panel"><div className="calendar-title-row"><h2>Календарь</h2></div><div className="month-switcher"><button type="button" aria-label="Предыдущий месяц" onClick={() => setCalendarMonth((value) => new Date(value.getFullYear(), value.getMonth() - 1, 1))}><ChevronLeft /></button><strong>{ruMonth.format(calendarMonth)} <ChevronDownSmall /></strong><button type="button" aria-label="Следующий месяц" onClick={() => setCalendarMonth((value) => new Date(value.getFullYear(), value.getMonth() + 1, 1))}><ChevronRight /></button></div><CalendarGrid month={calendarMonth} selectedDate={selectedDate} weekStart={weekStart} onSelect={selectDate} /></SidePanel>
           <SidePanel className="upcoming-panel"><div className="side-panel-title-row"><h2>Ближайшие события</h2></div>{data?.upcoming.length ? <div className="upcoming-list">{data.upcoming.map((task) => <div key={task.id}><p><strong>{formatDay(task.date)}</strong><b>{task.time || 'Весь день'}</b></p><span className={task.kind === 'meeting' ? 'purple' : 'blue'} /><div><strong>{task.title}</strong><small>{task.kind === 'meeting' ? 'Встреча' : 'Задача'}</small></div></div>)}</div> : <p className="side-empty">Сохранённых ближайших событий нет.</p>}</SidePanel>
           <SidePanel className="past-panel"><h2>Прошлые недели</h2>{data?.past_weeks.length ? data.past_weeks.map((pastWeek) => <button type="button" key={pastWeek} onClick={() => { setWeekStart(pastWeek); setSelectedDate(pastWeek) }}>{formatPastWeek(pastWeek)}<ChevronRight size={15} /></button>) : <p className="side-empty">Истории прошлых недель пока нет.</p>}<button className="archive-button" type="button" onClick={() => setNotice('Архив появится после сохранения первой недели')}>Открыть архив</button></SidePanel>
-          <SidePanel className="quick-actions-panel"><h2>Быстрые действия</h2><div><button type="button" onClick={() => setShowTaskModal(true)}><CheckCircle2 />Добавить задачу</button><button type="button" onClick={() => { setSelectedDate(todayIso()); document.querySelector('.day-note textarea')?.scrollIntoView({ behavior: 'smooth', block: 'center' }) }}><FileText />Добавить заметку дня</button></div></SidePanel>
+          <SidePanel className="quick-actions-panel"><h2>Быстрые действия</h2><div><button type="button" onClick={() => openCreateTask()}><CheckCircle2 />Добавить задачу</button><button type="button" onClick={() => { setSelectedDate(todayIso()); document.querySelector('.day-note textarea')?.scrollIntoView({ behavior: 'smooth', block: 'center' }) }}><FileText />Добавить заметку дня</button></div></SidePanel>
         </aside>
       </div>
       {notice && <div className="schedule-toast" role="status">{notice}</div>}
-      {showTaskModal && <TaskModal defaultDate={selectedDate >= weekStart && selectedDate <= addDays(weekStart, 6) ? selectedDate : weekStart} onClose={() => setShowTaskModal(false)} onCreated={taskCreated} />}
+      {taskModal && <TaskModal defaultDate={taskModal.date} task={taskModal.task} onClose={() => setTaskModal(null)} onSaved={taskSaved} onDeleted={taskDeleted} />}
       {showGoalModal && <GoalModal onClose={() => setShowGoalModal(false)} onCreated={async (title) => { await addGoal(title); setShowGoalModal(false) }} />}
     </div>
   )
 }
 
-function WeekColumn({ day, onToggle, onSaveNote }: { day: { date: string; short: string; tasks: Task[]; note: string }; onToggle: (task: Task) => Promise<void>; onSaveNote: (date: string, note: string) => Promise<void> }) {
+function WeekColumn({ day, onCreate, onEdit, onToggle, onSaveNote }: { day: { date: string; short: string; tasks: Task[]; note: string }; onCreate: (date: string) => void; onEdit: (task: Task) => void; onToggle: (task: Task) => Promise<void>; onSaveNote: (date: string, note: string) => Promise<void> }) {
   const [draft, setDraft] = useState(day.note)
   const [saving, setSaving] = useState(false)
+  const shortDate = parseDate(day.date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })
   useEffect(() => setDraft(day.note), [day.note])
   const save = async () => { setSaving(true); await onSaveNote(day.date, draft); setSaving(false) }
-  return <article className="week-column"><header><strong>{day.short}</strong><span>{parseDate(day.date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}</span><b>{day.tasks.length}</b></header><div className="day-task-list">{day.tasks.length ? day.tasks.map((task) => <button type="button" className={`day-task ${task.done ? 'done' : ''}`} key={task.id} onClick={() => void onToggle(task)}><span className="task-check" aria-hidden="true">{task.done && <Check size={12} />}</span><span><strong>{task.title}</strong>{task.time && <small>{task.time}{task.kind === 'meeting' ? ' · встреча' : ''}</small>}</span></button>) : <p className="day-empty">Задач нет</p>}</div><div className="day-note"><small>Заметка дня</small><textarea value={draft} onChange={(event) => setDraft(event.target.value)} aria-label={`Заметка ${day.date}`} placeholder="Что произошло сегодня?" /><button type="button" onClick={() => void save()} disabled={saving || draft === day.note}><Plus size={13} />{saving ? 'Сохраняем…' : 'Сохранить заметку'}</button></div></article>
+  return <article className="week-column"><header><button className="day-add-button" type="button" onClick={() => onCreate(day.date)} aria-label={`Добавить задачу на ${day.short} ${shortDate}`}><strong>{day.short}</strong><span>{shortDate}</span><b>{day.tasks.length}</b><Plus size={14} aria-hidden="true" /></button></header><div className="day-task-list">{day.tasks.length ? <>{day.tasks.map((task) => <div className={`day-task ${task.done ? 'done' : ''}`} key={task.id}><button className="task-toggle" type="button" onClick={() => void onToggle(task)} aria-label={task.done ? `Отметить задачу «${task.title}» невыполненной` : `Отметить задачу «${task.title}» выполненной`}><span className="task-check" aria-hidden="true">{task.done && <Check size={12} />}</span></button><button className="task-edit" type="button" onClick={() => onEdit(task)} aria-label={`Редактировать задачу ${task.title}`}><span><strong>{task.title}</strong>{task.time && <small>{task.time}{task.kind === 'meeting' ? ' · встреча' : ''}</small>}</span><SquarePen size={13} aria-hidden="true" /></button></div>)}<button className="day-add-inline" type="button" onClick={() => onCreate(day.date)} aria-label={`Добавить ещё задачу на ${day.short} ${shortDate}`}><Plus size={13} />Добавить</button></> : <button className="day-empty day-empty-action" type="button" onClick={() => onCreate(day.date)} aria-label={`Создать первую задачу на ${day.short} ${shortDate}`}><Plus size={14} />Задач нет — добавить</button>}</div><div className="day-note"><small>Заметка дня</small><textarea value={draft} onChange={(event) => setDraft(event.target.value)} aria-label={`Заметка ${day.date}`} placeholder="Что произошло сегодня?" /><button type="button" onClick={() => void save()} disabled={saving || draft === day.note}><Plus size={13} />{saving ? 'Сохраняем…' : 'Сохранить заметку'}</button></div></article>
 }
 
 function CalendarGrid({ month, selectedDate, weekStart, onSelect }: { month: Date; selectedDate: string; weekStart: string; onSelect: (date: string) => void }) {
@@ -264,25 +281,39 @@ function CalendarGrid({ month, selectedDate, weekStart, onSelect }: { month: Dat
 
 function ChevronDownSmall() { return <ChevronRight className="chevron-down" size={14} /> }
 
-function TaskModal({ defaultDate, onClose, onCreated }: { defaultDate: string; onClose: () => void; onCreated: (task: Task) => Promise<void> }) {
-  const [title, setTitle] = useState('')
-  const [taskDate, setTaskDate] = useState(defaultDate)
-  const [taskTime, setTaskTime] = useState('')
-  const [kind, setKind] = useState<TaskKind>('task')
+function TaskModal({ defaultDate, task, onClose, onSaved, onDeleted }: { defaultDate: string; task: Task | null; onClose: () => void; onSaved: (task: Task, mode: 'created' | 'updated') => Promise<void>; onDeleted: () => Promise<void> }) {
+  const [title, setTitle] = useState(task?.title ?? '')
+  const [taskDate, setTaskDate] = useState(task?.date ?? defaultDate)
+  const [taskTime, setTaskTime] = useState(task?.time ?? '')
+  const [kind, setKind] = useState<TaskKind>(task?.kind ?? 'task')
   const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
+  const [busy, setBusy] = useState<'save' | 'delete' | ''>('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const isEditing = task !== null
   const submit = async (event: FormEvent) => {
     event.preventDefault()
-    setSaving(true)
+    setBusy('save')
     setError('')
     try {
-      const task = await apiRequest<Task>('/api/schedule/tasks', { method: 'POST', body: JSON.stringify({ title: title.trim(), task_date: taskDate, task_time: taskTime, kind }) })
-      await onCreated(task)
+      const savedTask = await apiRequest<Task>(isEditing ? `/api/schedule/tasks/${task.id}` : '/api/schedule/tasks', { method: isEditing ? 'PUT' : 'POST', body: JSON.stringify({ title: title.trim(), task_date: taskDate, task_time: taskTime, kind }) })
+      await onSaved(savedTask, isEditing ? 'updated' : 'created')
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Не удалось добавить задачу')
-    } finally { setSaving(false) }
+      setError(requestError instanceof Error ? requestError.message : isEditing ? 'Не удалось сохранить задачу' : 'Не удалось добавить задачу')
+    } finally { setBusy('') }
   }
-  return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><form className="compact-modal schedule-task-modal" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}><button className="modal-close" type="button" onClick={onClose} aria-label="Закрыть"><X size={20} /></button><span className="metric-icon blue"><CheckCircle2 /></span><h2>Новая задача</h2><label htmlFor="task-title">Название задачи</label><input id="task-title" autoFocus value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Например, подготовить отчёт" required /><label htmlFor="task-date">Дата</label><input id="task-date" type="date" value={taskDate} onChange={(event) => setTaskDate(event.target.value)} required /><div className="schedule-modal-fields"><label htmlFor="task-time">Время<input id="task-time" type="time" value={taskTime} onChange={(event) => setTaskTime(event.target.value)} /></label><label htmlFor="task-kind">Тип<select id="task-kind" value={kind} onChange={(event) => setKind(event.target.value as TaskKind)}><option value="task">Задача</option><option value="meeting">Встреча</option></select></label></div>{error && <p className="form-error">{error}</p>}<button className="solid-action wide-action" type="submit" disabled={!title.trim() || saving}><Plus size={18} />{saving ? 'Добавляем…' : 'Добавить задачу'}</button></form></div>
+  const remove = async () => {
+    if (!task) return
+    setBusy('delete')
+    setError('')
+    try {
+      await apiRequest(`/api/schedule/tasks/${task.id}`, { method: 'DELETE' })
+      await onDeleted()
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось удалить задачу')
+      setBusy('')
+    }
+  }
+  return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><form className="compact-modal schedule-task-modal" role="dialog" aria-modal="true" aria-labelledby="schedule-task-modal-title" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}><button className="modal-close" type="button" onClick={onClose} aria-label="Закрыть"><X size={20} /></button><span className={`metric-icon ${isEditing ? 'purple' : 'blue'}`}>{isEditing ? <SquarePen /> : <CheckCircle2 />}</span><h2 id="schedule-task-modal-title">{isEditing ? 'Редактирование задачи' : 'Новая задача'}</h2><label htmlFor="task-title">Название задачи</label><input id="task-title" autoFocus value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Например, подготовить отчёт" required /><label htmlFor="task-date">Дата</label><input id="task-date" type="date" value={taskDate} onChange={(event) => setTaskDate(event.target.value)} required /><div className="schedule-modal-fields"><label htmlFor="task-time">Время<input id="task-time" type="time" value={taskTime} onChange={(event) => setTaskTime(event.target.value)} /></label><label htmlFor="task-kind">Тип<select id="task-kind" value={kind} onChange={(event) => setKind(event.target.value as TaskKind)}><option value="task">Задача</option><option value="meeting">Встреча</option></select></label></div>{error && <p className="form-error" role="alert">{error}</p>}{isEditing && confirmDelete && <div className="task-delete-confirm"><p>Удалить задачу без возможности восстановления?</p><div><button type="button" onClick={() => setConfirmDelete(false)} disabled={Boolean(busy)}>Отмена</button><button className="danger-action" type="button" onClick={() => void remove()} disabled={Boolean(busy)} aria-label="Подтвердить удаление задачи"><Trash2 size={16} />{busy === 'delete' ? 'Удаляем…' : 'Удалить'}</button></div></div>}{!confirmDelete && <div className="task-modal-actions">{isEditing && <button className="task-delete-button" type="button" onClick={() => setConfirmDelete(true)} disabled={Boolean(busy)}><Trash2 size={17} />Удалить задачу</button>}<button className="solid-action" type="submit" disabled={!title.trim() || Boolean(busy)}>{isEditing ? <Check size={18} /> : <Plus size={18} />}{busy === 'save' ? 'Сохраняем…' : isEditing ? 'Сохранить изменения' : 'Добавить задачу'}</button></div>}</form></div>
 }
 
 function GoalModal({ onClose, onCreated }: { onClose: () => void; onCreated: (title: string) => Promise<void> }) {
