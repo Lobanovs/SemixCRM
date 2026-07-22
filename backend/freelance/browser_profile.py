@@ -84,6 +84,8 @@ class PersistentBrowserSession:
             "locale": "ru-RU",
             "viewport": {"width": 1440, "height": 1000},
         }
+        if not headless:
+            options["args"] = ["--start-minimized"]
         executable = find_chrome_executable()
         if executable:
             options["executable_path"] = executable.as_posix()
@@ -120,8 +122,8 @@ class PersistentBrowserSession:
             self._playwright.stop()
 
 
-def persistent_browser_factory(source: str | None = None) -> PersistentBrowserSession:
-    return PersistentBrowserSession(source=source, headless=True)
+def persistent_browser_factory(source: str | None = None, headless: bool = True) -> PersistentBrowserSession:
+    return PersistentBrowserSession(source=source, headless=headless)
 
 
 def open_login_window(source: str) -> dict[str, Any]:

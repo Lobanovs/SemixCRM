@@ -62,6 +62,12 @@ class FreelanceAdapterTests(unittest.TestCase):
             def goto(self, *_args, **_kwargs):
                 return None
 
+            def title(self):
+                return "Заказы"
+
+            def content(self):
+                return "<main data-empty-state>Нет подходящих заказов</main>"
+
             def locator(self, _selector):
                 return EmptyLocator()
 
@@ -79,6 +85,73 @@ class FreelanceAdapterTests(unittest.TestCase):
         result = ProfiAdapter(browser_factory=lambda: session).collect(FreelanceSettings())
         self.assertEqual("empty", result.status)
         self.assertTrue(session.closed)
+
+    def test_login_page_with_http_200_is_auth_required(self) -> None:
+        class EmptyLocator:
+            def all(self):
+                return []
+
+        class FakeResponse:
+            status = 200
+
+        class FakePage:
+            url = "https://profi.ru/backoffice/a.php"
+
+            def goto(self, *_args, **_kwargs):
+                return FakeResponse()
+
+            def title(self):
+                return "Вход на Профи.ру"
+
+            def content(self):
+                return "<form><input type='password'></form>"
+
+            def locator(self, _selector):
+                return EmptyLocator()
+
+        class FakeSession:
+            def new_page(self):
+                return FakePage()
+
+            def close(self):
+                return None
+
+        result = ProfiAdapter(browser_factory=lambda: FakeSession()).collect(FreelanceSettings())
+        self.assertEqual("auth_required", result.status)
+        self.assertTrue(result.auth_required)
+
+    def test_unknown_empty_markup_is_error(self) -> None:
+        class EmptyLocator:
+            def all(self):
+                return []
+
+        class FakeResponse:
+            status = 200
+
+        class FakePage:
+            url = "https://profi.ru/backoffice/a.php"
+
+            def goto(self, *_args, **_kwargs):
+                return FakeResponse()
+
+            def title(self):
+                return "Профи"
+
+            def content(self):
+                return "<main></main>"
+
+            def locator(self, _selector):
+                return EmptyLocator()
+
+        class FakeSession:
+            def new_page(self):
+                return FakePage()
+
+            def close(self):
+                return None
+
+        result = ProfiAdapter(browser_factory=lambda: FakeSession()).collect(FreelanceSettings())
+        self.assertEqual("error", result.status)
 
     def test_registry_injects_persistent_browser_factory_only_into_browser_sources(self) -> None:
         factory = lambda: None
@@ -169,6 +242,42 @@ class FreelanceAdapterTests(unittest.TestCase):
         with patch("backend.freelance.browser_profile.PersistentBrowserSession") as session_type:
             persistent_browser_factory("youdo")
             session_type.assert_called_once_with(source="youdo", headless=True)
+
+    def test_persistent_factory_forwards_headless_mode(self) -> None:
+        with patch("backend.freelance.browser_profile.PersistentBrowserSession") as session_type:
+            persistent_browser_factory("youdo", headless=False)
+            session_type.assert_called_once_with(source="youdo", headless=False)
+
+    def test_headed_persistent_session_starts_minimized(self) -> None:
+        class FakeContext:
+            def close(self):
+                return None
+
+        class FakeChromium:
+            def __init__(self):
+                self.options = None
+
+            def launch_persistent_context(self, **options):
+                self.options = options
+                return FakeContext()
+
+        class FakePlaywright:
+            def __init__(self):
+                self.chromium = FakeChromium()
+
+            def stop(self):
+                return None
+
+        fake_playwright = FakePlaywright()
+        starter = type("Starter", (), {"start": lambda self: fake_playwright})()
+        with patch("backend.freelance.browser_profile.sync_playwright", return_value=starter), patch(
+            "backend.freelance.browser_profile.browser_profile_path", return_value=Path("C:/profile/youdo")
+        ), patch(
+            "backend.freelance.browser_profile.find_chrome_executable", return_value=Path("C:/Chrome.exe")
+        ):
+            session = PersistentBrowserSession(source="youdo", headless=False)
+            self.assertIn("--start-minimized", fake_playwright.chromium.options["args"])
+            session.close()
 
 
 if __name__ == "__main__":
