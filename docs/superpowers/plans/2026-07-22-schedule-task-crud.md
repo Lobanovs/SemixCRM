@@ -50,7 +50,7 @@ Expected: new CRUD assertions pass against the existing backend; any uncovered A
 
 - [ ] **Step 3: Make only backend fixes required by the tests**
 
-Keep the existing route signatures. A successful delete returns `{"deleted": true}`; missing update/delete returns HTTP 404.
+Keep the existing route signatures. A successful delete returns `{"ok": true, "deleted_id": task_id}`; missing update/delete returns HTTP 404.
 
 - [ ] **Step 4: Run focused tests and verify GREEN**
 
