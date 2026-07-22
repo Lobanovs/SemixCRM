@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Protocol
@@ -56,8 +57,18 @@ class PublicHttpAdapter:
     requires_browser = False
     url = ""
 
-    def __init__(self, client_factory: Callable[..., httpx.Client] | None = None) -> None:
+    def __init__(
+        self,
+        client_factory: Callable[..., httpx.Client] | None = None,
+        *,
+        max_attempts: int = 2,
+        retry_delay: float = 0.25,
+        sleeper: Callable[[float], None] = time.sleep,
+    ) -> None:
         self.client_factory = client_factory or (lambda **kwargs: httpx.Client(**kwargs))
+        self.max_attempts = max(1, int(max_attempts))
+        self.retry_delay = max(0.0, float(retry_delay))
+        self.sleeper = sleeper
 
     def fetch(self) -> str:
         with self.client_factory(headers={"User-Agent": USER_AGENT}, follow_redirects=True, timeout=20) as client:
@@ -69,15 +80,22 @@ class PublicHttpAdapter:
         raise NotImplementedError
 
     def collect(self, settings: FreelanceSettings) -> AdapterResult:
-        try:
-            orders = self.parse_html(self.fetch())
-            return AdapterResult(self.source, "done" if orders else "empty", tuple(orders), now_iso())
-        except httpx.HTTPStatusError as error:
-            return AdapterResult(self.source, "error", checked_at=now_iso(), error=f"HTTP {error.response.status_code}")
-        except httpx.HTTPError as error:
-            return AdapterResult(self.source, "error", checked_at=now_iso(), error=f"Сетевая ошибка: {error}")
-        except Exception as error:  # noqa: BLE001 - surface source-specific parser failures
-            return AdapterResult(self.source, "error", checked_at=now_iso(), error=f"Ошибка разбора: {error}")
+        for attempt in range(self.max_attempts):
+            try:
+                orders = self.parse_html(self.fetch())
+                return AdapterResult(self.source, "done" if orders else "empty", tuple(orders), now_iso())
+            except httpx.HTTPStatusError as error:
+                return AdapterResult(self.source, "error", checked_at=now_iso(), error=f"HTTP {error.response.status_code}")
+            except (httpx.TimeoutException, httpx.NetworkError) as error:
+                if attempt + 1 < self.max_attempts:
+                    self.sleeper(self.retry_delay)
+                    continue
+                return AdapterResult(self.source, "error", checked_at=now_iso(), error=f"Сетевая ошибка: {error}")
+            except httpx.HTTPError as error:
+                return AdapterResult(self.source, "error", checked_at=now_iso(), error=f"Сетевая ошибка: {error}")
+            except Exception as error:  # noqa: BLE001 - surface source-specific parser failures
+                return AdapterResult(self.source, "error", checked_at=now_iso(), error=f"Ошибка разбора: {error}")
+        return AdapterResult(self.source, "error", checked_at=now_iso(), error="Источник не ответил")
 
 
 def source_url(source: str, default: str) -> str:

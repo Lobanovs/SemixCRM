@@ -4,6 +4,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import httpx
+
 from backend.freelance.adapters.browser import ProfiAdapter, YoudoAdapter
 from backend.freelance.adapters.public import FlAdapter, FreelanceRuAdapter, KworkAdapter
 from backend.freelance.adapters.registry import adapter_registry, build_adapters
@@ -31,6 +33,25 @@ class FreelanceAdapterTests(unittest.TestCase):
         self.assertEqual("https://kwork.ru/projects/3221147/view", result[0].url)
         self.assertEqual("varvaras3", result[0].customer)
         self.assertEqual(3000, result[0].budget_min)
+
+    def test_public_adapter_retries_one_timeout(self) -> None:
+        html = (FIXTURES / "kwork_projects.html").read_text(encoding="utf-8")
+
+        class TimeoutThenSuccessKworkAdapter(KworkAdapter):
+            def __init__(self):
+                super().__init__(retry_delay=0, sleeper=lambda _delay: None)
+                self.attempts = 0
+
+            def fetch(self):
+                self.attempts += 1
+                if self.attempts == 1:
+                    raise httpx.ReadTimeout("slow source")
+                return html
+
+        adapter = TimeoutThenSuccessKworkAdapter()
+        result = adapter.collect(FreelanceSettings())
+        self.assertEqual("done", result.status)
+        self.assertEqual(2, adapter.attempts)
 
     def test_freelance_ru_fixture_extracts_task_card(self) -> None:
         html = (FIXTURES / "freelance_ru_projects.html").read_text(encoding="utf-8")
