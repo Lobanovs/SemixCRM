@@ -12,7 +12,6 @@ from playwright.sync_api import sync_playwright
 
 
 AUTH_URLS = {
-    "workzilla": "https://client.work-zilla.com/account/login?isFreelancer=true&ReturnUrl=%2Ffreelancer",
     "profi": "https://profi.ru/backoffice/a.php",
     "youdo": "https://youdo.com/tasks",
 }
@@ -61,7 +60,7 @@ def find_chrome_executable() -> Path | None:
 def _missing_browser_error(error: Exception, source: str | None = None) -> RuntimeError:
     message = str(error)
     compact_message = " ".join(message.split())
-    source_labels = {"workzilla": "Workzilla", "profi": "Profi.ru", "youdo": "YouDo"}
+    source_labels = {"profi": "Profi.ru", "youdo": "YouDo"}
     source_label = source_labels.get(source or "", "этой площадки")
     if "Target page, context or browser has been closed" in message or "exitCode=21" in message:
         return RuntimeError(f"Профиль {source_label} занят другим окном. Закройте окно входа {source_label} и повторите проверку.")

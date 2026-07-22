@@ -167,7 +167,7 @@ class FreelanceOrderUpdateRequest(BaseModel):
 
 
 class FreelanceSettingsRequest(BaseModel):
-    sources: list[str] = Field(min_length=1, max_length=6)
+    sources: list[str] = Field(min_length=1, max_length=5)
     keywords: list[str] = Field(default_factory=list, max_length=50)
     excluded_keywords: list[str] = Field(default_factory=list, max_length=50)
     categories: list[str] = Field(default_factory=list, max_length=30)

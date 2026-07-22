@@ -62,11 +62,6 @@ class BrowserAdapter:
                 close()
 
 
-class WorkzillaAdapter(BrowserAdapter):
-    source = "workzilla"
-    url = os.getenv("FREELANCE_WORKZILLA_URL", "https://client.work-zilla.com/freelancer")
-
-
 class ProfiAdapter(BrowserAdapter):
     source = "profi"
     url = os.getenv("FREELANCE_PROFI_URL", "https://profi.ru/backoffice/a.php")

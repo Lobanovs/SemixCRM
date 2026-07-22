@@ -79,11 +79,15 @@ class FreelanceApiTests(unittest.TestCase):
 
     @patch("backend.main.open_login_window")
     def test_browser_source_auth_opens_local_profile(self, open_login_window) -> None:
-        open_login_window.return_value = {"source": "workzilla", "status": "opened", "pid": 42}
-        response = self.client.post("/api/freelance/sources/workzilla/auth")
+        open_login_window.return_value = {"source": "profi", "status": "opened", "pid": 42}
+        response = self.client.post("/api/freelance/sources/profi/auth")
         self.assertEqual(200, response.status_code)
         self.assertEqual("opened", response.json()["status"])
-        open_login_window.assert_called_once_with("workzilla")
+        open_login_window.assert_called_once_with("profi")
+
+    def test_workzilla_auth_endpoint_is_removed(self) -> None:
+        response = self.client.post("/api/freelance/sources/workzilla/auth")
+        self.assertEqual(404, response.status_code)
 
     def test_public_source_does_not_offer_browser_auth(self) -> None:
         response = self.client.post("/api/freelance/sources/fl/auth")

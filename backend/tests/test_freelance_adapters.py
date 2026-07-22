@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from backend.freelance.adapters.browser import WorkzillaAdapter
+from backend.freelance.adapters.browser import ProfiAdapter
 from backend.freelance.adapters.public import FlAdapter, FreelanceRuAdapter, KworkAdapter
 from backend.freelance.adapters.registry import adapter_registry, build_adapters
 from backend.freelance.browser_profile import PersistentBrowserSession, browser_profile_path, persistent_browser_factory
@@ -42,12 +42,12 @@ class FreelanceAdapterTests(unittest.TestCase):
 
     def test_registry_contains_only_supported_sources(self) -> None:
         self.assertEqual(
-            {"kwork", "fl", "freelance_ru", "workzilla", "profi", "youdo"},
+            {"kwork", "fl", "freelance_ru", "profi", "youdo"},
             set(adapter_registry()),
         )
 
     def test_browser_adapter_reports_auth_required_without_session(self) -> None:
-        result = WorkzillaAdapter(browser_factory=lambda: None).collect(FreelanceSettings())
+        result = ProfiAdapter(browser_factory=lambda: None).collect(FreelanceSettings())
         self.assertEqual("auth_required", result.status)
         self.assertTrue(result.auth_required)
 
@@ -76,14 +76,13 @@ class FreelanceAdapterTests(unittest.TestCase):
                 self.closed = True
 
         session = FakeSession()
-        result = WorkzillaAdapter(browser_factory=lambda: session).collect(FreelanceSettings())
+        result = ProfiAdapter(browser_factory=lambda: session).collect(FreelanceSettings())
         self.assertEqual("empty", result.status)
         self.assertTrue(session.closed)
 
     def test_registry_injects_persistent_browser_factory_only_into_browser_sources(self) -> None:
         factory = lambda: None
         adapters = build_adapters(browser_factory=factory)
-        self.assertIs(factory, adapters["workzilla"].browser_factory)
         self.assertIs(factory, adapters["profi"].browser_factory)
         self.assertIs(factory, adapters["youdo"].browser_factory)
         self.assertFalse(adapters["fl"].requires_browser)

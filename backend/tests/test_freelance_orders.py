@@ -47,6 +47,10 @@ class FreelanceOrderTests(unittest.TestCase):
         self.assertEqual([], database.list_freelance_orders(FreelanceOrderFilters()))
         self.assertEqual(0, database.freelance_stats()["total"])
 
+    def test_legacy_workzilla_setting_is_filtered(self) -> None:
+        database.save_freelance_settings(FreelanceSettings(sources=("workzilla", "profi")))
+        self.assertEqual(["profi"], database.get_freelance_settings()["sources"])
+
     def test_archived_orders_are_separate_and_can_be_restored(self) -> None:
         created = database.create_freelance_order(FreelanceOrder(source="fl", external_id="hidden-1", title="Hidden order"))
         self.assertTrue(database.archive_freelance_order(created["id"]))

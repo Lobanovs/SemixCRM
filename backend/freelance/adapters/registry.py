@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from .browser import ProfiAdapter, WorkzillaAdapter, YoudoAdapter
+from .browser import ProfiAdapter, YoudoAdapter
 from .public import FlAdapter, FreelanceRuAdapter, KworkAdapter
 
 
@@ -11,7 +11,6 @@ def adapter_registry() -> dict[str, type]:
         "kwork": KworkAdapter,
         "fl": FlAdapter,
         "freelance_ru": FreelanceRuAdapter,
-        "workzilla": WorkzillaAdapter,
         "profi": ProfiAdapter,
         "youdo": YoudoAdapter,
     }
