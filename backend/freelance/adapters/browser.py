@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import os
 import inspect
+import re
 from dataclasses import dataclass
 from typing import Any, Callable
+
+from bs4 import BeautifulSoup
 
 from ..models import AdapterResult, FreelanceOrder, FreelanceSettings
 from .base import now_iso, order_from_card
@@ -67,6 +70,9 @@ class BrowserAdapter:
             orders.append(order_from_card(self.source, title, link, row.inner_text()))
         return orders
 
+    def prepare_page(self, page: Any) -> None:
+        return None
+
     def _collect_once(self, settings: FreelanceSettings, *, headless: bool = True) -> AdapterResult:
         if self.browser_factory is None:
             return AdapterResult(self.source, "auth_required", checked_at=now_iso(), error="Откройте авторизацию в браузере", auth_required=True)
@@ -82,6 +88,12 @@ class BrowserAdapter:
             status_code = getattr(response, "status", None)
             title_method = getattr(page, "title", None)
             content_method = getattr(page, "content", None)
+            title = str(title_method() if callable(title_method) else "")
+            html = str(content_method() if callable(content_method) else "")
+            state = self.classify_html(status_code, title, str(getattr(page, "url", self.url)), html)
+            if state.status != "ready":
+                return AdapterResult(self.source, state.status, checked_at=now_iso(), error=state.error, auth_required=state.auth_required)
+            self.prepare_page(page)
             title = str(title_method() if callable(title_method) else "")
             html = str(content_method() if callable(content_method) else "")
             state = self.classify_html(status_code, title, str(getattr(page, "url", self.url)), html)
@@ -104,7 +116,69 @@ class BrowserAdapter:
 
 class ProfiAdapter(BrowserAdapter):
     source = "profi"
-    url = os.getenv("FREELANCE_PROFI_URL", "https://profi.ru/backoffice/a.php")
+    url = os.getenv("FREELANCE_PROFI_URL", "https://profi.ru/backoffice/n.php")
+    card_selector = '[data-testid$="_order-snippet"]'
+
+    def classify_html(self, status_code: int | None, title: str, page_url: str, html: str) -> BrowserPageState:
+        state = super().classify_html(status_code, title, page_url, html)
+        if state.status != "ready":
+            return state
+        soup = BeautifulSoup(html, "html.parser")
+        if soup.select_one('[data-testid="ORDERS_BOARD_EMPTY"]'):
+            return BrowserPageState("empty")
+        return state
+
+    def prepare_page(self, page: Any) -> None:
+        cards = page.locator(self.card_selector)
+        previous_count = -1
+        stable_checks = 0
+        for _ in range(30):
+            count = cards.count()
+            stable_checks = stable_checks + 1 if count == previous_count else 0
+            previous_count = count
+            if stable_checks >= 5:
+                break
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            page.wait_for_timeout(1200)
+
+    def parse_html(self, html: str, page_url: str) -> list[FreelanceOrder]:
+        soup = BeautifulSoup(html, "html.parser")
+        orders: list[FreelanceOrder] = []
+        for card in soup.select(self.card_selector):
+            test_id = str(card.get("data-testid") or "")
+            match = re.fullmatch(r"(\d+)_order-snippet", test_id)
+            title_node = card.select_one("h3")
+            if match is None or title_node is None:
+                continue
+            external_number = match.group(1)
+            title = title_node.get_text(" ", strip=True)
+            if not title:
+                continue
+            description_node = card.select_one("p")
+            description = description_node.get_text(" ", strip=True) if description_node else ""
+            budget_text = ""
+            category = ""
+            for item in card.select("li"):
+                label = str(item.get("aria-label") or "").lower()
+                value = item.get_text(" ", strip=True)
+                if "бюджет" in label or "стоим" in label or "₽" in value:
+                    budget_text = value
+                elif "категор" in label or "услуг" in label:
+                    category = value
+            href = f"https://profi.ru/backoffice/n.php?o={external_number}"
+            orders.append(order_from_card(
+                self.source,
+                title,
+                href,
+                description,
+                budget_text,
+                category,
+                f"profi-{external_number}",
+            ))
+        return orders
+
+    def parse_page(self, page: Any) -> list[FreelanceOrder]:
+        return self.parse_html(page.content(), str(getattr(page, "url", self.url)))
 
 
 class YoudoAdapter(BrowserAdapter):

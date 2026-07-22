@@ -153,6 +153,77 @@ class FreelanceAdapterTests(unittest.TestCase):
         result = ProfiAdapter(browser_factory=lambda: FakeSession()).collect(FreelanceSettings())
         self.assertEqual("error", result.status)
 
+    def test_profi_fixture_extracts_order_fields(self) -> None:
+        html = (FIXTURES / "profi_orders.html").read_text(encoding="utf-8")
+        order = ProfiAdapter().parse_html(html, "https://profi.ru/backoffice/n.php")[0]
+        self.assertEqual("profi", order.source)
+        self.assertEqual("profi-12345", order.external_id)
+        self.assertEqual("Разработка корпоративного сайта", order.title)
+        self.assertEqual("https://profi.ru/backoffice/n.php?o=12345", order.url)
+        self.assertEqual(5000, order.budget_min)
+        self.assertEqual(("Разработка сайтов",), order.categories)
+
+    def test_profi_confirmed_empty_fixture_is_empty(self) -> None:
+        html = (FIXTURES / "profi_empty.html").read_text(encoding="utf-8")
+        state = ProfiAdapter().classify_html(200, "Заказы", "https://profi.ru/backoffice/n.php", html)
+        self.assertEqual("empty", state.status)
+
+    def test_profi_feed_expansion_stops_after_five_stable_checks(self) -> None:
+        class CountingLocator:
+            def __init__(self):
+                self.counts = iter((2, 4, 4, 4, 4, 4, 4))
+
+            def count(self):
+                return next(self.counts)
+
+        class FakePage:
+            def __init__(self):
+                self.card_locator = CountingLocator()
+                self.scrolls = 0
+
+            def locator(self, selector):
+                self.asserted_selector = selector
+                return self.card_locator
+
+            def evaluate(self, _script):
+                self.scrolls += 1
+
+            def wait_for_timeout(self, _timeout):
+                return None
+
+        page = FakePage()
+        ProfiAdapter().prepare_page(page)
+        self.assertEqual('[data-testid$="_order-snippet"]', page.asserted_selector)
+        self.assertEqual(6, page.scrolls)
+
+    def test_profi_feed_expansion_waits_through_delayed_growth(self) -> None:
+        class CountingLocator:
+            def __init__(self):
+                self.values = iter((2, 2, 2, 2, 4, 4, 4, 4, 4, 4))
+                self.seen = []
+
+            def count(self):
+                value = next(self.values)
+                self.seen.append(value)
+                return value
+
+        class FakePage:
+            def __init__(self):
+                self.card_locator = CountingLocator()
+
+            def locator(self, _selector):
+                return self.card_locator
+
+            def evaluate(self, _script):
+                return None
+
+            def wait_for_timeout(self, _timeout):
+                return None
+
+        page = FakePage()
+        ProfiAdapter().prepare_page(page)
+        self.assertIn(4, page.card_locator.seen)
+
     def test_registry_injects_persistent_browser_factory_only_into_browser_sources(self) -> None:
         factory = lambda: None
         adapters = build_adapters(browser_factory=factory)
