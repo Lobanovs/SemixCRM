@@ -11,29 +11,33 @@ import {
   ExternalLink,
   Filter,
   Folder,
-  Globe2,
   LoaderCircle,
   MessageSquare,
-  PanelsTopLeft,
   Plus,
   RotateCcw,
   Search,
-  Send,
   Settings2,
   Sparkles,
   UsersRound,
   X,
 } from 'lucide-react'
 import { EmptyState, MetricCard, SidePanel, StatusBadge, Tag } from '../components/DashboardUi'
-import type { UiAccent } from '../components/DashboardUi'
+import {
+  BROWSER_SOURCE_KEYS,
+  FREELANCE_SOURCE_KEYS,
+  FREELANCE_SOURCE_META,
+  freelanceSourceLabel,
+  isFreelanceSourceKey,
+  type FreelanceSourceKey,
+} from './freelanceSources'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
-const sourceKeys = ['kwork', 'fl', 'freelance_ru', 'workzilla', 'profi', 'youdo'] as const
-const browserSourceKeys = ['workzilla', 'profi', 'youdo'] as const
-type SourceKey = (typeof sourceKeys)[number]
+const sourceKeys = FREELANCE_SOURCE_KEYS
+const browserSourceKeys = BROWSER_SOURCE_KEYS
+type SourceKey = FreelanceSourceKey
 const statuses = ['Новый', 'Написал', 'Откликнулся', 'Ответили', 'Созвон', 'В работе', 'Завершён', 'Отказ']
-const accents: Record<string, UiAccent> = { kwork: 'green', fl: 'blue', freelance_ru: 'purple', workzilla: 'cyan', profi: 'pink', youdo: 'blue', manual: 'gray' }
-const icons: Record<string, typeof Send> = { kwork: Send, fl: BriefcaseBusiness, freelance_ru: PanelsTopLeft, workzilla: Bot, profi: UsersRound, youdo: Globe2, manual: Folder }
+const accents = Object.fromEntries(sourceKeys.map((source) => [source, FREELANCE_SOURCE_META[source].accent])) as Record<string, string>
+accents.manual = 'gray'
 
 type FreelanceOrder = {
   id: number
@@ -68,9 +72,7 @@ type FreelanceRun = { id: number; started_at: string; finished_at: string; statu
 const emptyStats: FreelanceStats = { total: 0, responded: 0, replied: 0, in_progress: 0, new_today: 0, archived: 0, stages: {} }
 const emptySettings: FreelanceSettings = { sources: [], keywords: [], excluded_keywords: [], categories: [], min_budget: 0, interval_seconds: 60, sniper_enabled: false, telegram_enabled: false }
 
-function sourceLabel(source: string) {
-  return ({ kwork: 'Kwork', fl: 'FL.ru', freelance_ru: 'Freelance.ru', workzilla: 'Workzilla', profi: 'Profi.ru', youdo: 'YouDo', manual: 'Вручную' } as Record<string, string>)[source] ?? source
-}
+const sourceLabel = freelanceSourceLabel
 
 function formatBudget(order: FreelanceOrder) {
   if (order.budget_text) return order.budget_text
@@ -122,7 +124,8 @@ export default function FreelancePage() {
       const orderData = await ordersResponse.json()
       setOrders(orderData.orders ?? [])
       setStats(orderData.stats ?? emptyStats)
-      setSettings(await settingsResponse.json())
+      const savedSettings = await settingsResponse.json() as FreelanceSettings
+      setSettings({ ...savedSettings, sources: savedSettings.sources.filter((item) => sourceKeys.includes(item as SourceKey)) })
       setSourceStatuses(((await sourceResponse.json()).sources ?? []).filter((item: SourceStatus) => sourceKeys.includes(item.source as SourceKey)))
       setSniper(await sniperResponse.json())
     } catch (loadError) {
@@ -201,7 +204,7 @@ export default function FreelancePage() {
   }
 
   const stages = Object.entries(stats.stages).filter(([, value]) => value > 0)
-  const sourceErrors = sourceStatuses.filter((item) => sourceKeys.includes(item.source as SourceKey) && (item.status === 'error' || item.auth_required))
+  const sourceErrors = sourceStatuses.filter((item) => sourceKeys.includes(item.source as SourceKey) && (item.status === 'error' || item.status === 'blocked' || item.auth_required))
 
   return (
     <div className="data-page freelance-page">
@@ -238,21 +241,21 @@ export default function FreelancePage() {
         <aside className="data-side-column">
           <SidePanel className="parser-panel freelance-parser">
             <div className="parser-title"><span className="parser-icon"><Bot size={21} /></span><div><h2>Снайпер заказов</h2><p>Проверяет выбранные площадки локально и добавляет только новые заказы.</p></div></div>
-            <div className="source-chip-row">{sourceKeys.map((item) => <ParserSource key={item} text={sourceLabel(item)} tone={accents[item]} active={settings.sources.includes(item)} status={sourceStatuses.find((statusItem) => statusItem.source === item)} />)}</div>
+            <div className="source-chip-row">{sourceKeys.map((item) => <ParserSource key={item} source={item} active={settings.sources.includes(item)} status={sourceStatuses.find((statusItem) => statusItem.source === item)} />)}</div>
             <div className="parser-stats"><span>Сохранено<strong>{stats.total}</strong></span><span>Новых сегодня<strong>{stats.new_today} <i /></strong></span></div>
             <div className="parser-filters"><p><Filter />Источники <strong>{settings.sources.length ? settings.sources.map(sourceLabel).join(', ') : 'Не настроены'}</strong></p><p><Search />Ключевые слова <strong>{settings.keywords.join(', ') || 'Не заданы'}</strong></p><p><BriefcaseBusiness />Бюджет от <strong>{settings.min_budget ? `${settings.min_budget.toLocaleString('ru-RU')} ₽` : 'Без ограничения'}</strong></p><p><Clock3 />Интервал <strong>{settings.interval_seconds} сек.</strong></p></div>
-            {sourceErrors.length > 0 && <div className="source-error-list">{sourceErrors.map((item) => <p key={item.source}><AlertCircle size={14} /><strong>{sourceLabel(item.source)}:</strong> {item.error || 'Требуется авторизация'}</p>)}</div>}
+            {sourceErrors.length > 0 && <div className="source-error-list" aria-live="polite">{sourceErrors.map((item) => <p key={item.source}><AlertCircle size={14} /><strong>{sourceLabel(item.source)}:</strong> {item.error || 'Требуется авторизация'}</p>)}</div>}
             <button className={`solid-action wide-action ${sniper.status === 'running' ? 'is-running' : ''}`} type="button" onClick={toggleSniper} disabled={busy === 'sniper'}>{busy === 'sniper' ? <LoaderCircle className="spin" size={18} /> : <CirclePlay size={18} />}{sniper.status === 'running' ? 'Остановить снайпер' : 'Запустить снайпер'}</button>
             <button className="secondary-wide-action" type="button" onClick={checkNow} disabled={busy === 'check'}>{busy === 'check' ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />}Проверить сейчас</button>
             <button className="secondary-wide-action" type="button" onClick={() => setShowSettingsModal(true)}><Settings2 size={16} />Настроить</button>
             <button className="secondary-wide-action" type="button" onClick={() => void openHistory()}><Clock3 size={16} />История запусков</button>
           </SidePanel>
 
-          <SidePanel className="recommendations-panel"><h2>Лучшие заказы</h2>{filtered.slice(0, 3).map((order) => <button className="recommendation-item" type="button" key={order.id} onClick={() => setQuery(order.title)}><span className={`mini-order-icon ${accents[order.source] ?? 'blue'}`}><SourceIcon source={order.source} /></span><p><strong>{order.title}</strong><span>{formatBudget(order)}</span></p><span><b>{order.relevance}%</b><StatusBadge tone={order.relevance >= 70 ? 'green' : order.relevance >= 40 ? 'orange' : 'gray'}>{order.status}</StatusBadge></span></button>)}{!filtered.length && <p className="empty-panel-copy">Рекомендации появятся после добавления заказов.</p>}</SidePanel>
+          <SidePanel className="recommendations-panel"><h2>Лучшие заказы</h2>{filtered.slice(0, 3).map((order) => <button className="recommendation-item" type="button" key={order.id} onClick={() => setQuery(order.title)}><SourceMark source={order.source} size="small" /><p><strong>{order.title}</strong><span>{formatBudget(order)}</span></p><span><b>{order.relevance}%</b><StatusBadge tone={order.relevance >= 70 ? 'green' : order.relevance >= 40 ? 'orange' : 'gray'}>{order.status}</StatusBadge></span></button>)}{!filtered.length && <p className="empty-panel-copy">Рекомендации появятся после добавления заказов.</p>}</SidePanel>
 
           <SidePanel className="order-stages-panel"><h2>Этапы заказов</h2>{stages.length ? <div className="order-stage-grid">{stages.map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong><i className={label === 'Отказ' ? 'red' : label === 'В работе' ? 'green' : 'blue'} /></div>)}</div> : <p className="empty-panel-copy">Статистика появится после сохранения заказов.</p>}</SidePanel>
 
-          <SidePanel className="nearest-panel freelance-nearest"><h2>Состояние источников</h2>{sourceStatuses.length ? sourceStatuses.map((item) => <div className="nearest-action" key={item.source}><span className={`source-health-dot ${item.status}`} /><p><strong>{sourceLabel(item.source)}</strong><span>{item.auth_required ? 'Требуется вход' : item.error || `${item.order_count ?? 0} заказов при последней проверке`}</span></p><StatusBadge tone={item.status === 'done' ? 'green' : item.auth_required ? 'orange' : item.status === 'error' ? 'red' : 'gray'}>{item.auth_required ? 'Вход' : item.status === 'done' ? 'Готово' : item.status}</StatusBadge>{item.auth_required && browserSourceKeys.includes(item.source as (typeof browserSourceKeys)[number]) && <button className="source-auth-button" type="button" onClick={() => openAuth(item.source)} disabled={busy === `auth-${item.source}`}>{busy === `auth-${item.source}` ? <LoaderCircle className="spin" size={13} /> : <ExternalLink size={13} />}Открыть вход</button>}</div>) : <p className="empty-panel-copy">Проверок источников ещё не было.</p>}</SidePanel>
+          <SidePanel className="nearest-panel freelance-nearest"><h2>Состояние источников</h2>{sourceStatuses.length ? sourceStatuses.map((item) => <SourceState key={item.source} item={item} busy={busy} onAuth={openAuth} onRetry={checkNow} />) : <p className="empty-panel-copy">Проверок источников ещё не было.</p>}</SidePanel>
         </aside>
       </div>
 
@@ -263,18 +266,29 @@ export default function FreelancePage() {
   )
 }
 
-function SourceIcon({ source }: { source: string }) {
-  const Icon = icons[source] ?? Folder
-  return <Icon size={20} />
+function SourceMark({ source, size = 'medium' }: { source: string; size?: 'small' | 'medium' | 'large' }) {
+  if (!isFreelanceSourceKey(source)) return <span className={`source-mark ${size} manual`}><Folder aria-hidden="true" /></span>
+  const meta = FREELANCE_SOURCE_META[source]
+  return <span className={`source-mark ${size} ${meta.accent}`}><img src={meta.icon} alt={`${meta.label} — значок источника`} width={192} height={192} /></span>
 }
 
 function OrderRow({ order, archived, busy, onUpdate, onArchive, onRestore }: { order: FreelanceOrder; archived: boolean; busy: boolean; onUpdate: (id: number, changes: Record<string, unknown>) => void; onArchive: (id: number) => void; onRestore: (id: number) => void }) {
-  const accent = accents[order.source] ?? 'blue'
-  return <article className={`opportunity-row freelance-order-row ${archived ? 'archived-order' : ''}`}><div className="opportunity-identity"><span className={`project-logo ${accent}`}><SourceIcon source={order.source} /></span><div><div className="freelance-order-title"><h2>{order.title}</h2><StatusBadge tone={order.relevance >= 70 ? 'green' : order.relevance >= 40 ? 'orange' : 'gray'}>{order.relevance}% match</StatusBadge></div><p>{order.description || 'Описание не предоставлено источником.'}</p><div className="tag-row">{[sourceLabel(order.source), ...order.categories, ...order.tags].filter(Boolean).slice(0, 5).map((tag) => <Tag key={tag}>{tag}</Tag>)}</div></div></div><div className="opportunity-meta"><p><BriefcaseBusiness />Бюджет <strong>{formatBudget(order)}</strong></p><p><Sparkles />Источник <strong>{sourceLabel(order.source)}</strong></p><p><Clock3 />Добавлено <strong>{formatDate(order.published_at || order.discovered_at)}</strong></p>{order.customer && <p><UsersRound />Заказчик <strong>{order.customer}</strong></p>}</div><div className="opportunity-status freelance-order-status"><StatusBadge tone={archived ? 'gray' : order.status === 'Отказ' ? 'red' : order.status === 'В работе' ? 'green' : order.status === 'Ответили' ? 'orange' : 'blue'}>{archived ? 'Скрыт' : order.status}</StatusBadge><span>Следующий шаг</span><strong>{order.next_step}</strong><label className="status-select-label"><span className="sr-only">Статус заказа {order.title}</span><select value={order.status} onChange={(event) => onUpdate(order.id, { status: event.target.value })} disabled={busy}>{statuses.map((item) => <option key={item}>{item}</option>)}</select></label><div className="stacked-order-actions"><button type="button" onClick={() => order.url && window.open(order.url, '_blank', 'noopener,noreferrer')} disabled={!order.url}><span>{order.url ? 'Открыть источник' : 'Ссылка отсутствует'}</span>{order.url && <ExternalLink size={14} />}</button>{archived ? <button className="restore-row-action" type="button" onClick={() => onRestore(order.id)} disabled={busy}>{busy ? <LoaderCircle className="spin" size={14} /> : <RotateCcw size={14} />}Вернуть в активные</button> : <><button className="primary-row-action" type="button" onClick={() => onUpdate(order.id, { status: order.status === 'Новый' ? 'Написал' : order.status })} disabled={busy}>{busy ? <LoaderCircle className="spin" size={14} /> : <ChevronRight size={15} />}Следующий шаг</button><button className="danger-row-action" type="button" onClick={() => onArchive(order.id)} disabled={busy}><X size={14} />Скрыть</button></>}</div></div></article>
+  return <article className={`opportunity-row freelance-order-row ${archived ? 'archived-order' : ''}`}><div className="opportunity-identity"><SourceMark source={order.source} size="large" /><div><div className="freelance-order-title"><h2>{order.title}</h2><StatusBadge tone={order.relevance >= 70 ? 'green' : order.relevance >= 40 ? 'orange' : 'gray'}>{order.relevance}% match</StatusBadge></div><p>{order.description || 'Описание не предоставлено источником.'}</p><div className="tag-row">{[sourceLabel(order.source), ...order.categories, ...order.tags].filter(Boolean).slice(0, 5).map((tag) => <Tag key={tag}>{tag}</Tag>)}</div></div></div><div className="opportunity-meta"><p><BriefcaseBusiness />Бюджет <strong>{formatBudget(order)}</strong></p><p><Sparkles />Источник <strong>{sourceLabel(order.source)}</strong></p><p><Clock3 />Добавлено <strong>{formatDate(order.published_at || order.discovered_at)}</strong></p>{order.customer && <p><UsersRound />Заказчик <strong>{order.customer}</strong></p>}</div><div className="opportunity-status freelance-order-status"><StatusBadge tone={archived ? 'gray' : order.status === 'Отказ' ? 'red' : order.status === 'В работе' ? 'green' : order.status === 'Ответили' ? 'orange' : 'blue'}>{archived ? 'Скрыт' : order.status}</StatusBadge><span>Следующий шаг</span><strong>{order.next_step}</strong><label className="status-select-label"><span className="sr-only">Статус заказа {order.title}</span><select value={order.status} onChange={(event) => onUpdate(order.id, { status: event.target.value })} disabled={busy}>{statuses.map((item) => <option key={item}>{item}</option>)}</select></label><div className="stacked-order-actions"><button type="button" onClick={() => order.url && window.open(order.url, '_blank', 'noopener,noreferrer')} disabled={!order.url}><span>{order.url ? 'Открыть источник' : 'Ссылка отсутствует'}</span>{order.url && <ExternalLink size={14} />}</button>{archived ? <button className="restore-row-action" type="button" onClick={() => onRestore(order.id)} disabled={busy}>{busy ? <LoaderCircle className="spin" size={14} /> : <RotateCcw size={14} />}Вернуть в активные</button> : <><button className="primary-row-action" type="button" onClick={() => onUpdate(order.id, { status: order.status === 'Новый' ? 'Написал' : order.status })} disabled={busy}>{busy ? <LoaderCircle className="spin" size={14} /> : <ChevronRight size={15} />}Следующий шаг</button><button className="danger-row-action" type="button" onClick={() => onArchive(order.id)} disabled={busy}><X size={14} />Скрыть</button></>}</div></div></article>
 }
 
-function ParserSource({ text, tone, active, status }: { text: string; tone: UiAccent; active: boolean; status?: SourceStatus }) {
-  return <span className={`source-chip ${tone} ${active ? 'active' : 'inactive'}`} title={status?.error || (active ? 'Источник включён' : 'Источник выключен')}><i>{text.slice(0, 2)}</i>{text}{status?.auth_required && <AlertCircle size={12} />}</span>
+function ParserSource({ source, active, status }: { source: SourceKey; active: boolean; status?: SourceStatus }) {
+  const meta = FREELANCE_SOURCE_META[source]
+  return <span className={`source-chip source-chip-with-mark ${meta.accent} ${active ? 'active' : 'inactive'}`} title={status?.error || (active ? 'Источник включён' : 'Источник выключен')}><SourceMark source={source} size="small" /><span>{meta.label}</span>{status?.auth_required && <AlertCircle size={12} />}</span>
+}
+
+function SourceState({ item, busy, onAuth, onRetry }: { item: SourceStatus; busy: string; onAuth: (source: string) => void; onRetry: () => void }) {
+  const needsAuth = Boolean(item.auth_required || item.status === 'auth_required')
+  const isBlocked = item.status === 'blocked'
+  const canAuth = browserSourceKeys.includes(item.source as (typeof browserSourceKeys)[number])
+  const label = sourceLabel(item.source)
+  const statusLabel = needsAuth ? 'Требуется вход' : isBlocked ? 'Доступ ограничен' : item.status === 'done' ? 'Готово' : item.status === 'empty' ? 'Нет новых' : item.status === 'error' ? 'Ошибка' : item.status
+  const tone = item.status === 'done' ? 'green' : needsAuth || isBlocked ? 'orange' : item.status === 'error' ? 'red' : 'gray'
+  return <div className={`nearest-action freelance-source-state ${item.status}`}><SourceMark source={item.source} size="medium" /><p><strong>{label}</strong><span>{needsAuth ? 'Войдите в аккаунт и повторите проверку' : item.error || `${item.order_count ?? 0} заказов при последней проверке`}</span></p><StatusBadge tone={tone}>{statusLabel}</StatusBadge>{canAuth && (needsAuth || isBlocked) && <button className="source-auth-button" type="button" aria-label={`Войти в ${label}`} onClick={() => onAuth(item.source)} disabled={busy === `auth-${item.source}`}>{busy === `auth-${item.source}` ? <LoaderCircle className="spin" size={13} /> : <ExternalLink size={13} />}Войти</button>}{item.status === 'error' && <button className="source-auth-button retry" type="button" aria-label={`Повторить проверку ${label}`} onClick={onRetry} disabled={busy === 'check'}>{busy === 'check' ? <LoaderCircle className="spin" size={13} /> : <RotateCcw size={13} />}Повторить</button>}</div>
 }
 
 function OrderModal({ onClose, onCreate }: { onClose: () => void; onCreate: (payload: Record<string, unknown>) => Promise<void> }) {
@@ -293,7 +307,28 @@ function SettingsModal({ settings, statuses, busy, authBusy, onAuth, onClose, on
   const [excluded, setExcluded] = useState(settings.excluded_keywords.join(', '))
   const submit = (event: FormEvent) => { event.preventDefault(); void onSave({ ...draft, keywords: keywords.split(',').map((item) => item.trim()).filter(Boolean), excluded_keywords: excluded.split(',').map((item) => item.trim()).filter(Boolean), min_budget: Number(draft.min_budget) || 0, interval_seconds: Math.max(30, Number(draft.interval_seconds) || 60) }) }
   const toggleSource = (source: string) => setDraft((current) => ({ ...current, sources: current.sources.includes(source) ? current.sources.filter((item) => item !== source) : [...current.sources, source] }))
-  return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><form className="compact-modal freelance-settings-modal" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}><header className="parser-modal-header"><span className="metric-icon blue"><Settings2 /></span><div><h2>Настройки снайпера</h2><p className="modal-subtitle">Выберите источники и фильтры для локальной проверки.</p></div><button className="modal-close" type="button" onClick={onClose} aria-label="Закрыть"><X size={20} /></button></header><div className="parser-modal-body"><label>Источники</label><div className="freelance-source-options">{sourceKeys.map((source) => { const status = statuses.find((item) => item.source === source); const canAuth = browserSourceKeys.includes(source as (typeof browserSourceKeys)[number]); return <div className={`freelance-source-option ${draft.sources.includes(source) ? 'active' : ''}`} key={source}><label><input type="checkbox" checked={draft.sources.includes(source)} onChange={() => toggleSource(source)} /><span>{sourceLabel(source)}</span>{status?.auth_required && <AlertCircle size={14} />}</label>{canAuth && <button className="source-auth-button" type="button" onClick={() => onAuth(source)} disabled={authBusy === `auth-${source}`}>{authBusy === `auth-${source}` ? <LoaderCircle className="spin" size={13} /> : <ExternalLink size={13} />}Открыть вход</button>}</div> })}</div><label htmlFor="freelance-keywords">Ключевые слова</label><input id="freelance-keywords" value={keywords} onChange={(event) => setKeywords(event.target.value)} placeholder="React, Next.js, CRM" /><p className="form-hint">Разделяйте слова запятыми.</p><label htmlFor="freelance-excluded">Исключить слова</label><input id="freelance-excluded" value={excluded} onChange={(event) => setExcluded(event.target.value)} placeholder="стажировка, бесплатно" /><label htmlFor="freelance-min-budget">Минимальный бюджет, ₽</label><input id="freelance-min-budget" value={draft.min_budget || ''} onChange={(event) => setDraft((current) => ({ ...current, min_budget: Number(event.target.value.replace(/\D/g, '')) || 0 }))} inputMode="numeric" placeholder="Без ограничения" /><label htmlFor="freelance-interval">Интервал проверки, секунд</label><input id="freelance-interval" type="number" min={30} max={3600} value={draft.interval_seconds} onChange={(event) => setDraft((current) => ({ ...current, interval_seconds: Number(event.target.value) }))} /><label className="switch-field"><input type="checkbox" checked={draft.telegram_enabled} onChange={(event) => setDraft((current) => ({ ...current, telegram_enabled: event.target.checked }))} /><span>Отправлять новые заказы в Telegram</span></label><label className="switch-field"><input type="checkbox" checked={draft.sniper_enabled} onChange={(event) => setDraft((current) => ({ ...current, sniper_enabled: event.target.checked }))} /><span>Запустить снайпер после сохранения</span></label></div><footer className="parser-modal-footer"><button className="solid-action wide-action" type="submit" disabled={busy || !draft.sources.length}>{busy ? <LoaderCircle className="spin" size={17} /> : <Check size={17} />}Сохранить настройки</button></footer></form></div>
+  return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+    <form className="compact-modal freelance-settings-modal" role="dialog" aria-modal="true" aria-labelledby="freelance-settings-title" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}>
+      <header className="parser-modal-header"><span className="metric-icon blue"><Settings2 /></span><div><h2 id="freelance-settings-title">Настройки снайпера</h2><p className="modal-subtitle">Выберите источники и фильтры для локальной проверки.</p></div><button className="modal-close" type="button" onClick={onClose} aria-label="Закрыть"><X size={20} /></button></header>
+      <div className="parser-modal-body">
+        <label>Источники</label>
+        <div className="freelance-source-options">{sourceKeys.map((source) => {
+          const status = statuses.find((item) => item.source === source)
+          const canAuth = browserSourceKeys.includes(source as (typeof browserSourceKeys)[number])
+          const needsAuth = Boolean(status?.auth_required || status?.status === 'auth_required' || status?.status === 'blocked')
+          const meta = FREELANCE_SOURCE_META[source]
+          return <div className={`freelance-source-option ${draft.sources.includes(source) ? 'active' : ''}`} key={source}><label><input type="checkbox" checked={draft.sources.includes(source)} onChange={() => toggleSource(source)} /><SourceMark source={source} size="medium" /><span><strong>{meta.label}</strong><small>{canAuth ? 'Браузерный источник' : 'Публичная лента'}</small></span>{needsAuth && <AlertCircle size={14} />}</label>{canAuth && <button className="source-auth-button" type="button" aria-label={`Войти в ${meta.label}`} onClick={() => onAuth(source)} disabled={authBusy === `auth-${source}`}>{authBusy === `auth-${source}` ? <LoaderCircle className="spin" size={13} /> : <ExternalLink size={13} />}Войти</button>}</div>
+        })}</div>
+        <label htmlFor="freelance-keywords">Ключевые слова</label><input id="freelance-keywords" value={keywords} onChange={(event) => setKeywords(event.target.value)} placeholder="React, Next.js, CRM" /><p className="form-hint">Разделяйте слова запятыми.</p>
+        <label htmlFor="freelance-excluded">Исключить слова</label><input id="freelance-excluded" value={excluded} onChange={(event) => setExcluded(event.target.value)} placeholder="стажировка, бесплатно" />
+        <label htmlFor="freelance-min-budget">Минимальный бюджет, ₽</label><input id="freelance-min-budget" value={draft.min_budget || ''} onChange={(event) => setDraft((current) => ({ ...current, min_budget: Number(event.target.value.replace(/\D/g, '')) || 0 }))} inputMode="numeric" placeholder="Без ограничения" />
+        <label htmlFor="freelance-interval">Интервал проверки, секунд</label><input id="freelance-interval" type="number" min={30} max={3600} value={draft.interval_seconds} onChange={(event) => setDraft((current) => ({ ...current, interval_seconds: Number(event.target.value) }))} />
+        <label className="switch-field"><input type="checkbox" checked={draft.telegram_enabled} onChange={(event) => setDraft((current) => ({ ...current, telegram_enabled: event.target.checked }))} /><span>Отправлять новые заказы в Telegram</span></label>
+        <label className="switch-field"><input type="checkbox" checked={draft.sniper_enabled} onChange={(event) => setDraft((current) => ({ ...current, sniper_enabled: event.target.checked }))} /><span>Запустить снайпер после сохранения</span></label>
+      </div>
+      <footer className="parser-modal-footer"><button className="solid-action wide-action" type="submit" disabled={busy || !draft.sources.length}>{busy ? <LoaderCircle className="spin" size={17} /> : <Check size={17} />}Сохранить настройки</button></footer>
+    </form>
+  </div>
 }
 
 function HistoryModal({ runs, selected, loading, onSelect, onClose }: { runs: FreelanceRun[]; selected: { run: FreelanceRun; orders: FreelanceOrder[] } | null; loading: boolean; onSelect: (run: FreelanceRun) => void; onClose: () => void }) {
