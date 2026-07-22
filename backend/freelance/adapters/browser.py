@@ -3,13 +3,14 @@ from __future__ import annotations
 import os
 import inspect
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Callable
+from urllib.parse import urlsplit
 
 from bs4 import BeautifulSoup
 
 from ..models import AdapterResult, FreelanceOrder, FreelanceSettings
-from .base import now_iso, order_from_card
+from .base import absolute_url, now_iso, order_from_card
 
 
 @dataclass(frozen=True)
@@ -46,16 +47,30 @@ class BrowserAdapter:
     def classify_html(self, status_code: int | None, title: str, page_url: str, html: str) -> BrowserPageState:
         normalized_url = page_url.lower()
         normalized_title = title.lower()
-        normalized_html = html.lower()
+        soup = BeautifulSoup(html, "html.parser")
+        visible_soup = BeautifulSoup(html, "html.parser")
+        for hidden in visible_soup.select("script, style, noscript, template"):
+            hidden.decompose()
+        visible_text = visible_soup.get_text(" ", strip=True).lower()
         if status_code in {401, 403, 429}:
             return BrowserPageState("blocked", f"Источник ограничил доступ: HTTP {status_code}")
         if any(marker in normalized_url for marker in ("login", "signin", "auth")):
             return BrowserPageState("auth_required", "Требуется вход в аккаунт", True)
-        if "type='password'" in normalized_html or 'type="password"' in normalized_html or any(marker in normalized_title for marker in ("вход", "авторизац", "sign in", "log in")):
+        if soup.select_one('input[type="password"]') or any(marker in normalized_title for marker in ("вход", "авторизац", "sign in", "log in")):
             return BrowserPageState("auth_required", "Требуется вход в аккаунт", True)
-        if any(marker in f"{normalized_title}\n{normalized_html}" for marker in ("доступ ограничен", "access denied", "captcha", "challenge")):
+        challenge_element = next((
+            element for element in soup.find_all(True)
+            if element.name not in {"script", "style", "noscript", "template"} and any(marker in " ".join((
+                str(element.get("id") or ""),
+                " ".join(element.get("class") or ()),
+                str(element.get("src") or ""),
+            )).lower() for marker in ("captcha", "challenge"))
+        ), None)
+        blocked_title = any(marker in normalized_title for marker in ("доступ ограничен", "access denied", "captcha", "challenge"))
+        blocked_visible_page = any(marker in visible_text for marker in ("доступ ограничен", "access denied"))
+        if challenge_element is not None or blocked_title or blocked_visible_page:
             return BrowserPageState("blocked", "Площадка ограничила автоматический доступ")
-        if "data-empty-state" in normalized_html or any(marker in normalized_html for marker in ("нет подходящих заказов", "заказов пока нет", "нет доступных заданий")):
+        if soup.select_one("[data-empty-state]") or any(marker in visible_text for marker in ("нет подходящих заказов", "заказов пока нет", "нет доступных заданий")):
             return BrowserPageState("empty")
         return BrowserPageState("ready")
 
@@ -73,6 +88,9 @@ class BrowserAdapter:
     def prepare_page(self, page: Any) -> None:
         return None
 
+    def wait_for_initial_state(self, page: Any) -> None:
+        return None
+
     def _collect_once(self, settings: FreelanceSettings, *, headless: bool = True) -> AdapterResult:
         if self.browser_factory is None:
             return AdapterResult(self.source, "auth_required", checked_at=now_iso(), error="Откройте авторизацию в браузере", auth_required=True)
@@ -86,6 +104,8 @@ class BrowserAdapter:
             page = browser.new_page() if hasattr(browser, "new_page") else browser
             response = page.goto(self.url, wait_until="domcontentloaded", timeout=30000)
             status_code = getattr(response, "status", None)
+            if status_code not in {401, 403, 429}:
+                self.wait_for_initial_state(page)
             title_method = getattr(page, "title", None)
             content_method = getattr(page, "content", None)
             title = str(title_method() if callable(title_method) else "")
@@ -184,3 +204,83 @@ class ProfiAdapter(BrowserAdapter):
 class YoudoAdapter(BrowserAdapter):
     source = "youdo"
     url = os.getenv("FREELANCE_YOUDO_URL", "https://youdo.com/tasks")
+    card_selector = '[class*="TasksList_listItem__"]'
+    task_card_selector = f'{card_selector}:has(a[href^="/t"])'
+    show_more_selector = '[class*="TasksList_showMoreButton__"]'
+    max_tasks = max(50, int(os.getenv("FREELANCE_YOUDO_MAX_TASKS", "500")))
+
+    def classify_html(self, status_code: int | None, title: str, page_url: str, html: str) -> BrowserPageState:
+        soup = BeautifulSoup(html, "html.parser")
+        has_real_tasks = any(card.select_one('a[href^="/t"]') is not None for card in soup.select(self.card_selector))
+        if status_code not in {401, 403, 429} and has_real_tasks:
+            return BrowserPageState("ready")
+        state = super().classify_html(status_code, title, page_url, html)
+        if state.status != "ready":
+            return state
+        if soup.select_one('[class*="TasksList_empty__"]'):
+            return BrowserPageState("empty")
+        return state
+
+    def prepare_page(self, page: Any) -> None:
+        tasks = page.locator(self.task_card_selector)
+        stable_checks = 0
+        while tasks.count() < self.max_tasks:
+            show_more = page.locator(self.show_more_selector)
+            if not show_more.count() or not show_more.first.is_visible():
+                break
+            previous_count = tasks.count()
+            show_more.first.click()
+            page.wait_for_timeout(1200)
+            stable_checks = stable_checks + 1 if tasks.count() <= previous_count else 0
+            if stable_checks >= 2:
+                break
+
+    def wait_for_initial_state(self, page: Any) -> None:
+        try:
+            page.locator(self.task_card_selector).first.wait_for(state="attached", timeout=10000)
+        except Exception:  # noqa: BLE001 - empty lists and blocked pages have no task card
+            page.wait_for_timeout(1200)
+
+    def parse_html(self, html: str, page_url: str) -> list[FreelanceOrder]:
+        soup = BeautifulSoup(html, "html.parser")
+        orders: list[FreelanceOrder] = []
+        for card in soup.select(self.card_selector):
+            link = card.select_one('a[href^="/t"]')
+            if link is None:
+                continue
+            href = str(link.get("href") or "")
+            path = urlsplit(href).path
+            match = re.fullmatch(r"/t(\d+)", path)
+            title = link.get_text(" ", strip=True)
+            if match is None or not title:
+                continue
+            address_node = card.select_one('[class*="TasksList_address__"]')
+            date_node = card.select_one('[class*="TasksList_date__"]')
+            price_node = card.select_one('[class*="TasksList_desktopPriceBlock__"] [class*="TasksList_price__"]') or card.select_one('[class*="TasksList_price__"]')
+            customer_node = card.select_one('[class*="TasksList_authorName__"]')
+            labels = [node.get_text(" ", strip=True) for node in card.select('[class*="TasksList_footerLabels__"] [class*="TasksList_label__"]')]
+            category = next((label for label in labels if label), "")
+            order = order_from_card(
+                self.source,
+                title,
+                absolute_url(page_url, path),
+                address_node.get_text(" ", strip=True) if address_node else "",
+                price_node.get_text(" ", strip=True) if price_node else "",
+                category,
+                f"youdo-{match.group(1)}",
+            )
+            orders.append(replace(
+                order,
+                customer=customer_node.get_text(" ", strip=True) if customer_node else "",
+                published_at=date_node.get_text(" ", strip=True) if date_node else "",
+            ))
+        return orders
+
+    def parse_page(self, page: Any) -> list[FreelanceOrder]:
+        return self.parse_html(page.content(), str(getattr(page, "url", self.url)))
+
+    def collect(self, settings: FreelanceSettings) -> AdapterResult:
+        result = self._collect_once(settings, headless=True)
+        if result.status != "blocked":
+            return result
+        return self._collect_once(settings, headless=False)

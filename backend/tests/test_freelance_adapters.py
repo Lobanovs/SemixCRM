@@ -4,11 +4,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from backend.freelance.adapters.browser import ProfiAdapter
+from backend.freelance.adapters.browser import ProfiAdapter, YoudoAdapter
 from backend.freelance.adapters.public import FlAdapter, FreelanceRuAdapter, KworkAdapter
 from backend.freelance.adapters.registry import adapter_registry, build_adapters
 from backend.freelance.browser_profile import PersistentBrowserSession, browser_profile_path, persistent_browser_factory
-from backend.freelance.models import FreelanceSettings
+from backend.freelance.models import AdapterResult, FreelanceOrder, FreelanceSettings
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "freelance"
@@ -223,6 +223,138 @@ class FreelanceAdapterTests(unittest.TestCase):
         page = FakePage()
         ProfiAdapter().prepare_page(page)
         self.assertIn(4, page.card_locator.seen)
+
+    def test_youdo_403_is_blocked(self) -> None:
+        state = YoudoAdapter().classify_html(403, "Доступ ограничен", "https://youdo.com/tasks-all-opened-all", "<main></main>")
+        self.assertEqual("blocked", state.status)
+
+    def test_youdo_script_markers_do_not_block_a_working_page(self) -> None:
+        html = "<html><body><div>Задание по интеграции captcha challenge API</div><script src='/assets/challenge.js'>const challenge = 'captcha access denied';</script></body></html>"
+        state = YoudoAdapter().classify_html(200, "Все задания", "https://youdo.com/tasks-all-opened-all", html)
+        self.assertEqual("ready", state.status)
+
+    def test_youdo_real_task_cards_override_access_words_in_task_text(self) -> None:
+        html = '<ul><li class="TasksList_listItem__fixture"><a href="/t42">Исправить access denied</a></li></ul>'
+        state = YoudoAdapter().classify_html(200, "Все задания", "https://youdo.com/tasks-all-opened-all", html)
+        self.assertEqual("ready", state.status)
+
+    def test_youdo_waits_for_react_tasks_before_classification(self) -> None:
+        class FakeResponse:
+            status = 200
+
+        class FakePage:
+            url = "https://youdo.com/tasks-all-opened-all"
+
+            def __init__(self):
+                self.ready = False
+
+            def goto(self, *_args, **_kwargs):
+                return FakeResponse()
+
+            def title(self):
+                return "Все задания"
+
+            def content(self):
+                if not self.ready:
+                    return "<main>Доступ ограничен</main>"
+                return '<ul><li class="TasksList_listItem__fixture"><a href="/t42">Рабочая задача</a></li></ul>'
+
+        class FakeSession:
+            def __init__(self):
+                self.page = FakePage()
+
+            def new_page(self):
+                return self.page
+
+            def close(self):
+                return None
+
+        class WaitingYoudoAdapter(YoudoAdapter):
+            def wait_for_initial_state(self, page):
+                page.ready = True
+
+            def prepare_page(self, _page):
+                return None
+
+            def parse_page(self, _page):
+                return [FreelanceOrder(source="youdo", external_id="youdo-42", title="Рабочая задача")]
+
+        result = WaitingYoudoAdapter(browser_factory=lambda: FakeSession()).collect(FreelanceSettings())
+        self.assertEqual("done", result.status)
+
+    def test_youdo_retries_blocked_headless_once_in_headed_browser(self) -> None:
+        class RecordingYoudoAdapter(YoudoAdapter):
+            def __init__(self):
+                super().__init__(browser_factory=lambda: None)
+                self.headless_modes = []
+
+            def _collect_once(self, settings, *, headless=True):
+                self.headless_modes.append(headless)
+                if headless:
+                    return AdapterResult("youdo", "blocked", checked_at="now", error="HTTP 403")
+                return AdapterResult("youdo", "done", checked_at="now")
+
+        adapter = RecordingYoudoAdapter()
+        result = adapter.collect(FreelanceSettings())
+        self.assertEqual([True, False], adapter.headless_modes)
+        self.assertEqual("done", result.status)
+
+    def test_youdo_fixture_extracts_task_fields(self) -> None:
+        html = (FIXTURES / "youdo_tasks.html").read_text(encoding="utf-8")
+        order = YoudoAdapter().parse_html(html, "https://youdo.com/tasks-all-opened-all")[0]
+        self.assertEqual("youdo", order.source)
+        self.assertEqual("youdo-15001227", order.external_id)
+        self.assertEqual("Разработать лендинг", order.title)
+        self.assertEqual("https://youdo.com/t15001227", order.url)
+        self.assertEqual(15000, order.budget_min)
+        self.assertEqual(("Веб-разработка",), order.categories)
+
+    def test_youdo_confirmed_empty_fixture_is_empty(self) -> None:
+        html = (FIXTURES / "youdo_empty.html").read_text(encoding="utf-8")
+        state = YoudoAdapter().classify_html(200, "Все задания", "https://youdo.com/tasks-all-opened-all", html)
+        self.assertEqual("empty", state.status)
+
+    def test_youdo_feed_expansion_stops_at_safety_limit(self) -> None:
+        class TaskLocator:
+            def __init__(self):
+                self.value = 50
+
+            def count(self):
+                return self.value
+
+        class ButtonLocator:
+            def __init__(self, tasks):
+                self.tasks = tasks
+                self.first = self
+                self.clicks = 0
+
+            def count(self):
+                return 1
+
+            def is_visible(self):
+                return True
+
+            def click(self):
+                self.clicks += 1
+                self.tasks.value += 50
+
+        class FakePage:
+            def __init__(self):
+                self.tasks = TaskLocator()
+                self.button = ButtonLocator(self.tasks)
+
+            def locator(self, selector):
+                return self.button if "showMoreButton" in selector else self.tasks
+
+            def wait_for_timeout(self, _timeout):
+                return None
+
+        page = FakePage()
+        adapter = YoudoAdapter()
+        adapter.max_tasks = 150
+        adapter.prepare_page(page)
+        self.assertEqual(2, page.button.clicks)
+        self.assertEqual(150, page.tasks.value)
 
     def test_registry_injects_persistent_browser_factory_only_into_browser_sources(self) -> None:
         factory = lambda: None
