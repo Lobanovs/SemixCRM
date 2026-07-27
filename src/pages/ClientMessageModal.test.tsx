@@ -8,33 +8,51 @@ const GENERATED = {
   ready: true,
   cached: false,
   model: 'test-model',
-  analysis: 'Клиника с рейтингом 5,0 и 200 отзывами, но сайта нет — заявки теряются вечером.',
-  pain: 'Пациенты находят клинику, но не могут записаться без звонка',
-  money_argument: 'Даже два импланта в месяц — это заметные деньги; оценка приблизительная.',
+  analysis: 'Рейтинг 5,0 и 200 отзывов. В карточке не указан сайт. Можно упростить путь до обращения.',
+  pain: 'В карточке не указан полноценный сайт',
+  money_argument: 'Даже одно дополнительное обращение может окупить улучшение.',
+  insights: {
+    signal: 'Рейтинг 5,0 и 200 отзывов',
+    problem: 'В карточке не указан полноценный сайт',
+    opportunity: 'Упростить путь до обращения',
+  },
   variants: [
-    { angle: 'наблюдение о них', text: 'Добрый день! Посмотрел карточку в 2ГИС: рейтинг 5,0 и двести отзывов. Записаться при этом можно только звонком. Показать короткий разбор? Семён' },
-    { angle: 'деньги', text: 'Здравствуйте! У вас двести отзывов, но записаться онлайн негде — часть людей уходит к соседям. Прислать разбор? Семён' },
-    { angle: 'короткий', text: 'Добрый день! Нашёл вас в 2ГИС, сайта нет. Сделать бесплатный трёхминутный видеоразбор? Семён' },
+    { tone: 'confident', title: 'Уверенный продавец', angle: 'Уверенный продавец', text: 'Добрый день! У «7R» рейтинг 5,0 и 200 отзывов — доверие уже заработано. В карточке не вижу полноценного сайта, только Telegram. Могу прислать короткий разбор с тремя точками роста — куда удобнее отправить? Семён' },
+    { tone: 'hard_sell', title: 'Жёсткая продажа', angle: 'Жёсткая продажа', text: 'Добрый день! 200 отзывов приводят внимание к «7R», но без сайта часть этого спроса негде превращать в записи. Даже одно обращение может окупить улучшение. Покажу, где обрывается путь до заявки — прислать сюда? Семён' },
+    { tone: 'expert', title: 'Эксперт', angle: 'Эксперт', text: 'Здравствуйте! Посмотрел путь пациента у «7R»: карточка сильная — 5,0 и 200 отзывов, но следующим шагом вижу только Telegram. Могу бесплатно показать прототип первого экрана под вашу клинику — посмотреть? Семён' },
   ],
   follow_up: 'Добрый день! Разбор всё ещё в силе, если интересно.',
   warnings: [],
-  links: [{ channel: 'WhatsApp', url: 'https://wa.me/79636775777' }],
+  links: [
+    { channel: 'WhatsApp', url: 'https://wa.me/79636775777' },
+    { channel: 'Telegram', url: 'https://t.me/stom7r' },
+  ],
 }
 
 function jsonResponse(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json' } })
 }
 
-function createFetchMock(options: { cached?: boolean; failGenerate?: string } = {}) {
+function createFetchMock(options: {
+  cached?: boolean
+  failGenerate?: string
+  failGenerateOnce?: string
+  payload?: typeof GENERATED | Record<string, unknown>
+} = {}) {
+  let postCount = 0
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     const method = init?.method || 'GET'
     if (method === 'GET' && url.includes('/api/ai/clients/28/message')) {
-      return jsonResponse(options.cached ? { ...GENERATED, cached: true } : { ready: false })
+      return jsonResponse(options.cached ? { ...(options.payload ?? GENERATED), cached: true } : { ready: false })
     }
     if (method === 'POST' && url.includes('/api/ai/clients/28/message')) {
+      postCount += 1
       if (options.failGenerate) return jsonResponse({ detail: options.failGenerate }, 502)
-      return jsonResponse(GENERATED)
+      if (options.failGenerateOnce && postCount === 1) {
+        return jsonResponse({ detail: options.failGenerateOnce }, 502)
+      }
+      return jsonResponse(options.payload ?? GENERATED)
     }
     throw new Error(`Unexpected request: ${method} ${url}`)
   })
@@ -52,27 +70,32 @@ describe('диалог первого сообщения клиенту', () => 
     vi.unstubAllGlobals()
   })
 
-  it('показывает разбор карточки, боль и аргумент про деньги', async () => {
+  it('показывает три компактных вывода вместо полотна анализа', async () => {
     vi.stubGlobal('fetch', createFetchMock())
     renderModal()
 
-    expect(await screen.findByText(/рейтингом 5,0 и 200 отзывами/)).toBeInTheDocument()
-    expect(screen.getByText(/не могут записаться без звонка/)).toBeInTheDocument()
-    expect(screen.getByText(/оценка приблизительная/)).toBeInTheDocument()
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Сильный сигнал')).toBeInTheDocument()
+    expect(within(dialog).getByText('Гипотеза')).toBeInTheDocument()
+    expect(within(dialog).getByText('Возможность')).toBeInTheDocument()
+    expect(within(dialog).getByText('Рейтинг 5,0 и 200 отзывов')).toBeInTheDocument()
   })
 
-  it('даёт три варианта и переключает их', async () => {
+  it('даёт три стратегии и выбирает уверенного продавца первой', async () => {
     const user = userEvent.setup()
     vi.stubGlobal('fetch', createFetchMock())
     renderModal()
 
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getAllByRole('tab')).toHaveLength(3)
-    expect((screen.getByLabelText('Текст сообщения') as HTMLTextAreaElement).value).toContain('двести отзывов')
+    expect(within(dialog).getByRole('tab', { name: /Уверенный продавец/ })).toHaveAttribute('aria-selected', 'true')
+    expect(within(dialog).getByRole('tab', { name: /Жёсткая продажа/ })).toBeInTheDocument()
+    expect(within(dialog).getByRole('tab', { name: /Эксперт/ })).toBeInTheDocument()
+    expect((screen.getByLabelText('Текст сообщения') as HTMLTextAreaElement).value).toContain('доверие уже заработано')
 
-    await user.click(within(dialog).getByRole('tab', { name: 'короткий' }))
+    await user.click(within(dialog).getByRole('tab', { name: /Эксперт/ }))
 
-    expect((screen.getByLabelText('Текст сообщения') as HTMLTextAreaElement).value).toContain('видеоразбор')
+    expect((screen.getByLabelText('Текст сообщения') as HTMLTextAreaElement).value).toContain('Посмотрел путь пациента')
   })
 
   it('подставляет текст выбранного варианта в ссылку WhatsApp', async () => {
@@ -81,20 +104,29 @@ describe('диалог первого сообщения клиенту', () => 
 
     const link = await screen.findByRole('link', { name: /Открыть WhatsApp/ })
     expect(link).toHaveAttribute('href', expect.stringContaining('https://wa.me/79636775777?text='))
-    expect(link.getAttribute('href')).toContain(encodeURIComponent('двести отзывов'))
+    expect(link.getAttribute('href')).toContain(encodeURIComponent('доверие уже заработано'))
   })
 
-  it('редактирование текста меняет ссылку отправки', async () => {
+  it('сохраняет отдельный черновик каждой стратегии и меняет ссылку отправки', async () => {
     const user = userEvent.setup()
     vi.stubGlobal('fetch', createFetchMock())
     renderModal()
 
     const textarea = await screen.findByLabelText('Текст сообщения')
     await user.clear(textarea)
-    await user.type(textarea, 'Свой текст')
+    await user.type(textarea, 'Свой уверенный текст')
 
     expect(screen.getByRole('link', { name: /Открыть WhatsApp/ }).getAttribute('href'))
-      .toContain(encodeURIComponent('Свой текст'))
+      .toContain(encodeURIComponent('Свой уверенный текст'))
+
+    await user.click(screen.getByRole('tab', { name: /Эксперт/ }))
+    await user.clear(textarea)
+    await user.type(textarea, 'Свой экспертный текст')
+    await user.click(screen.getByRole('tab', { name: /Уверенный продавец/ }))
+
+    expect(textarea).toHaveValue('Свой уверенный текст')
+    await user.click(screen.getByRole('tab', { name: /Эксперт/ }))
+    expect(textarea).toHaveValue('Свой экспертный текст')
   })
 
   it('переход в мессенджер отмечает клиента как «Написал»', async () => {
@@ -111,10 +143,10 @@ describe('диалог первого сообщения клиенту', () => 
     vi.stubGlobal('fetch', createFetchMock({ cached: true }))
     renderModal()
 
-    await screen.findByText(/рейтингом 5,0 и 200 отзывами/)
+    await screen.findByText('Рейтинг 5,0 и 200 отзывов')
 
     expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
-    expect(screen.getByText('Показан сохранённый разбор')).toBeInTheDocument()
+    expect(screen.getByText('Сохранённый результат')).toBeInTheDocument()
   })
 
   it('кнопка «Переписать заново» запрашивает новую генерацию', async () => {
@@ -122,7 +154,7 @@ describe('диалог первого сообщения клиенту', () => 
     vi.stubGlobal('fetch', createFetchMock({ cached: true }))
     renderModal()
 
-    await user.click(await screen.findByRole('button', { name: /Переписать заново/ }))
+    await user.click(await screen.findByRole('button', { name: /Переписать 3 варианта/ }))
 
     await waitFor(() => {
       const call = vi.mocked(fetch).mock.calls.find(([url, init]) => init?.method === 'POST' && String(url).includes('force=true'))
@@ -138,11 +170,41 @@ describe('диалог первого сообщения клиенту', () => 
     expect(await screen.findByRole('alert')).toHaveTextContent('Лимит запросов исчерпан')
   })
 
+  it('после ошибки предлагает повторить генерацию', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', createFetchMock({ failGenerateOnce: 'Модель вернула ответ без JSON' }))
+    renderModal()
+
+    await user.click(await screen.findByRole('button', { name: 'Повторить' }))
+
+    expect(await screen.findByRole('tab', { name: /Уверенный продавец/ })).toBeInTheDocument()
+    expect(vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(2)
+  })
+
   it('показывает напоминание на случай молчания', async () => {
     vi.stubGlobal('fetch', createFetchMock())
     renderModal()
 
     expect(await screen.findByText(/Разбор всё ещё в силе/)).toBeInTheDocument()
+  })
+
+  it('поддерживает сохранённые варианты старого формата', async () => {
+    const legacy = {
+      ...GENERATED,
+      insights: undefined,
+      variants: [
+        { angle: 'Наблюдение', text: GENERATED.variants[0].text },
+        { angle: 'Деньги', text: GENERATED.variants[1].text },
+        { angle: 'Короткий', text: GENERATED.variants[2].text },
+      ],
+    }
+    vi.stubGlobal('fetch', createFetchMock({ cached: true, payload: legacy }))
+    renderModal()
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getAllByRole('tab')).toHaveLength(3)
+    expect(within(dialog).getByRole('tab', { name: /^Наблюдение/ })).toBeInTheDocument()
+    expect(within(dialog).getByText('Сильный сигнал')).toBeInTheDocument()
   })
 
   it('без ключа объясняет, как включить, и не дёргает модель', async () => {
