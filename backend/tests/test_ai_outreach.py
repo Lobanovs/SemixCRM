@@ -349,6 +349,33 @@ class GenerationTests(unittest.TestCase):
         self.assertEqual("https://semyon-lobanov-portfolio.vercel.app/", result["portfolio_url"])
         self.assertEqual([], result["warnings"])
 
+    def test_accepts_a_compact_second_variant_instead_of_losing_all_three_texts(self) -> None:
+        compact_text = (
+            "Здравствуйте!\n\n"
+            "Посмотрел карточку «7R» в 2GIS. У клиники высокий рейтинг и много отзывов, но не увидел "
+            "отдельного сайта с услугами, врачами, ценами и онлайн-записью. Человек, который выбирает "
+            "вечером или не готов звонить, может продолжить поиск.\n\n"
+            "Я делаю сайты с онлайн-записью и передачей заявок администратору в мессенджер или на почту. "
+            "Если сайт сейчас актуален, ответьте «да» — пришлю варианты по стоимости и срокам без созвона."
+        )
+        self.assertGreaterEqual(len(compact_text), 350)
+        self.assertLess(len(compact_text), 450)
+        answer = {
+            **GOOD_ANSWER,
+            "variants": [
+                GOOD_ANSWER["variants"][0],
+                {**GOOD_ANSWER["variants"][1], "text": compact_text},
+                GOOD_ANSWER["variants"][2],
+            ],
+        }
+
+        result = outreach.generate_client_message(
+            CLIENT,
+            ai_client=client_for(RecordingTransport(answer)),
+        )
+
+        self.assertEqual(compact_text, result["variants"][1]["text"])
+
     def test_prompt_version_invalidates_legacy_cached_results(self) -> None:
         self.assertEqual(6, outreach.build_input(CLIENT, get_profile())["prompt_version"])
 

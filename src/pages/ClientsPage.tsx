@@ -18,6 +18,7 @@ import {
   Phone,
   PhoneCall,
   Plus,
+  RefreshCw,
   Search,
   Scissors,
   Send,
@@ -41,6 +42,7 @@ import { API_BASE, persistParserSettings, startParserWithSettings } from './pars
 import type { ParserSettings } from './parserSettings'
 
 type ClientStatus = 'Новый' | 'Написал' | 'Ответили' | 'Созвон' | 'КП' | 'Закрыто' | 'Отказ'
+type AiMessageStatus = 'ready' | 'stale' | 'missing'
 type Contact = { type: string; label: string; value: string; url?: string }
 
 type Client = {
@@ -65,6 +67,8 @@ type Client = {
   website: string
   cardUrl: string
   contacts: Contact[]
+  aiMessageStatus: AiMessageStatus
+  aiMessageCreatedAt: string
   tone: UiAccent
   icon: LucideIcon
 }
@@ -121,6 +125,8 @@ type ApiClient = {
   contacts?: Contact[]
   archived?: number
   archived_at?: string
+  ai_message_status?: AiMessageStatus
+  ai_message_created_at?: string
 }
 
 type ParserRun = {
@@ -176,6 +182,7 @@ const toClient = (item: ApiClient): Client => {
     score: Number(item.lead_score) || 0, scoreMax: Number(item.lead_score_max) || 23,
     scoreReasons: item.lead_score_reasons || [], rating: item.rating ?? null, reviews: item.reviews ?? null,
     phone: item.phone || '', website: item.website || '', cardUrl: item.card_url || '', contacts: item.contacts || [],
+    aiMessageStatus: item.ai_message_status || 'missing', aiMessageCreatedAt: item.ai_message_created_at || '',
     tone: toneByStatus[status], icon: iconForCategory(category),
   }
 }
@@ -520,7 +527,20 @@ export default function ClientsPage() {
       </div>
 
       {showModal && <ClientModal onClose={() => setShowModal(false)} onCreate={(client) => void createClient(client)} nextId={(clients.length ? Math.max(...clients.map((client) => client.id)) : 0) + 1} />}
-      {messageClient && <ClientMessageModal clientId={messageClient.id} clientName={messageClient.name} enabled={aiEnabled} onClose={() => setMessageClient(null)} onSent={() => updateStatus(messageClient.id, 'Написал')} />}
+      {messageClient && (
+        <ClientMessageModal
+          clientId={messageClient.id}
+          clientName={messageClient.name}
+          enabled={aiEnabled}
+          onClose={() => setMessageClient(null)}
+          onSent={() => updateStatus(messageClient.id, 'Написал')}
+          onGenerated={() => setClients((current) => current.map((client) => (
+            client.id === messageClient.id
+              ? { ...client, aiMessageStatus: 'ready', aiMessageCreatedAt: new Date().toISOString() }
+              : client
+          )))}
+        />
+      )}
       {selectedClient && <ClientDetails client={selectedClient} onClose={() => setSelectedClient(null)} />}
       {deleteTarget && <ConfirmDeleteModal target={deleteTarget} isDeleting={isDeleting} onClose={() => setDeleteTarget(null)} onConfirm={() => void deleteClients()} />}
     </div>
@@ -574,11 +594,33 @@ function ConfirmRestoreAllModal({ isRestoring, onClose, onConfirm }: { isRestori
 function ClientRow({ client, onStatusChange, onDetails, onDelete, onWrite }: { client: Client; onStatusChange: (id: number, status: ClientStatus) => void; onDetails: (client: Client) => void; onDelete: (client: Client) => void; onWrite: (client: Client) => void }) {
   const Icon = client.icon
   const visibleContacts = client.contacts.filter((item) => item.type !== 'website').slice(0, 4)
+  const aiMeta = client.aiMessageStatus === 'ready'
+    ? { label: 'Текст готов', note: 'Можно открыть и отправить', icon: CircleCheck }
+    : client.aiMessageStatus === 'stale'
+      ? { label: 'Нужно обновить', note: 'Данные клиента изменились', icon: RefreshCw }
+      : { label: 'Текст не создан', note: 'Генерация ещё не запускалась', icon: Sparkles }
+  const AiStatusIcon = aiMeta.icon
   return <article className="client-row">
     <div className="client-identity"><span className={`client-logo ${client.tone}`}><Icon size={24} /></span><div><h2>{client.name}</h2><p className="client-category">{client.category}</p><p className="client-source"><MapPin size={13} />{client.location}<span>·</span>{client.source}<span>·</span>{client.added}</p><div className="client-proof"><span><Star size={14} fill="currentColor" />{client.rating ?? '—'}</span><span><MessageSquareText size={14} />{client.reviews ?? 0} отзывов</span></div><div className="tag-row">{client.tags.slice(0, 4).map((tag) => <Tag key={tag}>{tag}</Tag>)}</div></div></div>
     <div className="client-pain"><p>{client.pain}</p><div className="client-contact-list">{visibleContacts.map((contact) => <ContactLink contact={contact} key={`${contact.type}-${contact.value}`} />)}{!visibleContacts.length && <span className="no-direct-contact">Нет Telegram, e-mail или WhatsApp</span>}</div></div>
     <div className="client-status-column"><StatusBadge tone={toneByStatus[client.status]}>{client.status}</StatusBadge><span>Следующий шаг</span><strong>{client.next}</strong><select aria-label={`Статус клиента ${client.name}`} value={client.status} onChange={(event) => onStatusChange(client.id, event.target.value as ClientStatus)}>{statusOptions.map((item) => <option key={item}>{item}</option>)}</select></div>
-    <div className="client-fit"><div className="client-score-line" data-guide="clients-score"><StatusBadge tone={scoreTone(client.score)}>{client.score >= 14 ? 'Горячий лид' : client.score >= 8 ? 'Перспективный' : 'Нужно проверить'}</StatusBadge><strong>{client.score}<small>/{client.scoreMax}</small></strong></div><small>{client.match}% релевантности</small><div className="score-reason-preview">{client.scoreReasons.slice(0, 2).map((reason) => <span key={reason}><Check size={12} />{reason}</span>)}</div><div className="client-actions"><button type="button" onClick={() => onDetails(client)}>Подробнее</button>{client.cardUrl ? <a href={safeHref(client.cardUrl)} target="_blank" rel="noreferrer">Источник <ExternalLink size={13} /></a> : <button type="button" disabled>Нет источника</button>}{client.website ? <a className="client-website-action" href={safeHref(client.website)} target="_blank" rel="noreferrer"><Globe2 size={14} />Сайт</a> : <button type="button" disabled><Globe2 size={14} />Сайт не найден</button>}<button className="client-delete-action" type="button" onClick={() => onDelete(client)} aria-label={`Скрыть клиента ${client.name}`}><Trash2 size={14} />Скрыть</button><button className="client-ai-action" type="button" data-guide="clients-write" onClick={() => onWrite(client)}><Sparkles size={14} />Написать</button><button className="primary-row-action" type="button" data-guide="clients-status" onClick={() => onStatusChange(client.id, client.status === 'Новый' ? 'Написал' : client.status)}>Изменить статус</button></div></div>
+    <div className="client-fit">
+      <div className="client-score-line" data-guide="clients-score"><StatusBadge tone={scoreTone(client.score)}>{client.score >= 14 ? 'Горячий лид' : client.score >= 8 ? 'Перспективный' : 'Нужно проверить'}</StatusBadge><strong>{client.score}<small>/{client.scoreMax}</small></strong></div>
+      <small>{client.match}% релевантности</small>
+      <div className="score-reason-preview">{client.scoreReasons.slice(0, 2).map((reason) => <span key={reason}><Check size={12} />{reason}</span>)}</div>
+      <div className="client-actions">
+        <div className={`client-ai-summary ${client.aiMessageStatus}`}>
+          <AiStatusIcon size={17} />
+          <span><strong>{aiMeta.label}</strong><small>{aiMeta.note}</small></span>
+        </div>
+        <button type="button" onClick={() => onDetails(client)}>Подробнее</button>
+        {client.cardUrl ? <a href={safeHref(client.cardUrl)} target="_blank" rel="noreferrer">Источник <ExternalLink size={13} /></a> : <button type="button" disabled>Нет источника</button>}
+        {client.website ? <a className="client-website-action" href={safeHref(client.website)} target="_blank" rel="noreferrer"><Globe2 size={14} />Сайт</a> : <button type="button" disabled><Globe2 size={14} />Сайт не найден</button>}
+        <button className="client-delete-action" type="button" onClick={() => onDelete(client)} aria-label={`Скрыть клиента ${client.name}`}><Trash2 size={14} />Скрыть</button>
+        <button className="client-ai-action" type="button" data-guide="clients-write" aria-label={`Посмотреть текст для ${client.name}`} onClick={() => onWrite(client)}><Sparkles size={14} />Посмотреть текст</button>
+        <button className="primary-row-action" type="button" data-guide="clients-status" onClick={() => onStatusChange(client.id, client.status === 'Новый' ? 'Написал' : client.status)}>Изменить статус</button>
+      </div>
+    </div>
   </article>
 }
 
@@ -603,7 +645,7 @@ function ClientModal({ onClose, onCreate, nextId }: { onClose: () => void; onCre
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (!name.trim()) return
-    onCreate({ id: nextId, name: name.trim(), category, location: city, address: '', source: 'Добавлен вручную', added: 'Сегодня', pain: 'Нужно уточнить задачи и точки роста бизнеса.', tags: ['Новый лид'], status: 'Новый', next: 'Найти контакт', match: 0, score: 3, scoreMax: 23, scoreReasons: ['Ниша с высоким чеком +3'], rating: null, reviews: null, phone: '', website: '', cardUrl: '', contacts: [], tone: 'blue', icon: Building2 })
+    onCreate({ id: nextId, name: name.trim(), category, location: city, address: '', source: 'Добавлен вручную', added: 'Сегодня', pain: 'Нужно уточнить задачи и точки роста бизнеса.', tags: ['Новый лид'], status: 'Новый', next: 'Найти контакт', match: 0, score: 3, scoreMax: 23, scoreReasons: ['Ниша с высоким чеком +3'], rating: null, reviews: null, phone: '', website: '', cardUrl: '', contacts: [], aiMessageStatus: 'missing', aiMessageCreatedAt: '', tone: 'blue', icon: Building2 })
   }
   return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><form className="compact-modal client-modal" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}><button className="modal-close" type="button" onClick={onClose} aria-label="Закрыть"><X size={20} /></button><span className="metric-icon blue"><Building2 /></span><h2>Новый клиент</h2><label htmlFor="client-name">Название бизнеса</label><input id="client-name" autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="Например, Studio Forma" /><label htmlFor="client-category">Ниша</label><select id="client-category" value={category} onChange={(event) => setCategory(event.target.value)}>{businessNiches.map((item) => <option key={item}>{item}</option>)}</select><label htmlFor="client-city">Город</label><select id="client-city" value={city} onChange={(event) => setCity(event.target.value)}>{majorRussianCities.map((item) => <option key={item}>{item}</option>)}</select><button className="solid-action wide-action" type="submit" disabled={!name.trim()}><Plus size={18} />Сохранить клиента</button></form></div>
 }

@@ -4,6 +4,7 @@ import {
   Check,
   Copy,
   ExternalLink,
+  FileText,
   Lightbulb,
   RefreshCw,
   Sparkles,
@@ -31,6 +32,7 @@ type MessageInsights = {
 
 export type ClientMessage = {
   ready: boolean
+  status?: 'ready' | 'stale' | 'missing'
   analysis?: string
   pain?: string
   money_argument?: string
@@ -41,14 +43,52 @@ export type ClientMessage = {
   links?: { channel: string; url: string }[]
   cached?: boolean
   model?: string
+  created_at?: string
+  manual_observation?: string
+  portfolio_url?: string
+  review_insight?: { summary?: string; evidence_ids?: string[] }
+  review_evidence?: { id: string; text: string }[]
 }
 
 const TONE_ORDER: MessageTone[] = ['confident', 'hard_sell', 'expert']
 
 const TONE_META: Record<MessageTone, { title: string; note: string }> = {
-  confident: { title: 'Уверенный продавец', note: 'Прямо и по делу' },
-  hard_sell: { title: 'Жёсткая продажа', note: 'Сильнее через цену бездействия' },
-  expert: { title: 'Эксперт', note: 'Спокойно через диагностику' },
+  confident: { title: 'По отзывам и точке роста', note: 'Самый персональный и подробный' },
+  hard_sell: { title: 'Решение и портфолио', note: 'Быстрее переводит к обсуждению сайта' },
+  expert: { title: 'Короткий контакт', note: 'Для первого аккуратного касания' },
+}
+
+const TONE_LENGTHS: Record<MessageTone, [number, number]> = {
+  confident: [550, 1200],
+  hard_sell: [350, 900],
+  expert: [180, 450],
+}
+
+const PORTFOLIO_MARKER = 'Примеры моих работ:'
+const PORTFOLIO_BLOCK = /\n{2}Примеры моих работ:\nhttps?:\/\/\S+(?=\n{2}|$)/u
+
+function withoutPortfolio(text: string): string {
+  return text.replace(PORTFOLIO_BLOCK, '').replace(/\n{3,}/gu, '\n\n').trim()
+}
+
+function withPortfolio(text: string, url: string): string {
+  const clean = withoutPortfolio(text)
+  if (!url) return clean
+  const paragraphs = clean.split(/\n{2,}/u).map((item) => item.trim()).filter(Boolean)
+  const portfolio = `${PORTFOLIO_MARKER}\n${url}`
+  if (paragraphs.length < 2) return `${clean}\n\n${portfolio}`
+  return [...paragraphs.slice(0, -1), portfolio, paragraphs[paragraphs.length - 1]].join('\n\n')
+}
+
+function applyPortfolio(message: ClientMessage, include: boolean): ClientMessage {
+  const url = message.portfolio_url ?? ''
+  return {
+    ...message,
+    variants: (message.variants ?? []).map((variant) => ({
+      ...variant,
+      text: include ? withPortfolio(variant.text, url) : withoutPortfolio(variant.text),
+    })),
+  }
 }
 
 function toneFor(variant: MessageVariant, index: number): MessageTone {
@@ -62,19 +102,24 @@ function variantTitle(variant: MessageVariant, index: number): string {
 }
 
 export default function ClientMessageModal({
-  clientId, clientName, enabled, onClose, onSent,
+  clientId, clientName, enabled, onClose, onSent, onGenerated,
 }: {
   clientId: number
   clientName: string
   enabled: boolean
   onClose: () => void
   onSent: () => void
+  onGenerated?: () => void
 }) {
   const [message, setMessage] = useState<ClientMessage | null>(null)
   const [active, setActive] = useState(0)
   const [busy, setBusy] = useState(false)
+  const [storedLoading, setStoredLoading] = useState(enabled)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState('')
+  const [manualObservation, setManualObservation] = useState('')
+  const [includePortfolio, setIncludePortfolio] = useState(true)
+  const [storedStatus, setStoredStatus] = useState<'ready' | 'stale' | 'missing'>('missing')
 
   const generate = async (force: boolean) => {
     setBusy(true)
@@ -82,10 +127,16 @@ export default function ClientMessageModal({
     try {
       const result = await apiRequest<ClientMessage>(
         `/api/ai/clients/${clientId}/message${force ? '?force=true' : ''}`,
-        { method: 'POST', fallback: 'Не удалось подготовить сообщение' },
+        {
+          method: 'POST',
+          body: { manual_observation: manualObservation.trim() },
+          fallback: 'Не удалось подготовить сообщение',
+        },
       )
-      setMessage(result)
+      setMessage(applyPortfolio(result, includePortfolio))
+      setStoredStatus('ready')
       setActive(0)
+      onGenerated?.()
     } catch (generateError) {
       setError(generateError instanceof Error ? generateError.message : 'Не удалось подготовить сообщение')
     } finally {
@@ -95,15 +146,26 @@ export default function ClientMessageModal({
 
   // Сохранённый разбор показываем сразу, а модель дёргаем только по кнопке.
   useEffect(() => {
-    if (!enabled) return
+    if (!enabled) {
+      setStoredLoading(false)
+      return
+    }
+    const controller = new AbortController()
     void (async () => {
       try {
-        const stored = await apiRequest<ClientMessage>(`/api/ai/clients/${clientId}/message`, { fallback: '' })
-        if (stored.ready) { setMessage(stored); return }
+        const stored = await apiRequest<ClientMessage>(
+          `/api/ai/clients/${clientId}/message`,
+          { fallback: '', signal: controller.signal },
+        )
+        setStoredStatus(stored.status ?? (stored.ready ? 'ready' : 'missing'))
+        if (stored.ready) {
+          setManualObservation(stored.manual_observation ?? '')
+          setMessage(applyPortfolio(stored, true))
+        }
       } catch { /* нет сохранённого разбора — это нормально */ }
-      await generate(false)
+      finally { setStoredLoading(false) }
     })()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => controller.abort()
   }, [clientId, enabled])
 
   // Кнопку показываем всегда: спрятанная функция — это функция, о которой никто не узнает.
@@ -113,6 +175,7 @@ export default function ClientMessageModal({
   const variants = message?.variants ?? []
   const current = variants[active]
   const currentTone = current ? toneFor(current, active) : 'confident'
+  const currentRange = TONE_LENGTHS[currentTone]
   const insights = {
     signal: message?.insights?.signal || message?.analysis || 'Фактов для разбора пока недостаточно.',
     problem: message?.insights?.problem || message?.pain || 'Гипотеза появится после новой генерации.',
@@ -123,6 +186,12 @@ export default function ClientMessageModal({
     await navigator.clipboard?.writeText(text)
     setCopied(key)
     window.setTimeout(() => setCopied(''), 1600)
+  }
+
+  const togglePortfolio = () => {
+    const next = !includePortfolio
+    setIncludePortfolio(next)
+    setMessage((currentMessage) => currentMessage ? applyPortfolio(currentMessage, next) : currentMessage)
   }
 
   const selectTabFromKeyboard = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
@@ -150,12 +219,12 @@ export default function ClientMessageModal({
           <span className="ai-workspace-mark" aria-hidden="true"><Sparkles size={20} /></span>
           <div className="ai-workspace-heading">
             <span className="ai-workspace-kicker">AI-ассистент продаж</span>
-            <h2 id="client-message-title">Первое сообщение <strong>{clientName}</strong></h2>
+            <h2 id="client-message-title">Тексты для клиента <strong>{clientName}</strong></h2>
             <div className="ai-workspace-meta" aria-live="polite">
-              <span>3 стратегии</span>
+              <span>3 персональных варианта</span>
               {message?.model && <span>{message.model}</span>}
               {message?.cached && <span>Сохранённый результат</span>}
-              {busy && <span>Обновляю варианты…</span>}
+              {busy && <span>Изучаю карточку и отзывы…</span>}
             </div>
           </div>
           <button className="ai-workspace-close" type="button" onClick={onClose} aria-label="Закрыть">
@@ -163,24 +232,58 @@ export default function ClientMessageModal({
           </button>
         </header>
 
-        {!message && (
+        {storedLoading && !message && (
           <div className="ai-workspace-state">
-            {busy ? (
-              <>
-                <span className="ai-state-loader" aria-hidden="true" />
-                <h3>Готовлю три стратегии</h3>
-                <p>Проверяю факты карточки и собираю сообщения без рекламных штампов.</p>
-              </>
-            ) : (
-              <>
-                <span className="ai-state-error" aria-hidden="true"><TriangleAlert size={22} /></span>
-                <h3>Не удалось получить варианты</h3>
-                <p className="field-error" role="alert">{error || 'Модель не вернула готовый ответ.'}</p>
-                <button className="ai-retry-action" type="button" onClick={() => void generate(true)}>
-                  <RefreshCw size={16} /> Повторить
-                </button>
-              </>
-            )}
+            <span className="ai-state-loader" aria-hidden="true" />
+            <h3>Проверяю сохранённый текст</h3>
+            <p>Это не запускает нейросеть и не расходует запрос.</p>
+          </div>
+        )}
+
+        {!storedLoading && !message && (
+          <div className="ai-generator-start">
+            <span className="ai-generator-icon" aria-hidden="true"><FileText size={24} /></span>
+            <div className="ai-generator-copy">
+              <span className="ai-generator-kicker">
+                {storedStatus === 'stale' ? 'Сохранённый текст устарел' : 'Текст ещё не создан'}
+              </span>
+              <h3>{storedStatus === 'stale' ? 'Обновите тексты по актуальной карточке' : 'Подготовьте сильное первое сообщение'}</h3>
+              <p>
+                Нейросеть изучит данные клиента и доступные отзывы 2GIS, затем предложит три разных варианта.
+                Генерация начнётся только после нажатия кнопки.
+              </p>
+            </div>
+            <div className="ai-generator-form">
+              <label htmlFor="ai-manual-observation">Наблюдение о клиенте (необязательно)</label>
+              <textarea
+                id="ai-manual-observation"
+                value={manualObservation}
+                maxLength={500}
+                rows={4}
+                onChange={(event) => setManualObservation(event.target.value)}
+                placeholder="Например: в отзывах часто хвалят мастера Анну, а запись доступна только по телефону"
+              />
+              <span className="ai-generator-help">
+                Добавьте только проверенный факт. Если поле оставить пустым, AI возьмёт данные карточки и отзывы 2GIS.
+              </span>
+              <label className="ai-portfolio-toggle">
+                <input
+                  type="checkbox"
+                  aria-label="Добавлять портфолио в тексты"
+                  checked={includePortfolio}
+                  onChange={togglePortfolio}
+                />
+                <span>
+                  <strong>Добавлять портфолио в тексты</strong>
+                  <small>Ссылку можно убрать одним переключателем и вернуть без новой генерации</small>
+                </span>
+              </label>
+              {error && <p className="ai-generator-error" role="alert"><TriangleAlert size={16} />{error}</p>}
+              <button className="ai-generate-action" type="button" onClick={() => void generate(storedStatus === 'stale')} disabled={busy}>
+                {busy ? <span className="ai-button-loader" aria-hidden="true" /> : <Sparkles size={18} />}
+                {busy ? 'Изучаю клиента и пишу…' : 'Сгенерировать 3 текста'}
+              </button>
+            </div>
           </div>
         )}
 
@@ -203,8 +306,17 @@ export default function ClientMessageModal({
                 <span className="ai-insight-icon" aria-hidden="true"><Lightbulb size={17} /></span>
                 <div><h4>Возможность</h4><p>{insights.opportunity}</p></div>
               </article>
+              {message.review_insight?.summary && (
+                <article className="ai-review-proof">
+                  <span>Что заметили в отзывах</span>
+                  <p>{message.review_insight.summary}</p>
+                  <small>
+                    Подтверждено отзывами: {message.review_insight.evidence_ids?.join(', ') || '2GIS'}
+                  </small>
+                </article>
+              )}
               <p className="ai-grounding-note">
-                AI использует только данные карточки. Проверьте текст перед отправкой.
+                AI использует данные карточки и только найденные отзывы 2GIS. Проверьте текст перед отправкой.
               </p>
             </aside>
 
@@ -216,6 +328,32 @@ export default function ClientMessageModal({
                   <button type="button" onClick={() => void generate(true)} disabled={busy}>Повторить</button>
                 </div>
               )}
+
+              <div className="ai-compose-options">
+                <label htmlFor="ai-manual-observation-ready">
+                  Наблюдение о клиенте
+                  <textarea
+                    id="ai-manual-observation-ready"
+                    value={manualObservation}
+                    maxLength={500}
+                    rows={2}
+                    onChange={(event) => setManualObservation(event.target.value)}
+                    placeholder="Можно уточнить факт перед повторной генерацией"
+                  />
+                </label>
+                <label className="ai-portfolio-toggle compact">
+                  <input
+                    type="checkbox"
+                    aria-label="Добавлять портфолио в тексты"
+                    checked={includePortfolio}
+                    onChange={togglePortfolio}
+                  />
+                  <span>
+                    <strong>Добавлять портфолио в тексты</strong>
+                    <small>Переключатель меняет все три черновика без запроса к AI</small>
+                  </span>
+                </label>
+              </div>
 
               <div className="ai-tone-tabs" role="tablist" aria-label="Стратегии сообщения">
                 {variants.map((variant, index) => {
@@ -252,8 +390,8 @@ export default function ClientMessageModal({
                       <label htmlFor="ai-message-editor">Текст сообщения</label>
                       <span>{TONE_META[currentTone].note}</span>
                     </div>
-                    <span className={(current.text.length >= 180 && current.text.length <= 320) ? 'valid' : ''}>
-                      {current.text.length} / 320
+                    <span className={(current.text.length >= currentRange[0] && current.text.length <= currentRange[1]) ? 'valid' : ''}>
+                      {current.text.length} символов
                     </span>
                   </div>
                   <textarea
@@ -261,7 +399,7 @@ export default function ClientMessageModal({
                     className="ai-compose-textarea"
                     aria-label="Текст сообщения"
                     value={current.text}
-                    rows={8}
+                    rows={14}
                     onChange={(event) => {
                       const edited = [...variants]
                       edited[active] = { ...edited[active], text: event.target.value }
@@ -295,7 +433,7 @@ export default function ClientMessageModal({
           </div>
         )}
 
-        <footer className="ai-workspace-actions">
+        {message && <footer className="ai-workspace-actions">
           <div className="ai-primary-actions">
             {current && (
               <button className="ai-copy-action" type="button" onClick={() => void copy(current.text, 'text')}>
@@ -318,12 +456,10 @@ export default function ClientMessageModal({
               </a>
             ))}
           </div>
-          {message && (
-            <button className="ai-regenerate-action" type="button" onClick={() => void generate(true)} disabled={busy}>
-              <RefreshCw size={17} />{busy ? 'Переписываю…' : 'Переписать 3 варианта'}
-            </button>
-          )}
-        </footer>
+          <button className="ai-regenerate-action" type="button" onClick={() => void generate(true)} disabled={busy}>
+            <RefreshCw size={17} />{busy ? 'Переписываю…' : 'Переписать 3 варианта'}
+          </button>
+        </footer>}
       </section>
     </div>
   )

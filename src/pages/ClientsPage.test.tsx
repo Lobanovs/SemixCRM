@@ -182,4 +182,36 @@ describe('client parser controls', () => {
     await waitFor(() => expect(chooseButton).toHaveFocus())
     expect(screen.queryByRole('dialog', { name: 'Выберите ниши' })).not.toBeInTheDocument()
   })
+
+  it('показывает статус генерации и открывает тексты одной понятной кнопкой', async () => {
+    const baseFetch = createFetchMock()
+    const clientsFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = init?.method || 'GET'
+      if (method === 'GET' && url.endsWith('/api/clients')) {
+        return jsonResponse({
+          clients: [
+            { id: 1, name: 'Готовый клиент', status: 'Новый', ai_message_status: 'ready', ai_message_created_at: '2026-07-27T10:00:00Z' },
+            { id: 2, name: 'Изменённый клиент', status: 'Новый', ai_message_status: 'stale', ai_message_created_at: '2026-07-26T10:00:00Z' },
+            { id: 3, name: 'Новый клиент', status: 'Новый', ai_message_status: 'missing', ai_message_created_at: '' },
+          ],
+          stats: {
+            total: 3, contacted: 0, replied: 0, calls: 0, closed: 0,
+            found_today: 0, new_today: 0,
+            stages: { Новый: 3, Написал: 0, Ответили: 0, Созвон: 0, КП: 0, Закрыто: 0, Отказ: 0 },
+          },
+        })
+      }
+      if (method === 'GET' && url.endsWith('/api/ai/status')) return jsonResponse({ enabled: true })
+      return baseFetch(input, init)
+    })
+    vi.stubGlobal('fetch', clientsFetch)
+
+    render(<ClientsPage />)
+
+    expect(await screen.findByText('Текст готов')).toBeVisible()
+    expect(screen.getByText('Нужно обновить')).toBeVisible()
+    expect(screen.getByText('Текст не создан')).toBeVisible()
+    expect(screen.getAllByRole('button', { name: /^Посмотреть текст для / })).toHaveLength(3)
+  })
 })

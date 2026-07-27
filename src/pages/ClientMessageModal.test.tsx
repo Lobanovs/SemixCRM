@@ -12,6 +12,7 @@ const GENERATED = {
   ready: true,
   cached: false,
   model: 'test-model',
+  portfolio_url: 'https://semyon-lobanov-portfolio.vercel.app/',
   analysis: 'Рейтинг 5,0 и 200 отзывов. В карточке не указан сайт. Можно упростить путь до обращения.',
   pain: 'В карточке не указан полноценный сайт',
   money_argument: 'Даже одно дополнительное обращение может окупить улучшение.',
@@ -62,8 +63,8 @@ function createFetchMock(options: {
   })
 }
 
-function renderModal(onSent = vi.fn()) {
-  render(<ClientMessageModal clientId={28} clientName="7R" enabled onClose={vi.fn()} onSent={onSent} />)
+function renderModal(onSent = vi.fn(), onGenerated = vi.fn()) {
+  render(<ClientMessageModal clientId={28} clientName="7R" enabled onClose={vi.fn()} onSent={onSent} onGenerated={onGenerated} />)
   return onSent
 }
 
@@ -75,7 +76,7 @@ describe('диалог первого сообщения клиенту', () => 
   })
 
   it('показывает три компактных вывода вместо полотна анализа', async () => {
-    vi.stubGlobal('fetch', createFetchMock())
+    vi.stubGlobal('fetch', createFetchMock({ cached: true }))
     renderModal()
 
     const dialog = await screen.findByRole('dialog')
@@ -85,9 +86,55 @@ describe('диалог первого сообщения клиенту', () => 
     expect(within(dialog).getByText('Рейтинг 5,0 и 200 отзывов')).toBeInTheDocument()
   })
 
+  it('не запускает платную генерацию при простом открытии пустого диалога', async () => {
+    vi.stubGlobal('fetch', createFetchMock())
+    renderModal()
+
+    expect(await screen.findByRole('button', { name: 'Сгенерировать 3 текста' })).toBeVisible()
+    expect(screen.getByLabelText('Наблюдение о клиенте (необязательно)')).toBeVisible()
+    expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
+  })
+
+  it('генерирует тексты только по явной кнопке и передаёт ручное наблюдение', async () => {
+    const user = userEvent.setup()
+    const onGenerated = vi.fn()
+    vi.stubGlobal('fetch', createFetchMock())
+    renderModal(vi.fn(), onGenerated)
+
+    const observation = await screen.findByLabelText('Наблюдение о клиенте (необязательно)')
+    await user.type(observation, 'Клиенты хвалят мастера Анну')
+    await user.click(screen.getByRole('button', { name: 'Сгенерировать 3 текста' }))
+
+    await waitFor(() => {
+      const call = vi.mocked(fetch).mock.calls.find(([, init]) => init?.method === 'POST')
+      expect(call).toBeDefined()
+      expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+        manual_observation: 'Клиенты хвалят мастера Анну',
+      })
+    })
+    expect(await screen.findByRole('tab', { name: /Уверенный продавец/ })).toBeInTheDocument()
+    expect(onGenerated).toHaveBeenCalled()
+  })
+
+  it('добавляет портфолио по умолчанию и позволяет убрать его без нового запроса', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', createFetchMock({ cached: true }))
+    renderModal()
+
+    const editor = await screen.findByLabelText('Текст сообщения')
+    expect((editor as HTMLTextAreaElement).value).toContain('Примеры моих работ:')
+    expect((editor as HTMLTextAreaElement).value).toContain(GENERATED.portfolio_url)
+    const postCount = () => vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === 'POST').length
+
+    await user.click(screen.getByRole('checkbox', { name: 'Добавлять портфолио в тексты' }))
+
+    expect((editor as HTMLTextAreaElement).value).not.toContain(GENERATED.portfolio_url)
+    expect(postCount()).toBe(0)
+  })
+
   it('даёт три стратегии и выбирает уверенного продавца первой', async () => {
     const user = userEvent.setup()
-    vi.stubGlobal('fetch', createFetchMock())
+    vi.stubGlobal('fetch', createFetchMock({ cached: true }))
     renderModal()
 
     const dialog = await screen.findByRole('dialog')
@@ -103,7 +150,7 @@ describe('диалог первого сообщения клиенту', () => 
   })
 
   it('подставляет текст выбранного варианта в ссылку WhatsApp', async () => {
-    vi.stubGlobal('fetch', createFetchMock())
+    vi.stubGlobal('fetch', createFetchMock({ cached: true }))
     renderModal()
 
     const link = await screen.findByRole('link', { name: /Открыть WhatsApp/ })
@@ -113,7 +160,7 @@ describe('диалог первого сообщения клиенту', () => 
 
   it('сохраняет отдельный черновик каждой стратегии и меняет ссылку отправки', async () => {
     const user = userEvent.setup()
-    vi.stubGlobal('fetch', createFetchMock())
+    vi.stubGlobal('fetch', createFetchMock({ cached: true }))
     renderModal()
 
     const textarea = await screen.findByLabelText('Текст сообщения')
@@ -135,7 +182,7 @@ describe('диалог первого сообщения клиенту', () => 
 
   it('переход в мессенджер отмечает клиента как «Написал»', async () => {
     const user = userEvent.setup()
-    vi.stubGlobal('fetch', createFetchMock())
+    vi.stubGlobal('fetch', createFetchMock({ cached: true }))
     const onSent = renderModal()
 
     await user.click(await screen.findByRole('link', { name: /Открыть WhatsApp/ }))
@@ -168,9 +215,11 @@ describe('диалог первого сообщения клиенту', () => 
   })
 
   it('ошибку модели показывает текстом, а не пустым окном', async () => {
+    const user = userEvent.setup()
     vi.stubGlobal('fetch', createFetchMock({ failGenerate: 'Лимит запросов исчерпан (429)' }))
     renderModal()
 
+    await user.click(await screen.findByRole('button', { name: 'Сгенерировать 3 текста' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Лимит запросов исчерпан')
   })
 
@@ -179,14 +228,17 @@ describe('диалог первого сообщения клиенту', () => 
     vi.stubGlobal('fetch', createFetchMock({ failGenerateOnce: 'Модель вернула ответ без JSON' }))
     renderModal()
 
-    await user.click(await screen.findByRole('button', { name: 'Повторить' }))
+    const generate = await screen.findByRole('button', { name: 'Сгенерировать 3 текста' })
+    await user.click(generate)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Модель вернула ответ без JSON')
+    await user.click(generate)
 
     expect(await screen.findByRole('tab', { name: /Уверенный продавец/ })).toBeInTheDocument()
     expect(vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(2)
   })
 
   it('показывает напоминание на случай молчания', async () => {
-    vi.stubGlobal('fetch', createFetchMock())
+    vi.stubGlobal('fetch', createFetchMock({ cached: true }))
     renderModal()
 
     expect(await screen.findByText(/Разбор всё ещё в силе/)).toBeInTheDocument()

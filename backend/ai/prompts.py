@@ -17,12 +17,14 @@ NICHE_ECONOMICS = {
     "клиник": "приём 2–5 тыс ₽, курс лечения 30–120 тыс ₽",
 }
 
-MESSAGE_MIN_LENGTH = 220
-MESSAGE_MAX_LENGTH = 1100
+MESSAGE_MIN_LENGTH = 180
+MESSAGE_MAX_LENGTH = 1200
 TONE_LENGTHS = {
-    "confident": (650, 1100),
-    "hard_sell": (450, 800),
-    "expert": (220, 380),
+    # Wide enough for natural model variation, while still enforcing a detailed
+    # primary message and a genuinely short third option.
+    "confident": (550, 1200),
+    "hard_sell": (350, 900),
+    "expert": (180, 450),
 }
 
 SYSTEM_PROMPT = """Ты — сильный B2B-маркетолог и продавец сайтов для малого бизнеса в России.
