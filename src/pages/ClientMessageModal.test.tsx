@@ -1,8 +1,12 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import ClientMessageModal from './ClientMessageModal'
+
+const clientMessageModalCss = readFileSync(resolve('src/pages/ClientMessageModal.css'), 'utf8')
 
 const GENERATED = {
   ready: true,
@@ -205,6 +209,16 @@ describe('диалог первого сообщения клиенту', () => 
     expect(within(dialog).getAllByRole('tab')).toHaveLength(3)
     expect(within(dialog).getByRole('tab', { name: /^Наблюдение/ })).toBeInTheDocument()
     expect(within(dialog).getByText('Сильный сигнал')).toBeInTheDocument()
+  })
+
+  it('сохраняет широкий grid-макет поверх общих стилей компактной модалки', async () => {
+    vi.stubGlobal('fetch', createFetchMock({ cached: true }))
+    renderModal()
+
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveClass('compact-modal', 'client-message-modal')
+    expect(clientMessageModalCss).toMatch(/\.compact-modal\.client-message-modal\s*\{[^}]*display:\s*grid;/s)
+    expect(clientMessageModalCss).toMatch(/\.compact-modal\.client-message-modal\s*\{[^}]*overflow:\s*hidden;/s)
   })
 
   it('без ключа объясняет, как включить, и не дёргает модель', async () => {
