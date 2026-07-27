@@ -102,10 +102,18 @@ class AiClient:
         with httpx.Client(timeout=self.settings.timeout) as client:
             return client.post(f"{self.settings.base_url}/chat/completions", headers=headers, json=payload)
 
-    def complete(self, system: str, user: str, temperature: float = 0.7, max_tokens: int = 1600) -> str:
+    def complete(
+        self,
+        system: str,
+        user: str,
+        temperature: float = 0.7,
+        max_tokens: int = 1600,
+        *,
+        json_mode: bool = False,
+    ) -> str:
         if not self.enabled:
             raise AiDisabledError("Не задан OPENCODE_API_KEY")
-        payload = {
+        payload: dict[str, Any] = {
             "model": self.settings.model,
             "temperature": temperature,
             "max_tokens": max_tokens,
@@ -114,6 +122,12 @@ class AiClient:
                 {"role": "user", "content": user},
             ],
         }
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
+        if self.settings.model.casefold().startswith("mimo-"):
+            # MiMo по умолчанию может потратить весь лимит на reasoning_content
+            # и вернуть content=null. Для структурированных CRM-задач нужен итог.
+            payload["chat_template_kwargs"] = {"enable_thinking": False}
         try:
             response = self._post(payload)
         except httpx.HTTPError as error:
@@ -126,25 +140,61 @@ class AiClient:
             raise AiError(f"Модель вернула ошибку {response.status_code}: {response.text[:200]}")
         data = response.json()
         try:
-            content = data["choices"][0]["message"]["content"]
+            choice = data["choices"][0]
+            message = choice["message"]
         except (KeyError, IndexError, TypeError) as error:
             raise AiError("Неожиданный формат ответа модели") from error
-        if not str(content).strip():
+        content = message.get("content")
+        if content is None:
+            if message.get("reasoning_content") and choice.get("finish_reason") == "length":
+                raise AiError(
+                    "Модель исчерпала лимит ответа: лимит ответа ушёл на внутреннее рассуждение. "
+                    "Повторите запрос или выберите другую модель."
+                )
+            raise AiError("Модель вернула ответ без итогового текста")
+        if not isinstance(content, str) or not content.strip():
             raise AiError("Модель вернула пустой ответ")
-        return str(content)
+        return content
 
-    def complete_json(self, system: str, user: str, temperature: float = 0.7, max_tokens: int = 1600) -> dict[str, Any]:
+    def complete_json(
+        self,
+        system: str,
+        user: str,
+        temperature: float = 0.7,
+        max_tokens: int = 1600,
+        *,
+        validate: Callable[[dict[str, Any]], Any] | None = None,
+    ) -> dict[str, Any]:
         """Просит JSON и один раз повторяет, если разбор не удался."""
 
-        raw = self.complete(system, user, temperature=temperature, max_tokens=max_tokens)
+        def parse_and_validate(raw: str) -> dict[str, Any]:
+            payload = extract_json(raw)
+            if validate is not None:
+                validate(payload)
+            return payload
+
+        raw = self.complete(
+            system,
+            user,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            json_mode=True,
+        )
         try:
-            return extract_json(raw)
+            return parse_and_validate(raw)
         except AiError as first_error:
             logger.warning("Ответ модели не разобрался, повторяю строже: %s", first_error)
             strict = (
                 f"{user}\n\n"
-                "Предыдущий ответ не удалось разобрать. Верни ТОЛЬКО валидный JSON-объект "
+                f"Ошибка предыдущего ответа: {first_error}. "
+                "Исправь её и верни ТОЛЬКО валидный JSON-объект "
                 "без пояснений, без markdown и без текста до или после него."
             )
-            retry = self.complete(system, strict, temperature=0.2, max_tokens=max_tokens)
-            return extract_json(retry)
+            retry = self.complete(
+                system,
+                strict,
+                temperature=0.2,
+                max_tokens=max_tokens,
+                json_mode=True,
+            )
+            return parse_and_validate(retry)

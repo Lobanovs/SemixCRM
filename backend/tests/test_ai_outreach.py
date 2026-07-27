@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 from urllib.parse import quote
 
@@ -77,6 +78,28 @@ def response_with(payload: object, status: int = 200) -> httpx.Response:
     return httpx.Response(
         status,
         json={"choices": [{"message": {"content": body}}]},
+        request=httpx.Request("POST", "https://opencode.ai/zen/go/v1/chat/completions"),
+    )
+
+
+def completion_response(
+    content: Any,
+    *,
+    finish_reason: str = "stop",
+    reasoning: str | None = None,
+) -> httpx.Response:
+    return httpx.Response(
+        200,
+        json={
+            "choices": [{
+                "finish_reason": finish_reason,
+                "message": {
+                    "role": "assistant",
+                    "content": content,
+                    "reasoning_content": reasoning,
+                },
+            }],
+        },
         request=httpx.Request("POST", "https://opencode.ai/zen/go/v1/chat/completions"),
     )
 
@@ -159,6 +182,68 @@ class JsonExtractionTests(unittest.TestCase):
     def test_answer_without_json_is_an_error(self) -> None:
         with self.assertRaises(AiError):
             extract_json("Извините, не могу помочь")
+
+
+class AiClientTests(unittest.TestCase):
+    def test_structured_mimo_request_disables_thinking_and_asks_for_json(self) -> None:
+        transport = RecordingTransport({"ok": True})
+        client = AiClient(
+            AiSettings(api_key="test-key", model="mimo-v2.5-pro"),
+            transport=transport,
+        )
+
+        self.assertEqual({"ok": True}, client.complete_json("system", "user"))
+
+        self.assertEqual({"type": "json_object"}, transport.calls[0]["response_format"])
+        self.assertEqual(
+            {"enable_thinking": False},
+            transport.calls[0]["chat_template_kwargs"],
+        )
+
+    def test_non_mimo_request_does_not_send_mimo_template_settings(self) -> None:
+        transport = RecordingTransport("Готово")
+        client = AiClient(
+            AiSettings(api_key="test-key", model="glm-5.2"),
+            transport=transport,
+        )
+
+        client.complete("system", "user")
+
+        self.assertNotIn("chat_template_kwargs", transport.calls[0])
+
+    def test_reasoning_only_length_response_is_not_converted_to_none(self) -> None:
+        transport = RecordingTransport(completion_response(
+            None,
+            finish_reason="length",
+            reasoning="Long private chain of thought",
+        ))
+        client = AiClient(
+            AiSettings(api_key="test-key", model="mimo-v2.5-pro"),
+            transport=transport,
+        )
+
+        with self.assertRaises(AiError) as error:
+            client.complete("system", "user")
+
+        self.assertIn("лимит ответа ушёл на внутреннее рассуждение", str(error.exception))
+        self.assertNotIn("None", str(error.exception))
+
+    def test_structural_validation_error_is_repaired_once(self) -> None:
+        transport = RecordingTransport({"variants": []}, {"variants": [{"tone": "confident"}]})
+        client = AiClient(
+            AiSettings(api_key="test-key", model="glm-5.2"),
+            transport=transport,
+        )
+
+        def validate(payload: dict[str, Any]) -> None:
+            if not payload["variants"]:
+                raise AiError("нет обязательных вариантов")
+
+        result = client.complete_json("system", "user", validate=validate)
+
+        self.assertEqual([{"tone": "confident"}], result["variants"])
+        self.assertEqual(2, len(transport.calls))
+        self.assertIn("нет обязательных вариантов", transport.last_user_prompt)
 
 
 class GenerationTests(unittest.TestCase):
