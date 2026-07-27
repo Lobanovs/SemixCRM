@@ -91,6 +91,11 @@ class BrowserAdapter:
     def wait_for_initial_state(self, page: Any) -> None:
         return None
 
+    def empty_result_reason(self) -> tuple[str, str]:
+        """Чем объяснять пустой разбор: сменившейся вёрсткой или отсутствием подходящего."""
+
+        return "error", "Не удалось найти ленту заказов: разметка источника изменилась"
+
     def _collect_once(self, settings: FreelanceSettings, *, headless: bool = True) -> AdapterResult:
         if self.browser_factory is None:
             return AdapterResult(self.source, "auth_required", checked_at=now_iso(), error="Откройте авторизацию в браузере", auth_required=True)
@@ -121,7 +126,8 @@ class BrowserAdapter:
                 return AdapterResult(self.source, state.status, checked_at=now_iso(), error=state.error, auth_required=state.auth_required)
             orders = self.parse_page(page)
             if not orders:
-                return AdapterResult(self.source, "error", checked_at=now_iso(), error="Не удалось найти ленту заказов: разметка источника изменилась")
+                status, error = self.empty_result_reason()
+                return AdapterResult(self.source, status, checked_at=now_iso(), error=error)
             return AdapterResult(self.source, "done", tuple(orders), now_iso())
         except Exception as error:  # noqa: BLE001 - isolate browser source failures
             return AdapterResult(self.source, "error", checked_at=now_iso(), error=str(error))
@@ -201,6 +207,25 @@ class ProfiAdapter(BrowserAdapter):
         return self.parse_html(page.content(), str(getattr(page, "url", self.url)))
 
 
+def _dev_markers() -> tuple[str, ...]:
+    """Категории YouDo, которые относятся к разработке.
+
+    YouDo отдаёт вперемешку курьеров, уборку и грузоперевозки. Без фильтра база
+    забивается непрофильными заданиями. Список переопределяется переменной
+    FREELANCE_YOUDO_CATEGORIES, а FREELANCE_YOUDO_ALL=yes выключает фильтр совсем.
+    """
+
+    override = os.getenv("FREELANCE_YOUDO_CATEGORIES", "").strip()
+    if override:
+        return tuple(item.strip().lower() for item in override.split(",") if item.strip())
+    return (
+        "разработ", "программир", "верстк", "сайт", "веб", "приложен", "бот",
+        "скрипт", "автоматизац", "интеграц", "api", "компьютерн", "it",
+        "1с", "битрикс", "wordpress", "тильда", "tilda", "дизайн", "интерфейс",
+        "ui", "ux", "виртуальный помощник", "seo", "база данных", "парсер",
+    )
+
+
 class YoudoAdapter(BrowserAdapter):
     source = "youdo"
     url = os.getenv("FREELANCE_YOUDO_URL", "https://youdo.com/tasks")
@@ -208,6 +233,26 @@ class YoudoAdapter(BrowserAdapter):
     task_card_selector = f'{card_selector}:has(a[href^="/t"])'
     show_more_selector = '[class*="TasksList_showMoreButton__"]'
     max_tasks = max(50, int(os.getenv("FREELANCE_YOUDO_MAX_TASKS", "500")))
+
+    def __init__(self, browser_factory: Callable[..., Any] | None = None) -> None:
+        super().__init__(browser_factory)
+        # Сколько карточек было на странице до отбора по категориям.
+        self.last_seen_cards = 0
+
+    def empty_result_reason(self) -> tuple[str, str]:
+        if self.last_seen_cards:
+            return "empty", ""
+        return super().empty_result_reason()
+
+    @staticmethod
+    def is_development(labels: list[str], title: str) -> bool:
+        if os.getenv("FREELANCE_YOUDO_ALL", "").strip().lower() in {"1", "yes", "true"}:
+            return True
+        # Смотрим на метки категории; заголовок берём, только если меток нет,
+        # иначе «доставить компьютер» проходил бы как компьютерная помощь.
+        haystack = " ".join(labels) if labels else title
+        normalized = haystack.lower().replace("ё", "е")
+        return any(marker.replace("ё", "е") in normalized for marker in _dev_markers())
 
     def classify_html(self, status_code: int | None, title: str, page_url: str, html: str) -> BrowserPageState:
         soup = BeautifulSoup(html, "html.parser")
@@ -244,10 +289,12 @@ class YoudoAdapter(BrowserAdapter):
     def parse_html(self, html: str, page_url: str) -> list[FreelanceOrder]:
         soup = BeautifulSoup(html, "html.parser")
         orders: list[FreelanceOrder] = []
+        seen = 0
         for card in soup.select(self.card_selector):
             link = card.select_one('a[href^="/t"]')
             if link is None:
                 continue
+            seen += 1
             href = str(link.get("href") or "")
             path = urlsplit(href).path
             match = re.fullmatch(r"/t(\d+)", path)
@@ -259,6 +306,8 @@ class YoudoAdapter(BrowserAdapter):
             price_node = card.select_one('[class*="TasksList_desktopPriceBlock__"] [class*="TasksList_price__"]') or card.select_one('[class*="TasksList_price__"]')
             customer_node = card.select_one('[class*="TasksList_authorName__"]')
             labels = [node.get_text(" ", strip=True) for node in card.select('[class*="TasksList_footerLabels__"] [class*="TasksList_label__"]')]
+            if not self.is_development(labels, title):
+                continue
             category = next((label for label in labels if label), "")
             order = order_from_card(
                 self.source,
@@ -274,6 +323,7 @@ class YoudoAdapter(BrowserAdapter):
                 customer=customer_node.get_text(" ", strip=True) if customer_node else "",
                 published_at=date_node.get_text(" ", strip=True) if date_node else "",
             ))
+        self.last_seen_cards = seen
         return orders
 
     def parse_page(self, page: Any) -> list[FreelanceOrder]:

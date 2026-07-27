@@ -4,6 +4,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import uuid
@@ -51,7 +52,12 @@ def build_2gis_search_url(city_code: str, niche: str, start_page: int = 1) -> st
     """Build the URL expected by parser-2gis for a selected start page."""
     page = max(1, int(start_page))
     page_segment = f"/page/{page}" if page > 1 else ""
-    return f"https://2gis.ru/{city_code}/search/{quote(niche, safe='')}{page_segment}/filters/sort=name"
+    # Город экранируется так же, как ниша: иначе «/» или «?» в названии
+    # уводят реальный Chrome на произвольный путь внутри 2gis.ru.
+    safe_city = quote(city_code.strip("/"), safe="")
+    if not safe_city:
+        raise ValueError("Не удалось определить код города для 2GIS")
+    return f"https://2gis.ru/{safe_city}/search/{quote(niche, safe='')}{page_segment}/filters/sort=name"
 
 
 def _python_command() -> list[str]:
@@ -63,6 +69,48 @@ def _python_command() -> list[str]:
     if launcher:
         return [launcher, "-3"]
     return [sys.executable]
+
+
+def _kill_process_tree(process: subprocess.Popen[str]) -> None:
+    """Убивает parser-2gis вместе с Chrome, который он поднял отдельным деревом."""
+
+    if process.poll() is not None:
+        return
+    if sys.platform == "win32":
+        try:
+            subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True, timeout=15, check=False)
+        except (OSError, subprocess.SubprocessError):
+            process.kill()
+    else:
+        try:
+            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        except (OSError, ProcessLookupError):
+            process.terminate()
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        process.kill()
+
+
+def _run_parser_process(cmd: list[str], environment: dict[str, str], timeout: int) -> subprocess.CompletedProcess[str]:
+    creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0
+    process = subprocess.Popen(
+        cmd, cwd=str(ROOT_DIR), env=environment, text=True,
+        encoding="utf-8", errors="replace", stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+        creationflags=creation_flags, start_new_session=sys.platform != "win32",
+    )
+    try:
+        output, _ = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _kill_process_tree(process)
+        # Дочитываем то, что успел напечатать процесс, но не ждём вечно закрытия трубы.
+        try:
+            output, _ = process.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            output = ""
+        raise
+    return subprocess.CompletedProcess(cmd, process.returncode, output, "")
 
 
 def collect_2gis(
@@ -93,24 +141,26 @@ def collect_2gis(
     environment.update({"PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"})
     timeout = max(180, min(600, 20 + int(limit) * 12))
     try:
-        completed = subprocess.run(
-            cmd, cwd=str(ROOT_DIR), env=environment, text=True,
-            encoding="utf-8", errors="replace", stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, timeout=timeout, check=False,
-        )
-    except subprocess.TimeoutExpired as error:
-        raise RuntimeError(f"Парсер 2GIS превысил лимит {timeout} секунд") from error
-    output = completed.stdout or ""
-    if on_status and output:
-        lines = [line.strip() for line in output.splitlines() if line.strip()]
-        if lines:
-            on_status(lines[-1][:180])
-    if completed.returncode != 0:
-        tail = "\n".join(output.splitlines()[-8:])
-        raise RuntimeError(f"parser-2gis завершился с кодом {completed.returncode}: {tail}")
-    if not output_path.exists() or output_path.stat().st_size <= 4:
-        raise RuntimeError("parser-2gis завершился без результатов. Возможно, 2GIS показал CAPTCHA.")
-    leads = load_2gis_json(output_path, city, niche, limit)
+        try:
+            completed = _run_parser_process(cmd, environment, timeout)
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError(f"Парсер 2GIS превысил лимит {timeout} секунд") from error
+        output = completed.stdout or ""
+        if on_status and output:
+            lines = [line.strip() for line in output.splitlines() if line.strip()]
+            if lines:
+                on_status(lines[-1][:180])
+        if completed.returncode != 0:
+            tail = "\n".join(output.splitlines()[-8:])
+            raise RuntimeError(f"parser-2gis завершился с кодом {completed.returncode}: {tail}")
+        if not output_path.exists() or output_path.stat().st_size <= 4:
+            raise RuntimeError("parser-2gis завершился без результатов. Возможно, 2GIS показал CAPTCHA.")
+        leads = load_2gis_json(output_path, city, niche, limit)
+    finally:
+        # Промежуточный дамп содержит телефоны и адреса и больше не нужен:
+        # данные уже в SQLite, где работают архив и удаление.
+        if os.getenv("PARSER2GIS_KEEP_OUTPUT", "").strip().lower() not in {"1", "yes", "true"}:
+            output_path.unlink(missing_ok=True)
     if not leads:
         raise RuntimeError("parser-2gis не вернул карточки. Оставьте PARSER2GIS_HEADLESS=no и повторите запуск.")
     return leads

@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+<item>
+      <media:content url="https://wwr-pro.s3.amazonaws.com/logos/0171/4688/logo.gif" type="image/png"/>
+      <title>Tether: AI Research Engineer</title>
+      <region>Anywhere in the World</region>
+      <category>Back-End Programming</category>
+      <description>&lt;img src="https://we-work-remotely.imgix.net/logos/0171/4688/logo.gif?ixlib=rails-4.0.0&amp;w=50&amp;h=50&amp;dpr=2&amp;fit=fill&amp;auto=compress" /&gt;
+
+&lt;p&gt;
+  &lt;strong&gt;Headquarters:&lt;/strong&gt; El Salvador
+    &lt;br /&gt;&lt;strong&gt;URL:&lt;/strong&gt; &lt;a href="https://careers.tether.io/"&gt;https://careers.tether.io/&lt;/a&gt;
+&lt;/p&gt;
+
+&lt;div class="sc-1fwbcuw-0 kbZOmE"&gt;
+&lt;div&gt;
+&lt;p&gt;&lt;strong&gt;&lt;em&gt;Why Join Us?&lt;/em&gt;&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;Our team is a global talent powerhouse, working remotely from every corner of the world. If you’re passionate about making a mark in the fintech space, this is your opportunity to collaborate with some of the brightest minds, pushing boundaries and setting new standards. We’ve grown fast, stayed lean, and secured our place as a leader in the industry.&lt;/p&gt;
+&lt;p&gt;If you have excellent English communication skills and are ready to contribute to the most innovative platform on the planet, Tether is the place for you.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Are you ready to be part of the future?&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;&amp;nbsp;&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;About the job&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;As a member of the AI model team, you will drive innovation in reinforcement learning approaches for advanced models. Your work will optimize decision-making and adaptive behavior to deliver enhanced intelligence, improved performance, and domain-specific capabilities for real-world challenges. You will work across a broad spectrum of systems, including resource-efficient models designed for limited hardware environments and complex multi-modal architectures that integrate data such as text, images, and audio.&lt;/p&gt;
+&lt;p&gt;We expect you to have deep expertise in designing reinforcement learning systems and a strong background in advanced model architectures. You will adopt a hands-on, research-driven approach to developing, testing, and implementing novel reinforcement learning algorithms and training frameworks. Your responsibilities include curating specialized simulation environments and training datasets, strengthening baseline policy performance, and identifying as well as resolving bottlenecks in the reinforcement learning process. The ultimate goal is to unlock superior, domain-adapted AI performance and push the limits of what these models can achieve in dynamic, real-world environments.&lt;/p&gt;
+&lt;p&gt;&amp;nbsp;&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Responsibilities&lt;/strong&gt;&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;Develop and implement state-of-the-art reinforcement learning algorithms designed to optimize decision-making processes in both simulated and real-world settings. Establish clear performance targets such as reward maximization and policy stability.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Build, run, and monitor controlled reinforcement learning experiments. Track key performance indicators while documenting iterative results and comparing outcomes against established benchmarks.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Identify and curate high-quality simulation environments and training datasets that are tailored to specific domain challenges. Set measurable criteria to ensure that the selection and preparation of these resources significantly enhance the learning process and overall model performance.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Systematically debug and optimize the reinforcement learning pipeline by analyzing both computational efficiency and learning performance metrics. Address issues such as reward signal noise, exploration strategy, and policy divergence to improve convergence and stability.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Collaborate with cross-functional teams to integrate reinforcement learning agents into production systems. Define clear success metrics such as real-world performance improvements and robustness under varied conditions and ensure continuous monitoring and iterative refinements for sustained domain adaptation.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;h2 class="sc-1npqnwg-4 sc-1npqnwg-5 sc-1uwf3m5-0 sc-1uwf3m5-1 gCDcOw custom-css-style-job-requirements"&gt;Job requirements&lt;/h2&gt;
+&lt;div class="sc-1fwbcuw-0 kbZOmE"&gt;
+&lt;div&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;A degree in Computer Science or related field. Ideally PhD in NLP, Machine Learning, or a related field, complemented by a solid track record in AI R&amp;amp;D (with good publications in A* conferences).&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Proven experience with large-scale reinforcement learning experiments, including online RL techniques such as Group Relative Policy Optimization (GRPO), is essential. Your contributions should have led to measurable improvements in domain-specific decision-making and overall policy performance.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Deep understanding of reinforcement learning algorithms is required, including state-of-the-art online RL methods and other gradient-based optimization approaches like policy gradients, actor-critic, and GRPO. Your expertise should emphasize enhancing policy stability, exploration, and sample efficiency in complex, dynamic environments.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Strong expertise in PyTorch and relevant reinforcement learning frameworks is a must. Practical experience in developing RL pipelines, from simulation and online training to post-training evaluation and deploying RL-based solutions in production environments is expected.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Demonstrated ability to apply empirical research to overcome reinforcement learning challenges such as sample inefficiency, exploration-exploitation tradeoffs, and training instability. You should be proficient in designing robust evaluation frameworks and iterating on algorithmic innovations to continuously push the boundaries of RL agent performance.&lt;/p&gt;
+&lt;p&gt;&amp;nbsp;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;Important information for candidates&lt;/strong&gt;&lt;br&gt;Recruitment scams have become increasingly common. To protect yourself, please keep the following in mind when applying for roles:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;strong&gt;Apply only through our official channels.&lt;/strong&gt;&amp;nbsp;We do not use third-party platforms or agencies for recruitment unless clearly stated. All open roles are listed on our official careers page:&amp;nbsp;https://tether.recruitee.com/&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;strong&gt;Verify the recruiter’s identity.&lt;/strong&gt;&amp;nbsp;All our recruiters have verified LinkedIn profiles. If you’re unsure, you can confirm their identity by checking their profile or contacting us through our website.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;strong&gt;Be cautious of unusual communication methods.&lt;/strong&gt;&amp;nbsp;We do not conduct interviews over WhatsApp, Telegram, or SMS. All communication is done through official company emails and platforms.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;strong&gt;Double-check email addresses.&lt;/strong&gt;&amp;nbsp;All communication from us will come from emails ending in&amp;nbsp;&lt;strong&gt;@&lt;/strong&gt;&lt;a href="http://tether.to/"&gt;tether.to&lt;/a&gt;&lt;strong&gt;&amp;nbsp;or&amp;nbsp;@&lt;/strong&gt;&lt;a href="http://tether.io/"&gt;tether.io&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;strong&gt;We will never request payment or financial details.&lt;/strong&gt; If someone asks for personal financial information or payment at any point during the hiring process, it is a scam. Please report it immediately.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+
+&lt;p&gt;&lt;strong&gt;To apply:&lt;/strong&gt; &lt;a href="https://weworkremotely.com/remote-jobs/tether-ai-research-engineer"&gt;https://weworkremotely.com/remote-jobs/tether-ai-research-engineer&lt;/a&gt;&lt;/p&gt;
+</description>
+      <pubDate>Thu, 02 Apr 2026 20:28:59 +0000</pubDate>
+      <guid>https://weworkremotely.com/remote-jobs/tether-ai-research-engineer</guid>
+      <link>https://weworkremotely.com/remote-jobs/tether-ai-research-engineer</link>
+    </item>
+<item>
+      <title>Supportyourapp: (fluent German &amp; English) L1 Customer Support Consultant (EU Remote)</title>
+      <region>Anywhere in the World</region>
+      <category>Full-Stack Programming</category>
+      <description>
+
+&lt;p&gt;
+  &lt;strong&gt;Headquarters:&lt;/strong&gt; Cluj-Napoca, Cluj County, Romania
+&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Who we are?&lt;/strong&gt;&lt;/p&gt;&lt;p&gt;&lt;strong&gt;SupportYourApp &lt;/strong&gt;is a global Support-as-a-Service leader, partnering with tech companies and industry leaders like MasterCard, Calm and MacPaw in 30+ countries since 2010 to deliver secure customer and technical support. We operate globally, supporting clients in 60 languages across diverse industries. So what if you had a chance to be a part of the world’s leading SaaS, software, or hardware solutions?&lt;/p&gt;&lt;p&gt;Join our community as a &lt;strong&gt;Customer Support Consultant&lt;/strong&gt; today and thrive in a multicultural and multilingual environment while enjoying your home office. Unlock your potential by mastering new skills and achieving challenging goals in cooperation with our People First management approach. Excited? Let’s see what it takes.&lt;/p&gt;&lt;p&gt;&lt;strong&gt;What you will do:&lt;/strong&gt;&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Deliver outstanding customer support via emails, calls, and chats&lt;/li&gt;&lt;li&gt;Build strong and lasting customer relationships&lt;/li&gt;&lt;li&gt;Resolve customer issues quickly and efficiently, ensuring high-quality solutions&lt;/li&gt;&lt;li&gt;Keep up with evolving tools and technology&lt;/li&gt;&lt;li&gt;Escalate complex issues to the appropriate team for resolution&lt;/li&gt;&lt;li&gt;Apply the latest and greatest customer happiness practices&lt;/li&gt;&lt;li&gt;Maintain a deep understanding of client solutions and meet KPIs&lt;/li&gt;&lt;li&gt;Communicate with developers and cross-functional specialists&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;&lt;strong&gt;What you need to succeed in this role:&lt;/strong&gt;&lt;/p&gt;&lt;ul&gt;&lt;li&gt;&lt;strong&gt;Fluency in&amp;nbsp;German and English (C1 or higher), both spoken and written&lt;/strong&gt;&lt;/li&gt;&lt;li&gt;6–12 months of experience&amp;nbsp;in customer support&lt;/li&gt;&lt;li&gt;Strong&amp;nbsp;analytical thinking, research, and problem-solving skills&lt;/li&gt;&lt;li&gt;Tech-savvy, with strong system-handling skills, including routine navigation of&amp;nbsp;Google Workspace or Microsoft-based environments&lt;/li&gt;&lt;li&gt;Fast and accurate typing skills&amp;nbsp;with confident multi-platform usage&lt;/li&gt;&lt;li&gt;Proven customer service communication skills, including:&lt;/li&gt;&lt;ul&gt;&lt;li&gt;Objection handling&lt;/li&gt;&lt;li&gt;Structured and benefit-oriented dialogue&lt;/li&gt;&lt;li&gt;Empathy and clear, professional articulation&lt;/li&gt;&lt;/ul&gt;&lt;li&gt;Ability to consistently apply these communication skills across&amp;nbsp;all customer interaction channels&lt;/li&gt;&lt;li&gt;Positive, proactive, and responsible attitude&lt;/li&gt;&lt;li&gt;Personal computer (minimum&amp;nbsp;8 GB RAM) with a stable internet connection (50 Mbps download / 40 Mbps upload)&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;&lt;strong&gt;Benefits and Perks:&lt;/strong&gt;&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Flexible schedule (24/7)&lt;/li&gt;&lt;li&gt;Opportunity to cooperate fully &lt;strong&gt;remotely&lt;/strong&gt;&lt;/li&gt;&lt;li&gt;Inclusive international environment&lt;/li&gt;&lt;li&gt;Compensation in USD&lt;/li&gt;&lt;li&gt;Rewards for referring friends&lt;/li&gt;&lt;li&gt;Balance between project workload and personal time, but also –&amp;nbsp;internal health policy&lt;/li&gt;&lt;li&gt;Responsive leadership interested in your development and long-lasting cooperation&lt;/li&gt;&lt;li&gt;Greenhouse conditions for self-development&lt;/li&gt;&lt;li&gt;A culture built on trust, with no time-tracking requirements&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;*The items listed in this section may vary depending on the terms of your engagement. Certain benefits and conditions typically apply to employees; independent contractors may not be eligible for all of these. The specific terms, including compensation, benefits, and work conditions, will be clearly defined in your agreement if selected.&lt;/p&gt;&lt;p&gt;&lt;a href="http://www.supportyourapp.com/"&gt;&lt;/a&gt;You can learn more about the company and its culture by visiting our &lt;a href="https://supportyourapp.com/"&gt;official website&lt;/a&gt; and social pages on &lt;a href="https://www.facebook.com/supportyourapp/"&gt;Facebook&lt;/a&gt;, &lt;a href="https://www.instagram.com/supportyourapp?igsh=eDJycGdkbnVkMnBr"&gt;Instagram&lt;/a&gt;, and &lt;a href="https://www.linkedin.com/company/supportyourapp/posts/?feedView=all"&gt;LinkedIn&lt;/a&gt;.&lt;/p&gt;&lt;p&gt;So if you're a proactive &lt;strong&gt;Support Specialist&lt;/strong&gt; who thrives on solving problems, ensuring customer satisfaction, and delivering outstanding service, don't miss this opportunity and send us your CV in English to collaborate with us!&lt;/p&gt;&lt;p&gt;Over 1300+ specialists who already deliver exceptional customer experiences collaborating with SupportYourApp.&lt;/p&gt;&lt;p&gt;Know someone perfect for the role? &lt;a href="https://supportyourapp.com/referral/"&gt;Refer them&lt;/a&gt; and get rewarded!&lt;/p&gt;&lt;p&gt;&lt;em&gt;We adhere to the principles of equal treatment of candidates and prohibit discrimination on any grounds protected by law.&lt;/em&gt;&lt;/p&gt;&lt;p&gt;&lt;em&gt;Your personal data will be processed as described in the SupportYourApp &lt;/em&gt;&lt;a href="https://supportyourapp.com/candidate-privacy-notice/"&gt;&lt;em&gt;Candidate Privacy Notice&lt;/em&gt;&lt;/a&gt;&lt;em&gt;.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;To apply:&lt;/strong&gt; &lt;a href="https://weworkremotely.com/remote-jobs/supportyourapp-fluent-german-english-l1-customer-support-consultant-eu-remote-1"&gt;https://weworkremotely.com/remote-jobs/supportyourapp-fluent-german-english-l1-customer-support-consultant-eu-remote-1&lt;/a&gt;&lt;/p&gt;
+</description>
+      <pubDate>Tue, 30 Jun 2026 20:34:13 +0000</pubDate>
+      <guid>https://weworkremotely.com/remote-jobs/supportyourapp-fluent-german-english-l1-customer-support-consultant-eu-remote-1</guid>
+      <link>https://weworkremotely.com/remote-jobs/supportyourapp-fluent-german-english-l1-customer-support-consultant-eu-remote-1</link>
+    </item>
+<item>
+      <media:content url="https://wwr-pro.s3.amazonaws.com/logos/0171/5712/logo.gif" type="image/png"/>
+      <title>Supportyourapp: (fluent German &amp; English) L1 Customer Support Consultant (EU Remote)</title>
+      <region>Anywhere in the World</region>
+      <category>Full-Stack Programming</category>
+      <description>&lt;img src="https://we-work-remotely.imgix.net/logos/0171/5712/logo.gif?ixlib=rails-4.0.0&amp;w=50&amp;h=50&amp;dpr=2&amp;fit=fill&amp;auto=compress" /&gt;
+
+&lt;p&gt;
+  &lt;strong&gt;Headquarters:&lt;/strong&gt; Prešov, Prešov Region, Slovakia
+&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Who we are?&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;SupportYourApp &lt;/strong&gt;is a global Support-as-a-Service leader, partnering with tech companies and industry leaders like MasterCard, Calm and MacPaw in 30+ countries since 2010 to deliver secure customer and technical support. We operate globally, supporting clients in 60 languages across diverse industries. So what if you had a chance to be a part of the world’s leading SaaS, software, or hardware solutions?&lt;/p&gt;
+&lt;p&gt;Join our community as a &lt;strong&gt;Customer Support Consultant&lt;/strong&gt; today and thrive in a multicultural and multilingual environment while enjoying your home office. Unlock your potential by mastering new skills and achieving challenging goals in cooperation with our People First management approach. Excited? Let’s see what it takes.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;What you will do:&lt;/strong&gt;&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Deliver outstanding customer support via emails, calls, and chats&lt;/li&gt;
+&lt;li&gt;Build strong and lasting customer relationships&lt;/li&gt;
+&lt;li&gt;Resolve customer issues quickly and efficiently, ensuring high-quality solutions&lt;/li&gt;
+&lt;li&gt;Keep up with evolving tools and technology&lt;/li&gt;
+&lt;li&gt;Escalate complex issues to the appropriate team for resolution&lt;/li&gt;
+&lt;li&gt;Apply the latest and greatest customer happiness practices&lt;/li&gt;
+&lt;li&gt;Maintain a deep understanding of client solutions and meet KPIs&lt;/li&gt;
+&lt;li&gt;Communicate with developers and cross-functional specialists&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;What you need to succeed in this role:&lt;/strong&gt;&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;Fluency in&amp;nbsp;German and English (C1 or higher), both spoken and written&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;6–12 months of experience&amp;nbsp;in customer support&lt;/li&gt;
+&lt;li&gt;Strong&amp;nbsp;analytical thinking, research, and problem-solving skills&lt;/li&gt;
+&lt;li&gt;Tech-savvy, with strong system-handling skills, including routine navigation of&amp;nbsp;Google Workspace or Microsoft-based environments&lt;/li&gt;
+&lt;li&gt;Fast and accurate typing skills&amp;nbsp;with confident multi-platform usage&lt;/li&gt;
+&lt;li&gt;Proven customer service communication skills, including:&lt;/li&gt;
+&lt;ul&gt;
+&lt;li&gt;Objection handling&lt;/li&gt;
+&lt;li&gt;Structured and benefit-oriented dialogue&lt;/li&gt;
+&lt;li&gt;Empathy and clear, professional articulation&lt;/li&gt;
+&lt;/ul&gt;
+&lt;li&gt;Ability to consistently apply these communication skills across&amp;nbsp;all customer interaction channels&lt;/li&gt;
+&lt;li&gt;Positive, proactive, and responsible attitude&lt;/li&gt;
+&lt;li&gt;Personal computer (minimum&amp;nbsp;8 GB RAM) with a stable internet connection (50 Mbps download / 40 Mbps upload)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;Benefits and Perks:&lt;/strong&gt;&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Flexible schedule (24/7)&lt;/li&gt;
+&lt;li&gt;Opportunity to cooperate fully &lt;strong&gt;remotely&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;Inclusive international environment&lt;/li&gt;
+&lt;li&gt;Compensation in USD&lt;/li&gt;
+&lt;li&gt;Rewards for referring friends&lt;/li&gt;
+&lt;li&gt;Balance between project workload and personal time, but also –&amp;nbsp;internal health policy&lt;/li&gt;
+&lt;li&gt;Responsive leadership interested in your development and long-lasting cooperation&lt;/li&gt;
+&lt;li&gt;Greenhouse conditions for self-development&lt;/li&gt;
+&lt;li&gt;A culture built on trust, with no time-tracking requirements&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;*The items listed in this section may vary depending on the terms of your engagement. Certain benefits and conditions typically apply to employees; independent contractors may not be eligible for all of these. The specific terms, including compensation, benefits, and work conditions, will be clearly defined in your agreement if selected.&lt;/p&gt;
+&lt;p&gt;You can learn more about the company and its culture by visiting our &lt;a href="https://supportyourapp.com/"&gt;official website&lt;/a&gt; and social pages on &lt;a href="https://www.facebook.com/supportyourapp/"&gt;Facebook&lt;/a&gt;, &lt;a href="https://www.instagram.com/supportyourapp?igsh=eDJycGdkbnVkMnBr"&gt;Instagram&lt;/a&gt;, and &lt;a href="https://www.linkedin.com/company/supportyourapp/posts/?feedView=all"&gt;LinkedIn&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;So if you're a proactive &lt;strong&gt;Support Specialist&lt;/strong&gt; who thrives on solving problems, ensuring customer satisfaction, and delivering outstanding service, don't miss this opportunity and send us your CV in English to collaborate with us!&lt;/p&gt;
+&lt;p&gt;Over 1300+ specialists who already deliver exceptional customer experiences collaborating with SupportYourApp.&lt;/p&gt;
+&lt;p&gt;Know someone perfect for the role? &lt;a href="https://supportyourapp.com/referral/"&gt;Refer them&lt;/a&gt; and get rewarded!&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;We adhere to the principles of equal treatment of candidates and prohibit discrimination on any grounds protected by law.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;Your personal data will be processed as described in the SupportYourApp &lt;/em&gt;&lt;a href="https://supportyourapp.com/candidate-privacy-notice/"&gt;&lt;em&gt;Candidate Privacy Notice&lt;/em&gt;&lt;/a&gt;&lt;em&gt;.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;To apply:&lt;/strong&gt; &lt;a href="https://weworkremotely.com/remote-jobs/supportyourapp-fluent-german-english-l1-customer-support-consultant-eu-remote-1"&gt;https://weworkremotely.com/remote-jobs/supportyourapp-fluent-german-english-l1-customer-support-consultant-eu-remote-1&lt;/a&gt;&lt;/p&gt;
+</description>
+      <pubDate>Tue, 30 Jun 2026 20:34:13 +0000</pubDate>
+      <guid>https://weworkremotely.com/remote-jobs/supportyourapp-fluent-german-english-l1-customer-support-consultant-eu-remote-1</guid>
+      <link>https://weworkremotely.com/remote-jobs/supportyourapp-fluent-german-english-l1-customer-support-consultant-eu-remote-1</link>
+    </item>
+<item>
+      <title>Supportyourapp: (fluent German &amp; English) L1 Customer Support Consultant (EU Remote)</title>
+      <region>Anywhere in the World</region>
+      <category>Full-Stack Programming</category>
+      <description>
+
+&lt;p&gt;
+  &lt;strong&gt;Headquarters:&lt;/strong&gt; Košice, Košice Region, Slovakia
+&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Who we are?&lt;/strong&gt;&lt;/p&gt;&lt;p&gt;&lt;strong&gt;SupportYourApp &lt;/strong&gt;is a global Support-as-a-Service leader, partnering with tech companies and industry leaders like MasterCard, Calm and MacPaw in 30+ countries since 2010 to deliver secure customer and technical support. We operate globally, supporting clients in 60 languages across diverse industries. So what if you had a chance to be a part of the world’s leading SaaS, software, or hardware solutions?&lt;/p&gt;&lt;p&gt;Join our community as a &lt;strong&gt;Customer Support Consultant&lt;/strong&gt; today and thrive in a multicultural and multilingual environment while enjoying your home office. Unlock your potential by mastering new skills and achieving challenging goals in cooperation with our People First management approach. Excited? Let’s see what it takes.&lt;/p&gt;&lt;p&gt;&lt;strong&gt;What you will do:&lt;/strong&gt;&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Deliver outstanding customer support via emails, calls, and chats&lt;/li&gt;&lt;li&gt;Build strong and lasting customer relationships&lt;/li&gt;&lt;li&gt;Resolve customer issues quickly and efficiently, ensuring high-quality solutions&lt;/li&gt;&lt;li&gt;Keep up with evolving tools and technology&lt;/li&gt;&lt;li&gt;Escalate complex issues to the appropriate team for resolution&lt;/li&gt;&lt;li&gt;Apply the latest and greatest customer happiness practices&lt;/li&gt;&lt;li&gt;Maintain a deep understanding of client solutions and meet KPIs&lt;/li&gt;&lt;li&gt;Communicate with developers and cross-functional specialists&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;&lt;strong&gt;What you need to succeed in this role:&lt;/strong&gt;&lt;/p&gt;&lt;ul&gt;&lt;li&gt;&lt;strong&gt;Fluency in&amp;nbsp;German and English (C1 or higher), both spoken and written&lt;/strong&gt;&lt;/li&gt;&lt;li&gt;6–12 months of experience&amp;nbsp;in customer support&lt;/li&gt;&lt;li&gt;Strong&amp;nbsp;analytical thinking, research, and problem-solving skills&lt;/li&gt;&lt;li&gt;Tech-savvy, with strong system-handling skills, including routine navigation of&amp;nbsp;Google Workspace or Microsoft-based environments&lt;/li&gt;&lt;li&gt;Fast and accurate typing skills&amp;nbsp;with confident multi-platform usage&lt;/li&gt;&lt;li&gt;Proven customer service communication skills, including:&lt;/li&gt;&lt;ul&gt;&lt;li&gt;Objection handling&lt;/li&gt;&lt;li&gt;Structured and benefit-oriented dialogue&lt;/li&gt;&lt;li&gt;Empathy and clear, professional articulation&lt;/li&gt;&lt;/ul&gt;&lt;li&gt;Ability to consistently apply these communication skills across&amp;nbsp;all customer interaction channels&lt;/li&gt;&lt;li&gt;Positive, proactive, and responsible attitude&lt;/li&gt;&lt;li&gt;Personal computer (minimum&amp;nbsp;8 GB RAM) with a stable internet connection (50 Mbps download / 40 Mbps upload)&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;&lt;strong&gt;Benefits and Perks:&lt;/strong&gt;&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Flexible schedule (24/7)&lt;/li&gt;&lt;li&gt;Opportunity to cooperate fully &lt;strong&gt;remotely&lt;/strong&gt;&lt;/li&gt;&lt;li&gt;Inclusive international environment&lt;/li&gt;&lt;li&gt;Compensation in USD&lt;/li&gt;&lt;li&gt;Rewards for referring friends&lt;/li&gt;&lt;li&gt;Balance between project workload and personal time, but also –&amp;nbsp;internal health policy&lt;/li&gt;&lt;li&gt;Responsive leadership interested in your development and long-lasting cooperation&lt;/li&gt;&lt;li&gt;Greenhouse conditions for self-development&lt;/li&gt;&lt;li&gt;A culture built on trust, with no time-tracking requirements&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;*The items listed in this section may vary depending on the terms of your engagement. Certain benefits and conditions typically apply to employees; independent contractors may not be eligible for all of these. The specific terms, including compensation, benefits, and work conditions, will be clearly defined in your agreement if selected.&lt;/p&gt;&lt;p&gt;&lt;a href="http://www.supportyourapp.com/"&gt;&lt;/a&gt;You can learn more about the company and its culture by visiting our &lt;a href="https://supportyourapp.com/"&gt;official website&lt;/a&gt; and social pages on &lt;a href="https://www.facebook.com/supportyourapp/"&gt;Facebook&lt;/a&gt;, &lt;a href="https://www.instagram.com/supportyourapp?igsh=eDJycGdkbnVkMnBr"&gt;Instagram&lt;/a&gt;, and &lt;a href="https://www.linkedin.com/company/supportyourapp/posts/?feedView=all"&gt;LinkedIn&lt;/a&gt;.&lt;/p&gt;&lt;p&gt;So if you're a proactive &lt;strong&gt;Support Specialist&lt;/strong&gt; who thrives on solving problems, ensuring customer satisfaction, and delivering outstanding service, don't miss this opportunity and send us your CV in English to collaborate with us!&lt;/p&gt;&lt;p&gt;Over 1300+ specialists who already deliver exceptional customer experiences collaborating with SupportYourApp.&lt;/p&gt;&lt;p&gt;Know someone perfect for the role? &lt;a href="https://supportyourapp.com/referral/"&gt;Refer them&lt;/a&gt; and get rewarded!&lt;/p&gt;&lt;p&gt;&lt;em&gt;We adhere to the principles of equal treatment of candidates and prohibit discrimination on any grounds protected by law.&lt;/em&gt;&lt;/p&gt;&lt;p&gt;&lt;em&gt;Your personal data will be processed as described in the SupportYourApp &lt;/em&gt;&lt;a href="https://supportyourapp.com/candidate-privacy-notice/"&gt;&lt;em&gt;Candidate Privacy Notice&lt;/em&gt;&lt;/a&gt;&lt;em&gt;.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;To apply:&lt;/strong&gt; &lt;a href="https://weworkremotely.com/remote-jobs/supportyourapp-fluent-german-english-l1-customer-support-consultant-eu-remote"&gt;https://weworkremotely.com/remote-jobs/supportyourapp-fluent-german-english-l1-customer-support-consultant-eu-remote&lt;/a&gt;&lt;/p&gt;
+</description>
+      <pubDate>Tue, 30 Jun 2026 20:33:57 +0000</pubDate>
+      <guid>https://weworkremotely.com/remote-jobs/supportyourapp-fluent-german-english-l1-customer-support-consultant-eu-remote</guid>
+      <link>https://weworkremotely.com/remote-jobs/supportyourapp-fluent-german-english-l1-customer-support-consultant-eu-remote</link>
+    </item>
+<item>
+      <title>Supportyourapp: (Native Finnish) Customer Support Consultant (remotely)</title>
+      <region>Anywhere in the World</region>
+      <category>Full-Stack Programming</category>
+      <description>
+
+&lt;p&gt;
+  &lt;strong&gt;Headquarters:&lt;/strong&gt; Alicante, Valencian Community, Spain
+&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Who we are?&lt;/strong&gt;&lt;/p&gt;&lt;p&gt;&lt;strong&gt;SupportYourApp&lt;/strong&gt; is a global Support-as-a-Service leader, collaborating with top-tier tech companies like Mastercard, Calm, and MacPaw since 2010. We operate in 30+ countries and from 90+ countries, and support customers in 60 languages, helping SaaS, software, and hardware brands deliver secure, world-class customer and technical support.&lt;/p&gt;&lt;p&gt;Right now, we’re expanding our &lt;strong&gt;talent bench&lt;/strong&gt; — a pool of skilled Customer Support Consultants who want to grow with us and be the first in line when new projects open.&lt;br&gt;If you’re ready to join a multicultural, multilingual community and grow professionally while working from home, this could be your next step.&lt;/p&gt;&lt;p&gt;&lt;strong&gt;What you will do:&lt;/strong&gt;&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Deliver outstanding customer support via calls, chats and emails&lt;/li&gt;&lt;li&gt;Build strong and lasting customer relationships&lt;/li&gt;&lt;li&gt;Keep up with evolving tools and technology&lt;/li&gt;&lt;li&gt;Handle sensitive customer data with care and security&lt;/li&gt;&lt;li&gt;Apply the latest and greatest customer happiness practices&lt;/li&gt;&lt;li&gt;Maintain deep understanding of client solutions and meet KPI&lt;/li&gt;&lt;li&gt;Communicate with developers and cross-functional specialists&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;&lt;strong&gt;What you need to succeed in this role: &lt;/strong&gt;&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Native Finnish and good English communication skills (at B2 level or higher)&lt;/li&gt;&lt;li&gt;&lt;strong&gt;6+ months of experience in customer support role&lt;/strong&gt;&lt;/li&gt;&lt;li&gt;CRM systems expertise&lt;/li&gt;&lt;li&gt;Strong analytical thinking and research skills&lt;/li&gt;&lt;li&gt;Positive, proactive and responsible attitude&lt;/li&gt;&lt;li&gt;Personal computer (at least 8Gb of RAM) with a stable internet connection (minimum 50 Mbps–download and 40 Mbps–upload)&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;&lt;strong&gt;Will be a great plus: &lt;/strong&gt;&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Experience in technical support&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;&lt;strong&gt;What you get in return:&lt;/strong&gt;&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Provide services during flexible hours&lt;/li&gt;&lt;li&gt;Opportunity to cooperate fully &lt;strong&gt;remotely&lt;/strong&gt;&lt;/li&gt;&lt;li&gt;Inclusive international environment&lt;/li&gt;&lt;li&gt;Compensation in USD&lt;/li&gt;&lt;li&gt;Rewards for referring friends&lt;/li&gt;&lt;li&gt;Balance between project workload and personal time, but also –&amp;nbsp;internal health policy&lt;/li&gt;&lt;li&gt;Responsive leadership interested in your development and long-lasting cooperation&lt;/li&gt;&lt;li&gt;Greenhouse conditions for self-development&lt;/li&gt;&lt;li&gt;A culture built on trust, with no time-tracking requirements&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;&lt;a href="http://www.supportyourapp.com/"&gt;&lt;/a&gt;If this is about you — let’s get to know each other before 2026 opens its doors. We can simply exchange ideas or talk through the opportunities for our growth together &lt;/p&gt;&lt;p&gt;*Benefits and conditions may vary depending on the terms of your engagement. Some benefits typically apply to employees; independent contractors may not be eligible for all of them. Final terms will be clearly defined in your agreement if selected.&lt;/p&gt;&lt;p&gt;&lt;em&gt;We adhere to the principles of equal treatment of candidates and prohibit discrimination on any grounds protected by law.&lt;/em&gt;&lt;/p&gt;&lt;p&gt;&lt;em&gt;Your personal data will be processed as described in the SupportYourApp &lt;/em&gt;&lt;a href="https://supportyourapp.com/candidate-privacy-notice/"&gt;&lt;em&gt;Candidate Privacy Notice&lt;/em&gt;&lt;/a&gt;&lt;em&gt;.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;To apply:&lt;/strong&gt; &lt;a href="https://weworkremotely.com/remote-jobs/supportyourapp-native-finnish-customer-support-consultant-remotely"&gt;https://weworkremotely.com/remote-jobs/supportyourapp-native-finnish-customer-support-consultant-remotely&lt;/a&gt;&lt;/p&gt;
+</description>
+      <pubDate>Tue, 30 Jun 2026 20:33:45 +0000</pubDate>
+      <guid>https://weworkremotely.com/remote-jobs/supportyourapp-native-finnish-customer-support-consultant-remotely</guid>
+      <link>https://weworkremotely.com/remote-jobs/supportyourapp-native-finnish-customer-support-consultant-remotely</link>
+    </item>
+<item>
+      <title>Supportyourapp: (Native Danish) Customer Support Consultant (remotely)</title>
+      <region>Anywhere in the World</region>
+      <category>Full-Stack Programming</category>
+      <description>
+
+&lt;p&gt;
+  &lt;strong&gt;Headquarters:&lt;/strong&gt; Bergen, Vestland, Norway
+&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Who we are?&lt;/strong&gt;&lt;/p&gt;&lt;p&gt;&lt;strong&gt;SupportYourApp&lt;/strong&gt; is a global Support-as-a-Service leader, collaborating with top-tier tech companies like Mastercard, Calm, and MacPaw since 2010. We operate in 30+ countries and from 90+ countries, and support customers in 60 languages, helping SaaS, software, and hardware brands deliver secure, world-class customer and technical support.&lt;/p&gt;&lt;p&gt;Right now, we’re expanding our &lt;strong&gt;talent bench&lt;/strong&gt; — a pool of skilled Customer Support Consultants who want to grow with us and be the first in line when new projects open.&lt;br&gt;If you’re ready to join a multicultural, multilingual community and grow professionally while working from home, this could be your next step.&lt;/p&gt;&lt;p&gt;&lt;strong&gt;What you will do:&lt;/strong&gt;&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Deliver outstanding customer support via calls, chats and emails&lt;/li&gt;&lt;li&gt;Build strong and lasting customer relationships&lt;/li&gt;&lt;li&gt;Keep up with evolving tools and technology&lt;/li&gt;&lt;li&gt;Handle sensitive customer data with care and security&lt;/li&gt;&lt;li&gt;Apply the latest and greatest customer happiness practices&lt;/li&gt;&lt;li&gt;Maintain deep understanding of client solutions and meet KPI&lt;/li&gt;&lt;li&gt;Communicate with developers and cross-functional specialists&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;&lt;strong&gt;What you need to succeed in this role: &lt;/strong&gt;&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Native Danish and good English communication skills (at B2 level or higher)&lt;/li&gt;&lt;li&gt;&lt;strong&gt;6+ months of experience in customer support role&lt;/strong&gt;&lt;/li&gt;&lt;li&gt;CRM systems expertise&lt;/li&gt;&lt;li&gt;Strong analytical thinking and research skills&lt;/li&gt;&lt;li&gt;Positive, proactive and responsible attitude&lt;/li&gt;&lt;li&gt;Personal computer (at least 8Gb of RAM) with a stable internet connection (minimum 50 Mbps–download and 40 Mbps–upload)&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;&lt;strong&gt;Will be a great plus: &lt;/strong&gt;&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Experience in technical support&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;&lt;strong&gt;What you get in return:&lt;/strong&gt;&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Provide services during flexible hours&lt;/li&gt;&lt;li&gt;Opportunity to cooperate fully &lt;strong&gt;remotely&lt;/strong&gt;&lt;/li&gt;&lt;li&gt;Inclusive international environment&lt;/li&gt;&lt;li&gt;Compensation in USD&lt;/li&gt;&lt;li&gt;Rewards for referring friends&lt;/li&gt;&lt;li&gt;Balance between project workload and personal time, but also –&amp;nbsp;internal health policy&lt;/li&gt;&lt;li&gt;Responsive leadership interested in your development and long-lasting cooperation&lt;/li&gt;&lt;li&gt;Greenhouse conditions for self-development&lt;/li&gt;&lt;li&gt;A culture built on trust, with no time-tracking requirements&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;&lt;a href="http://www.supportyourapp.com/"&gt;&lt;/a&gt;If this is about you — let’s get to know each other before 2026 opens its doors. We can simply exchange ideas or talk through the opportunities for our growth together &lt;/p&gt;&lt;p&gt;*Benefits and conditions may vary depending on the terms of your engagement. Some benefits typically apply to employees; independent contractors may not be eligible for all of them. Final terms will be clearly defined in your agreement if selected.&lt;/p&gt;&lt;p&gt;&lt;em&gt;We adhere to the principles of equal treatment of candidates and prohibit discrimination on any grounds protected by law.&lt;/em&gt;&lt;/p&gt;&lt;p&gt;&lt;em&gt;Your personal data will be processed as described in the SupportYourApp &lt;/em&gt;&lt;a href="https://supportyourapp.com/candidate-privacy-notice/"&gt;&lt;em&gt;Candidate Privacy Notice&lt;/em&gt;&lt;/a&gt;&lt;em&gt;.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;To apply:&lt;/strong&gt; &lt;a href="https://weworkremotely.com/remote-jobs/supportyourapp-native-danish-customer-support-consultant-remotely"&gt;https://weworkremotely.com/remote-jobs/supportyourapp-native-danish-customer-support-consultant-remotely&lt;/a&gt;&lt;/p&gt;
+</description>
+      <pubDate>Tue, 30 Jun 2026 20:33:44 +0000</pubDate>
+      <guid>https://weworkremotely.com/remote-jobs/supportyourapp-native-danish-customer-support-consultant-remotely</guid>
+      <link>https://weworkremotely.com/remote-jobs/supportyourapp-native-danish-customer-support-consultant-remotely</link>
+    </item>
+</channel></rss>

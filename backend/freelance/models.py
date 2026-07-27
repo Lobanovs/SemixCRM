@@ -24,6 +24,7 @@ class FreelanceOrder:
     published_at: str = ""
     discovered_at: str = ""
     relevance: int = 0
+    relevance_points: int = 0
     relevance_reasons: tuple[str, ...] = ()
     status: str = "Новый"
     next_step: str = "Изучить заказ"
@@ -52,6 +53,31 @@ class FreelanceSettings:
     interval_seconds: int = 60
     sniper_enabled: bool = False
     telegram_enabled: bool = False
+
+
+@dataclass(frozen=True)
+class FreelanceCleanupRules:
+    """Правила массовой уборки списка заказов.
+
+    Пустое правило ничего не скрывает: чтобы убрать всё подряд, нужно явно
+    выставить `include_everything`. Так случайный клик не уносит весь список.
+    """
+
+    max_relevance: int | None = None
+    older_than_days: int | None = None
+    sources: tuple[str, ...] = ()
+    statuses: tuple[str, ...] = ()
+    keep_worked: bool = True
+    include_everything: bool = False
+
+    def is_empty(self) -> bool:
+        return not (
+            self.include_everything
+            or self.max_relevance is not None
+            or self.older_than_days is not None
+            or self.sources
+            or self.statuses
+        )
 
 
 @dataclass(frozen=True)

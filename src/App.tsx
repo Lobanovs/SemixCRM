@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   BriefcaseBusiness,
   CalendarDays,
@@ -22,36 +22,45 @@ import JobsPage from './pages/JobsPage'
 import FreelancePage from './pages/FreelancePage'
 import SchedulePage from './pages/SchedulePage'
 import ClientsPage from './pages/ClientsPage'
+import SettingsPage from './pages/SettingsPage'
+import PageGuide from './components/PageGuide'
+import { HOME_GUIDE } from './guides'
+import { apiRequest } from './api'
 
 type Accent = 'blue' | 'green' | 'purple' | 'orange' | 'gray'
 
+// Переход между разделами идёт по устойчивому id: раньше сравнивались подписи меню,
+// и переименование пункта молча ломало маршрут.
+type SectionId = 'home' | 'projects' | 'jobs' | 'freelance' | 'schedule' | 'clients' | 'settings'
+
 type Feature = {
+  id: SectionId
   title: string
-  navTitle?: string
   description: string
   guide: string
   icon: LucideIcon
   accent: Accent
 }
 
-const clientSectionTitle = 'Волк с Уолл-стрит'
-
 const features: Feature[] = [
   {
+    id: 'projects',
     title: 'Мои проекты',
     description: 'Управление проектами',
-    guide: 'Создавайте проекты, добавляйте задачи, устанавливайте сроки и отслеживайте прогресс.',
+    guide: 'Добавьте папку проекта, задайте команду запуска — и стартуйте его одной кнопкой прямо из CRM.',
     icon: Folder,
     accent: 'blue',
   },
   {
+    id: 'jobs',
     title: 'Работа (вакансии)',
     description: 'Поиск и отклик на вакансии',
-    guide: 'Сохраняйте интересные вакансии, отслеживайте этапы откликов и собеседований.',
+    guide: 'Собирайте вакансии с hh.ru, Хабр Карьеры и Telegram-каналов и ведите этапы откликов.',
     icon: BriefcaseBusiness,
     accent: 'green',
   },
   {
+    id: 'freelance',
     title: 'Фриланс',
     description: 'Заказы, клиенты и доходы',
     guide: 'Ведите список клиентов, проектов, доходов и расходов. Храните всю информацию в одном месте.',
@@ -59,6 +68,7 @@ const features: Feature[] = [
     accent: 'purple',
   },
   {
+    id: 'schedule',
     title: 'Расписание по дням',
     description: 'Планирование и задачи',
     guide: 'Планируйте свой день, добавляйте задачи и не забывайте о важных делах.',
@@ -67,26 +77,62 @@ const features: Feature[] = [
   },
 ]
 
-const menuItems = [
-  { title: 'Главная', icon: Home, accent: 'blue' as Accent },
-  ...features.map(({ title, icon, accent }) => ({ title, icon, accent })),
-  { title: clientSectionTitle, icon: PawPrint, accent: 'blue' as Accent },
-  { title: 'Настройки', icon: Settings, accent: 'gray' as Accent },
+const menuItems: { id: SectionId; title: string; icon: LucideIcon; accent: Accent }[] = [
+  { id: 'home', title: 'Главная', icon: Home, accent: 'blue' },
+  ...features.map(({ id, title, icon, accent }) => ({ id, title, icon, accent })),
+  { id: 'clients', title: 'Волк с Уолл-стрит', icon: PawPrint, accent: 'blue' },
+  { id: 'settings', title: 'Настройки', icon: Settings, accent: 'gray' },
 ]
 
-const stats = [
-  { value: '3', label: 'Проекта' },
-  { value: '2', label: 'Вакансии' },
-  { value: '1', label: 'Клиент' },
-  { value: '5', label: 'Задач на сегодня' },
+type DashboardStats = { value: string; label: string }[]
+
+const PLACEHOLDER_STATS: DashboardStats = [
+  { value: '—', label: 'Проекты' },
+  { value: '—', label: 'Вакансии' },
+  { value: '—', label: 'Клиенты' },
+  { value: '—', label: 'Задач на сегодня' },
 ]
 
 function App() {
-  const [active, setActive] = useState('Главная')
+  const [active, setActive] = useState<SectionId>('home')
   const [search, setSearch] = useState('')
   const [isSidebarOpen, setSidebarOpen] = useState(false)
   const [showGuide, setShowGuide] = useState(false)
+  const [stats, setStats] = useState<DashboardStats>(PLACEHOLDER_STATS)
   const [isDark, setIsDark] = useState(() => window.localStorage.getItem('semix-crm-theme') === 'dark')
+
+  // Цифры на главной берутся из тех же эндпоинтов, что и разделы: иначе они врут.
+  useEffect(() => {
+    void (async () => {
+      const count = async (path: string, read: (payload: never) => number) => {
+        try {
+          return read(await apiRequest(path, { fallback: '' }) as never)
+        } catch {
+          return null
+        }
+      }
+      const [projects, jobs, clients, schedule] = await Promise.all([
+        count('/api/projects', (payload: { stats?: { total?: number } }) => payload.stats?.total ?? 0),
+        count('/api/jobs', (payload: { stats?: { total?: number } }) => payload.stats?.total ?? 0),
+        count('/api/clients', (payload: { stats?: { total?: number } }) => payload.stats?.total ?? 0),
+        count('/api/schedule', (payload: { stats?: { total?: number; done?: number } }) =>
+          Math.max(0, (payload.stats?.total ?? 0) - (payload.stats?.done ?? 0))),
+      ])
+      const show = (value: number | null) => (value === null ? '—' : String(value))
+      setStats([
+        { value: show(projects), label: 'Проекты' },
+        { value: show(jobs), label: 'Вакансии' },
+        { value: show(clients), label: 'Клиенты' },
+        { value: show(schedule), label: 'Задач на неделю' },
+      ])
+    })()
+  }, [])
+
+  // Прокручиваем после commit React: до него браузерное scroll anchoring
+  // восстанавливало позицию старого раздела поверх только что открытого.
+  useEffect(() => {
+    document.querySelector('.workspace')?.scrollTo({ top: 0, behavior: 'auto' })
+  }, [active])
 
   const filteredFeatures = useMemo(() => {
     const query = search.trim().toLocaleLowerCase('ru')
@@ -96,31 +142,28 @@ function App() {
     )
   }, [search])
 
-  const selectSection = (title: string) => {
-    setActive(title)
+  const selectSection = (id: SectionId) => {
+    setActive(id)
     setSidebarOpen(false)
-    if (title !== 'Главная') {
-      document.querySelector('.workspace')?.scrollTo({ top: 0, behavior: 'smooth' })
-    }
   }
 
   return (
     <div className={`app-shell ${isDark ? 'theme-dark' : ''}`}>
       <aside className={`sidebar ${isSidebarOpen ? 'is-open' : ''}`} aria-label="Главная навигация">
         <div className="brand-row">
-          <a className="brand" href="#home" onClick={() => selectSection('Главная')}>Semix CRM</a>
+          <a className="brand" href="#home" onClick={() => selectSection('home')}>Semix CRM</a>
           <button className="mobile-close" type="button" onClick={() => setSidebarOpen(false)} aria-label="Закрыть меню">
             <X size={22} />
           </button>
         </div>
 
-        <nav className="side-nav">
-          {menuItems.map(({ title, icon: Icon }) => (
+        <nav className="side-nav" data-guide="home-nav">
+          {menuItems.map(({ id, title, icon: Icon }) => (
             <button
-              className={`nav-item ${active === title ? 'active' : ''}`}
+              className={`nav-item ${active === id ? 'active' : ''}`}
               type="button"
-              key={title}
-              onClick={() => selectSection(title)}
+              key={id}
+              onClick={() => selectSection(id)}
             >
               <Icon size={27} strokeWidth={1.7} />
               <span>{title}</span>
@@ -144,7 +187,7 @@ function App() {
         <button className="menu-toggle" type="button" onClick={() => setSidebarOpen(true)} aria-label="Открыть меню">
           <Menu size={24} />
         </button>
-        <label className="search-box">
+        <label className="search-box" data-guide="home-search">
           <span className="sr-only">Поиск</span>
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск..." />
           <Search size={24} strokeWidth={1.8} />
@@ -152,6 +195,7 @@ function App() {
         <button
           className="theme-toggle"
           type="button"
+          data-guide="home-theme"
           aria-label={isDark ? 'Включить светлую тему' : 'Включить тёмную тему'}
           aria-pressed={isDark}
           title={isDark ? 'Светлая тема' : 'Тёмная тема'}
@@ -169,25 +213,28 @@ function App() {
       </header>
 
       <main className="workspace" id="home">
-        {active === 'Главная' ? (
+        {active === 'home' ? (
           <Dashboard
             features={filteredFeatures}
             hasSearch={Boolean(search.trim())}
+            stats={stats}
             onOpen={selectSection}
             onClearSearch={() => setSearch('')}
           />
-        ) : active === 'Мои проекты' ? (
+        ) : active === 'projects' ? (
           <ProjectsPage />
-        ) : active === 'Работа (вакансии)' ? (
+        ) : active === 'jobs' ? (
           <JobsPage />
-        ) : active === 'Фриланс' ? (
+        ) : active === 'freelance' ? (
           <FreelancePage />
-        ) : active === 'Расписание по дням' ? (
+        ) : active === 'schedule' ? (
           <SchedulePage />
-        ) : active === clientSectionTitle ? (
+        ) : active === 'clients' ? (
           <ClientsPage />
+        ) : active === 'settings' ? (
+          <SettingsPage />
         ) : (
-          <SectionPlaceholder title={active} onBack={() => selectSection('Главная')} />
+          <SectionPlaceholder id={active} onBack={() => selectSection('home')} />
         )}
       </main>
 
@@ -196,8 +243,9 @@ function App() {
           <section className="guide-modal" role="dialog" aria-modal="true" aria-labelledby="guide-title" onMouseDown={(event) => event.stopPropagation()}>
             <button className="modal-close" type="button" aria-label="Закрыть" onClick={() => setShowGuide(false)}><X size={22} /></button>
             <Lightbulb className="modal-icon" size={34} />
-            <h2 id="guide-title">Как использовать Semix CRM</h2>
-            <p>Выберите нужный раздел в меню или воспользуйтесь карточками быстрого доступа. Поиск поможет быстро найти нужную информацию.</p>
+            <h2 id="guide-title">Где искать инструкцию</h2>
+            <p>В каждом разделе под заголовком есть блок «Как пользоваться» с пошаговой инструкцией. Кнопка «Показать на экране» внутри него подсветит нужные элементы прямо в интерфейсе.</p>
+            <p>При первом заходе в раздел инструкция открывается сама, дальше — по кнопке.</p>
             <button className="primary-button" type="button" onClick={() => setShowGuide(false)}>Понятно</button>
           </section>
         </div>
@@ -209,12 +257,14 @@ function App() {
 function Dashboard({
   features,
   hasSearch,
+  stats,
   onOpen,
   onClearSearch,
 }: {
   features: Feature[]
   hasSearch: boolean
-  onOpen: (title: string) => void
+  stats: DashboardStats
+  onOpen: (id: SectionId) => void
   onClearSearch: () => void
 }) {
   return (
@@ -224,12 +274,19 @@ function Dashboard({
         <p>Добро пожаловать в Semix CRM!<br />Ваш личный помощник для организации дел, проектов и задач.</p>
       </section>
 
+      <PageGuide
+        sectionId="home"
+        title="Как пользоваться Semix CRM"
+        intro="Короткая вводная по оболочке. В каждом разделе есть своя инструкция с таким же туром по кнопкам."
+        steps={HOME_GUIDE}
+      />
+
       <section className="quick-section">
         <h2>Быстрый доступ</h2>
         {features.length ? (
           <div className="quick-grid">
-            {features.map(({ title, description, icon: Icon, accent }) => (
-              <button className="quick-card" type="button" key={title} onClick={() => onOpen(title)}>
+            {features.map(({ id, title, description, icon: Icon, accent }) => (
+              <button className="quick-card" type="button" key={id} onClick={() => onOpen(id)}>
                 <IconTile icon={Icon} accent={accent} />
                 <span className="quick-copy">
                   <strong>{title}</strong>
@@ -249,7 +306,7 @@ function Dashboard({
 
       {!hasSearch && (
         <section className="guide-section">
-          <h2>Как использовать систему</h2>
+          <h2>Что в каждом разделе</h2>
           <div className="guide-layout">
             <div className="steps-list">
               {features.map(({ title, guide, icon: Icon, accent }, index) => (
@@ -281,7 +338,7 @@ function Dashboard({
                 </ul>
               </aside>
 
-              <section className="stats-card">
+              <section className="stats-card" data-guide="home-stats">
                 <h3>Статистика</h3>
                 <div className="stats-grid">
                   {stats.map(({ value, label }) => (
@@ -301,13 +358,13 @@ function IconTile({ icon: Icon, accent }: { icon: LucideIcon; accent: Accent }) 
   return <span className={`icon-tile ${accent}`}><Icon size={31} strokeWidth={1.8} /></span>
 }
 
-function SectionPlaceholder({ title, onBack }: { title: string; onBack: () => void }) {
-  const item = menuItems.find((entry) => entry.title === title) ?? menuItems[0]
+function SectionPlaceholder({ id, onBack }: { id: SectionId; onBack: () => void }) {
+  const item = menuItems.find((entry) => entry.id === id) ?? menuItems[0]
   const Icon = item.icon
   return (
     <section className="section-placeholder">
       <IconTile icon={Icon} accent={item.accent} />
-      <h1>{title}</h1>
+      <h1>{item.title}</h1>
       <p>Раздел готов к наполнению данными.</p>
       <button className="primary-button" type="button" onClick={onBack}>Вернуться на главную</button>
     </section>

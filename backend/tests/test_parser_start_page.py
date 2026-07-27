@@ -51,7 +51,7 @@ class ParserStartPageTests(unittest.TestCase):
     def test_collect_2gis_passes_selected_page_to_parser_command(self) -> None:
         captured: dict[str, list[str]] = {}
 
-        def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        def fake_run(command: list[str], *_: object) -> subprocess.CompletedProcess[str]:
             captured["command"] = command
             output_path = Path(command[command.index("-o") + 1])
             output_path.write_text('[{"name": "Тестовая компания"}]', encoding="utf-8")
@@ -61,7 +61,7 @@ class ParserStartPageTests(unittest.TestCase):
             patch.object(parser, "OUTPUT_DIR", Path(self.temp_dir.name)),
             patch.object(parser, "ensure_parser2gis_command", return_value=["parser-2gis"], create=True),
             patch.object(parser, "resolve_parser2gis_city_code", return_value="novosibirsk"),
-            patch.object(parser.subprocess, "run", side_effect=fake_run),
+            patch.object(parser, "_run_parser_process", side_effect=fake_run),
         ):
             parser.collect_2gis("Новосибирск", "стоматологии", 10, start_page=4)
 

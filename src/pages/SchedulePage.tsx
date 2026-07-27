@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Clock3,
   FileText,
   ListChecks,
   Plus,
@@ -15,6 +14,8 @@ import {
   X,
 } from 'lucide-react'
 import { MetricCard, SidePanel } from '../components/DashboardUi'
+import PageGuide from '../components/PageGuide'
+import { SCHEDULE_GUIDE } from '../guides'
 
 type TaskKind = 'task' | 'meeting'
 type Task = { id: number; date: string; title: string; time: string; kind: TaskKind; done: boolean }
@@ -212,14 +213,22 @@ export default function SchedulePage() {
       <div className="schedule-grid">
         <section className="schedule-main">
           <header className="page-title-block"><h1>Расписание по дням</h1><p>Планируйте неделю, фиксируйте результаты и анализируйте прогресс</p></header>
+
+          <PageGuide
+            sectionId="schedule"
+            title="Как пользоваться разделом «Расписание по дням»"
+            intro="Неделя из семи колонок: задачи и встречи по дням, заметки, цели и итоги недели."
+            steps={SCHEDULE_GUIDE}
+          />
+
           <div className="schedule-controls">
-            <div className="week-switcher">
+            <div className="week-switcher" data-guide="schedule-week">
               <button type="button" aria-label="Предыдущая неделя" onClick={() => changeWeek(-1)}><ChevronLeft /></button>
               <strong>{formatWeek(weekStart)}</strong>
               <button type="button" aria-label="Следующая неделя" onClick={() => changeWeek(1)}><ChevronRight /></button>
               <button className="today-button" type="button" onClick={goToday}><CalendarDays size={16} />Сегодня</button>
             </div>
-            <button className="solid-action" type="button" onClick={() => openCreateTask()}><Plus size={19} />Добавить задачу</button>
+            <button className="solid-action" type="button" data-guide="schedule-add" onClick={() => openCreateTask()}><Plus size={19} />Добавить задачу</button>
           </div>
           {loading && <div className="schedule-loading" role="status">Загружаем сохранённое расписание…</div>}
           {error && <div className="schedule-error" role="alert">{error}<button type="button" onClick={() => void loadSchedule()}>Повторить</button></div>}
@@ -237,7 +246,7 @@ export default function SchedulePage() {
                 <textarea value={summary} onChange={(event) => setSummary(event.target.value)} aria-label="Итоги недели" placeholder="Запишите, что получилось и что важно улучшить…" />
                 <button className="solid-action save-summary" type="button" onClick={() => void saveWeek()} disabled={saving}><Check size={18} />{saving ? 'Сохраняем…' : 'Сохранить итоги недели'}</button>
               </section>
-              <section className="goals-panel">
+              <section className="goals-panel" data-guide="schedule-goals">
                 <div className="summary-panel-title"><h2>Цели на неделю</h2><button type="button" onClick={() => setShowGoalModal(true)}>Добавить</button></div>
                 <div className="goal-list">
                   {data.goals.length === 0 && <p className="goal-empty">Целей пока нет. Добавьте первую цель недели.</p>}
@@ -267,7 +276,7 @@ function WeekColumn({ day, onCreate, onEdit, onToggle, onSaveNote }: { day: { da
   const shortDate = parseDate(day.date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })
   useEffect(() => setDraft(day.note), [day.note])
   const save = async () => { setSaving(true); await onSaveNote(day.date, draft); setSaving(false) }
-  return <article className="week-column"><header><button className="day-add-button" type="button" onClick={() => onCreate(day.date)} aria-label={`Добавить задачу на ${day.short} ${shortDate}`}><strong>{day.short}</strong><span>{shortDate}</span><b>{day.tasks.length}</b><Plus size={14} aria-hidden="true" /></button></header><div className="day-task-list">{day.tasks.length ? <>{day.tasks.map((task) => <div className={`day-task ${task.done ? 'done' : ''}`} key={task.id}><button className="task-toggle" type="button" onClick={() => void onToggle(task)} aria-label={task.done ? `Отметить задачу «${task.title}» невыполненной` : `Отметить задачу «${task.title}» выполненной`}><span className="task-check" aria-hidden="true">{task.done && <Check size={12} />}</span></button><button className="task-edit" type="button" onClick={() => onEdit(task)} aria-label={`Редактировать задачу ${task.title}`}><span><strong>{task.title}</strong>{task.time && <small>{task.time}{task.kind === 'meeting' ? ' · встреча' : ''}</small>}</span><SquarePen size={13} aria-hidden="true" /></button></div>)}<button className="day-add-inline" type="button" onClick={() => onCreate(day.date)} aria-label={`Добавить ещё задачу на ${day.short} ${shortDate}`}><Plus size={13} />Добавить</button></> : <button className="day-empty day-empty-action" type="button" onClick={() => onCreate(day.date)} aria-label={`Создать первую задачу на ${day.short} ${shortDate}`}><Plus size={14} />Задач нет — добавить</button>}</div><div className="day-note"><small>Заметка дня</small><textarea value={draft} onChange={(event) => setDraft(event.target.value)} aria-label={`Заметка ${day.date}`} placeholder="Что произошло сегодня?" /><button type="button" onClick={() => void save()} disabled={saving || draft === day.note}><Plus size={13} />{saving ? 'Сохраняем…' : 'Сохранить заметку'}</button></div></article>
+  return <article className="week-column"><header><button className="day-add-button" type="button" onClick={() => onCreate(day.date)} aria-label={`Добавить задачу на ${day.short} ${shortDate}`}><strong>{day.short}</strong><span>{shortDate}</span><b>{day.tasks.length}</b><Plus size={14} aria-hidden="true" /></button></header><div className="day-task-list">{day.tasks.length ? <>{day.tasks.map((task) => <div className={`day-task ${task.done ? 'done' : ''}`} key={task.id}><button className="task-toggle" type="button" onClick={() => void onToggle(task)} aria-label={task.done ? `Отметить задачу «${task.title}» невыполненной` : `Отметить задачу «${task.title}» выполненной`}><span className="task-check" aria-hidden="true">{task.done && <Check size={12} />}</span></button><button className="task-edit" type="button" onClick={() => onEdit(task)} aria-label={`Редактировать задачу ${task.title}`}><span><strong>{task.title}</strong>{task.time && <small>{task.time}{task.kind === 'meeting' ? ' · встреча' : ''}</small>}</span><SquarePen size={13} aria-hidden="true" /></button></div>)}<button className="day-add-inline" type="button" onClick={() => onCreate(day.date)} aria-label={`Добавить ещё задачу на ${day.short} ${shortDate}`}><Plus size={13} />Добавить</button></> : <button className="day-empty day-empty-action" type="button" onClick={() => onCreate(day.date)} aria-label={`Создать первую задачу на ${day.short} ${shortDate}`}><Plus size={14} />Задач нет — добавить</button>}</div><div className="day-note" data-guide="schedule-note"><small>Заметка дня</small><textarea value={draft} onChange={(event) => setDraft(event.target.value)} aria-label={`Заметка ${day.date}`} placeholder="Что произошло сегодня?" /><button type="button" onClick={() => void save()} disabled={saving || draft === day.note}><Plus size={13} />{saving ? 'Сохраняем…' : 'Сохранить заметку'}</button></div></article>
 }
 
 function CalendarGrid({ month, selectedDate, weekStart, onSelect }: { month: Date; selectedDate: string; weekStart: string; onSelect: (date: string) => void }) {

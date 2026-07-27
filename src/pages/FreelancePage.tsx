@@ -8,6 +8,7 @@ import {
   ChevronRight,
   CirclePlay,
   Clock3,
+  Eraser,
   ExternalLink,
   Filter,
   Folder,
@@ -22,6 +23,9 @@ import {
   X,
 } from 'lucide-react'
 import { EmptyState, MetricCard, SidePanel, StatusBadge, Tag } from '../components/DashboardUi'
+import type { UiAccent } from '../components/DashboardUi'
+import PageGuide from '../components/PageGuide'
+import { FREELANCE_GUIDE } from '../guides'
 import {
   BROWSER_SOURCE_KEYS,
   FREELANCE_SOURCE_KEYS,
@@ -56,6 +60,7 @@ type FreelanceOrder = {
   published_at: string
   discovered_at: string
   relevance: number
+  relevance_points: number
   relevance_reasons: string[]
   status: string
   next_step: string
@@ -98,6 +103,8 @@ export default function FreelancePage() {
   const [status, setStatus] = useState('Все')
   const [category, setCategory] = useState('Все')
   const [sort, setSort] = useState('relevance')
+  const [minRelevance, setMinRelevance] = useState(0)
+  const [relevanceMax, setRelevanceMax] = useState(20)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
@@ -109,6 +116,7 @@ export default function FreelancePage() {
   const [selectedRun, setSelectedRun] = useState<{ run: FreelanceRun; orders: FreelanceOrder[] } | null>(null)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
+  const [showCleanupModal, setShowCleanupModal] = useState(false)
 
   const loadData = async (showLoader = false, archivedView = showArchived) => {
     if (showLoader) setLoading(true)
@@ -124,6 +132,7 @@ export default function FreelancePage() {
       const orderData = await ordersResponse.json()
       setOrders(orderData.orders ?? [])
       setStats(orderData.stats ?? emptyStats)
+      if (orderData.relevance_max) setRelevanceMax(orderData.relevance_max)
       const savedSettings = await settingsResponse.json() as FreelanceSettings
       setSettings({ ...savedSettings, sources: savedSettings.sources.filter((item) => sourceKeys.includes(item as SourceKey)) })
       setSourceStatuses(((await sourceResponse.json()).sources ?? []).filter((item: SourceStatus) => sourceKeys.includes(item.source as SourceKey)))
@@ -142,12 +151,12 @@ export default function FreelancePage() {
     const normalized = query.trim().toLocaleLowerCase('ru')
     const result = orders.filter((order) => {
       const haystack = `${order.title} ${order.description} ${order.customer} ${order.tags.join(' ')} ${order.categories.join(' ')}`.toLocaleLowerCase('ru')
-      return (!normalized || haystack.includes(normalized)) && (source === 'Все' || order.source === source) && (status === 'Все' || order.status === status) && (category === 'Все' || order.tags.includes(category) || order.categories.includes(category))
+      return (!normalized || haystack.includes(normalized)) && (source === 'Все' || order.source === source) && (status === 'Все' || order.status === status) && (category === 'Все' || order.tags.includes(category) || order.categories.includes(category)) && order.relevance >= minRelevance
     })
     if (sort === 'budget') return [...result].sort((a, b) => (b.budget_max ?? b.budget_min ?? 0) - (a.budget_max ?? a.budget_min ?? 0))
     if (sort === 'newest') return [...result].sort((a, b) => (b.published_at || b.discovered_at).localeCompare(a.published_at || a.discovered_at))
     return [...result].sort((a, b) => b.relevance - a.relevance)
-  }, [category, orders, query, sort, source, status])
+  }, [category, minRelevance, orders, query, sort, source, status])
 
   const runAction = async (action: string, request: () => Promise<Response>, message: string) => {
     setBusy(action)
@@ -212,6 +221,13 @@ export default function FreelancePage() {
         <section className="data-main-column">
           <header className="page-title-block"><h1>Фриланс</h1><p>Реальные заказы, отклики и приоритетные предложения из выбранных источников.</p></header>
 
+          <PageGuide
+            sectionId="freelance"
+            title="Как пользоваться разделом «Фриланс»"
+            intro="Снайпер сам обходит пять площадок и складывает новые заказы в базу, пока запущен backend."
+            steps={FREELANCE_GUIDE}
+          />
+
           <div className="metrics-grid">
             <MetricCard icon={Folder} label="Всего заказов" value={stats.total} hint={stats.new_today ? `+${stats.new_today} сегодня` : 'Только сохранённые заказы'} accent="blue" />
             <MetricCard icon={CirclePlay} label="Откликнулся" value={stats.responded} hint={stats.total ? `${Math.round((stats.responded / stats.total) * 100)}% от всех` : '0% от всех'} accent="green" />
@@ -222,6 +238,7 @@ export default function FreelancePage() {
           <div className="freelance-view-tabs" role="tablist" aria-label="Списки заказов">
             <button className={!showArchived ? 'active' : ''} type="button" role="tab" aria-selected={!showArchived} onClick={() => setShowArchived(false)}><Folder size={17} />Активные <span>{stats.total}</span></button>
             <button className={showArchived ? 'active' : ''} type="button" role="tab" aria-selected={showArchived} onClick={() => setShowArchived(true)}><Archive size={17} />Скрытые <span>{stats.archived}</span></button>
+            {showArchived && stats.archived > 0 && <button className="restore-all-tab-action" type="button" disabled={busy === 'restore-all'} onClick={() => void runAction('restore-all', () => fetch(`${API_BASE}/api/freelance/orders/restore-all`, { method: 'POST', headers: { 'X-Requested-With': 'SemixCRM' } }), 'Все заказы возвращены в активные')}><RotateCcw size={16} />Вернуть всех</button>}
           </div>
 
           <div className="toolbar-row freelance-toolbar">
@@ -229,13 +246,15 @@ export default function FreelancePage() {
             <label className="select-control"><span className="sr-only">Статус</span><select value={status} onChange={(event) => setStatus(event.target.value)}><option>Все</option>{statuses.map((item) => <option key={item}>{item}</option>)}</select></label>
             <label className="select-control"><span className="sr-only">Источник</span><select value={source} onChange={(event) => setSource(event.target.value)}><option>Все</option>{sourceKeys.map((item) => <option key={item} value={item}>{sourceLabel(item)}</option>)}</select></label>
             <label className="select-control"><span className="sr-only">Категория</span><select value={category} onChange={(event) => setCategory(event.target.value)}>{categories.map((item) => <option key={item}>{item}</option>)}</select></label>
+            <label className="select-control"><span className="sr-only">Релевантность</span><select value={minRelevance} onChange={(event) => setMinRelevance(Number(event.target.value))}><option value={0}>Любая релевантность</option><option value={40}>От 40% — стоит взглянуть</option><option value={60}>От 60% — профильные</option><option value={80}>От 80% — точно ваши</option></select></label>
             <label className="select-control sort-control"><span className="sr-only">Сортировка</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="relevance">Сначала релевантные</option><option value="newest">Сначала новые</option><option value="budget">Сначала дорогие</option></select></label>
             <button className="solid-action" type="button" onClick={() => setShowOrderModal(true)}><Plus size={19} />Добавить заказ</button>
+            <button className="secondary-wide-action" type="button" onClick={() => setShowCleanupModal(true)} disabled={showArchived || !stats.total}><Eraser size={16} />Очистить список</button>
           </div>
 
           {error && <div className="page-feedback error" role="alert"><AlertCircle size={17} />{error}</div>}
           {feedback && <div className="page-feedback success" role="status"><Check size={17} />{feedback}</div>}
-          {loading ? <div className="freelance-loading" role="status"><LoaderCircle className="spin" size={24} />Загружаю сохранённые заказы…</div> : <div className="opportunity-list freelance-list">{filtered.length ? filtered.map((order) => <OrderRow key={order.id} order={order} archived={showArchived} busy={busy === `order-${order.id}` || busy === `archive-${order.id}` || busy === `restore-${order.id}`} onUpdate={updateOrder} onArchive={archiveOrder} onRestore={restoreOrder} />) : <EmptyState>{orders.length ? 'По выбранным фильтрам заказы не найдены.' : showArchived ? 'Скрытых заказов нет. Здесь появятся карточки, которые вы убрали из активного списка.' : 'Заказов пока нет. Запустите проверку источников или добавьте заказ вручную.'}</EmptyState>}</div>}
+          {loading ? <div className="freelance-loading" role="status"><LoaderCircle className="spin" size={24} />Загружаю сохранённые заказы…</div> : <div className="opportunity-list freelance-list">{filtered.length ? filtered.map((order) => <OrderRow key={order.id} order={order} archived={showArchived} relevanceMax={relevanceMax} busy={busy === `order-${order.id}` || busy === `archive-${order.id}` || busy === `restore-${order.id}`} onUpdate={updateOrder} onArchive={archiveOrder} onRestore={restoreOrder} />) : <EmptyState>{orders.length ? 'По выбранным фильтрам заказы не найдены.' : showArchived ? 'Скрытых заказов нет. Здесь появятся карточки, которые вы убрали из активного списка.' : 'Заказов пока нет. Запустите проверку источников или добавьте заказ вручную.'}</EmptyState>}</div>}
         </section>
 
         <aside className="data-side-column">
@@ -246,9 +265,9 @@ export default function FreelancePage() {
             <div className="parser-filters"><p><Filter />Источники <strong>{settings.sources.length ? settings.sources.map(sourceLabel).join(', ') : 'Не настроены'}</strong></p><p><Search />Ключевые слова <strong>{settings.keywords.join(', ') || 'Не заданы'}</strong></p><p><BriefcaseBusiness />Бюджет от <strong>{settings.min_budget ? `${settings.min_budget.toLocaleString('ru-RU')} ₽` : 'Без ограничения'}</strong></p><p><Clock3 />Интервал <strong>{settings.interval_seconds} сек.</strong></p></div>
             {sourceErrors.length > 0 && <div className="source-error-list" aria-live="polite">{sourceErrors.map((item) => <p key={item.source}><AlertCircle size={14} /><strong>{sourceLabel(item.source)}:</strong> {item.error || 'Требуется авторизация'}</p>)}</div>}
             <button className={`solid-action wide-action ${sniper.status === 'running' ? 'is-running' : ''}`} type="button" onClick={toggleSniper} disabled={busy === 'sniper'}>{busy === 'sniper' ? <LoaderCircle className="spin" size={18} /> : <CirclePlay size={18} />}{sniper.status === 'running' ? 'Остановить снайпер' : 'Запустить снайпер'}</button>
-            <button className="secondary-wide-action" type="button" onClick={checkNow} disabled={busy === 'check'}>{busy === 'check' ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />}Проверить сейчас</button>
-            <button className="secondary-wide-action" type="button" onClick={() => setShowSettingsModal(true)}><Settings2 size={16} />Настроить</button>
-            <button className="secondary-wide-action" type="button" onClick={() => void openHistory()}><Clock3 size={16} />История запусков</button>
+            <button className="secondary-wide-action" type="button" data-guide="freelance-check" onClick={checkNow} disabled={busy === 'check'}>{busy === 'check' ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />}Проверить сейчас</button>
+            <button className="secondary-wide-action" type="button" data-guide="freelance-settings" onClick={() => setShowSettingsModal(true)}><Settings2 size={16} />Настроить</button>
+            <button className="secondary-wide-action" type="button" data-guide="freelance-history" onClick={() => void openHistory()}><Clock3 size={16} />История запусков</button>
           </SidePanel>
 
           <SidePanel className="recommendations-panel"><h2>Лучшие заказы</h2>{filtered.slice(0, 3).map((order) => <button className="recommendation-item" type="button" key={order.id} onClick={() => setQuery(order.title)}><SourceMark source={order.source} size="small" /><p><strong>{order.title}</strong><span>{formatBudget(order)}</span></p><span><b>{order.relevance}%</b><StatusBadge tone={order.relevance >= 70 ? 'green' : order.relevance >= 40 ? 'orange' : 'gray'}>{order.status}</StatusBadge></span></button>)}{!filtered.length && <p className="empty-panel-copy">Рекомендации появятся после добавления заказов.</p>}</SidePanel>
@@ -261,9 +280,23 @@ export default function FreelancePage() {
 
       {showOrderModal && <OrderModal onClose={() => setShowOrderModal(false)} onCreate={addOrder} />}
       {showSettingsModal && <SettingsModal settings={settings} statuses={sourceStatuses} busy={busy === 'settings'} authBusy={busy} onAuth={openAuth} onClose={() => setShowSettingsModal(false)} onSave={saveSettings} />}
+      {showCleanupModal && <CleanupModal stats={stats} onClose={() => setShowCleanupModal(false)} onDone={async (archived) => { setShowCleanupModal(false); setFeedback(`Скрыто ${archived} ${plural(archived, 'заказ', 'заказа', 'заказов')}`); window.setTimeout(() => setFeedback(''), 2600); await loadData() }} />}
       {showHistoryModal && <HistoryModal runs={runHistory} selected={selectedRun} loading={historyLoading} onSelect={(run) => void openRun(run)} onClose={() => { setShowHistoryModal(false); setSelectedRun(null) }} />}
     </div>
   )
+}
+
+/** Тон и подпись рейтинга: те же пороги, что у карточек клиентов. */
+function relevanceTone(relevance: number): UiAccent {
+  if (relevance >= 70) return 'green'
+  if (relevance >= 40) return 'orange'
+  return 'gray'
+}
+
+function relevanceLabel(relevance: number) {
+  if (relevance >= 70) return 'Профильный'
+  if (relevance >= 40) return 'Возможно'
+  return 'Не профиль'
 }
 
 function SourceMark({ source, size = 'medium' }: { source: string; size?: 'small' | 'medium' | 'large' }) {
@@ -272,8 +305,8 @@ function SourceMark({ source, size = 'medium' }: { source: string; size?: 'small
   return <span className={`source-mark ${size} ${meta.accent}`}><img src={meta.icon} alt={`${meta.label} — значок источника`} width={192} height={192} /></span>
 }
 
-function OrderRow({ order, archived, busy, onUpdate, onArchive, onRestore }: { order: FreelanceOrder; archived: boolean; busy: boolean; onUpdate: (id: number, changes: Record<string, unknown>) => void; onArchive: (id: number) => void; onRestore: (id: number) => void }) {
-  return <article className={`opportunity-row freelance-order-row ${archived ? 'archived-order' : ''}`}><div className="opportunity-identity"><SourceMark source={order.source} size="large" /><div><div className="freelance-order-title"><h2>{order.title}</h2><StatusBadge tone={order.relevance >= 70 ? 'green' : order.relevance >= 40 ? 'orange' : 'gray'}>{order.relevance}% match</StatusBadge></div><p>{order.description || 'Описание не предоставлено источником.'}</p><div className="tag-row">{[sourceLabel(order.source), ...order.categories, ...order.tags].filter(Boolean).slice(0, 5).map((tag) => <Tag key={tag}>{tag}</Tag>)}</div></div></div><div className="opportunity-meta"><p><BriefcaseBusiness />Бюджет <strong>{formatBudget(order)}</strong></p><p><Sparkles />Источник <strong>{sourceLabel(order.source)}</strong></p><p><Clock3 />Добавлено <strong>{formatDate(order.published_at || order.discovered_at)}</strong></p>{order.customer && <p><UsersRound />Заказчик <strong>{order.customer}</strong></p>}</div><div className="opportunity-status freelance-order-status"><StatusBadge tone={archived ? 'gray' : order.status === 'Отказ' ? 'red' : order.status === 'В работе' ? 'green' : order.status === 'Ответили' ? 'orange' : 'blue'}>{archived ? 'Скрыт' : order.status}</StatusBadge><span>Следующий шаг</span><strong>{order.next_step}</strong><label className="status-select-label"><span className="sr-only">Статус заказа {order.title}</span><select value={order.status} onChange={(event) => onUpdate(order.id, { status: event.target.value })} disabled={busy}>{statuses.map((item) => <option key={item}>{item}</option>)}</select></label><div className="stacked-order-actions"><button type="button" onClick={() => order.url && window.open(order.url, '_blank', 'noopener,noreferrer')} disabled={!order.url}><span>{order.url ? 'Открыть источник' : 'Ссылка отсутствует'}</span>{order.url && <ExternalLink size={14} />}</button>{archived ? <button className="restore-row-action" type="button" onClick={() => onRestore(order.id)} disabled={busy}>{busy ? <LoaderCircle className="spin" size={14} /> : <RotateCcw size={14} />}Вернуть в активные</button> : <><button className="primary-row-action" type="button" onClick={() => onUpdate(order.id, { status: order.status === 'Новый' ? 'Написал' : order.status })} disabled={busy}>{busy ? <LoaderCircle className="spin" size={14} /> : <ChevronRight size={15} />}Следующий шаг</button><button className="danger-row-action" type="button" onClick={() => onArchive(order.id)} disabled={busy}><X size={14} />Скрыть</button></>}</div></div></article>
+function OrderRow({ order, archived, busy, relevanceMax, onUpdate, onArchive, onRestore }: { order: FreelanceOrder; archived: boolean; busy: boolean; relevanceMax: number; onUpdate: (id: number, changes: Record<string, unknown>) => void; onArchive: (id: number) => void; onRestore: (id: number) => void }) {
+  return <article className={`opportunity-row freelance-order-row ${archived ? 'archived-order' : ''}`}><div className="opportunity-identity"><SourceMark source={order.source} size="large" /><div><div className="freelance-order-title"><h2>{order.title}</h2><StatusBadge tone={relevanceTone(order.relevance)}>{relevanceLabel(order.relevance)}</StatusBadge></div><p>{order.description || 'Описание не предоставлено источником.'}</p><div className="tag-row">{[sourceLabel(order.source), ...order.categories, ...order.tags].filter(Boolean).slice(0, 5).map((tag) => <Tag key={tag}>{tag}</Tag>)}</div></div></div><div className="opportunity-meta"><p><BriefcaseBusiness />Бюджет <strong>{formatBudget(order)}</strong></p><p><Sparkles />Источник <strong>{sourceLabel(order.source)}</strong></p><p><Clock3 />Добавлено <strong>{formatDate(order.published_at || order.discovered_at)}</strong></p>{order.customer && <p><UsersRound />Заказчик <strong>{order.customer}</strong></p>}</div><div className="opportunity-status freelance-order-status" data-guide="freelance-status"><div className="order-fit"><div className="order-score-line"><strong>{order.relevance_points}<small>/{relevanceMax}</small></strong><span>{order.relevance}% релевантности</span></div><div className="score-reason-preview">{order.relevance_reasons.slice(0, 2).map((reason) => <span key={reason}><Check size={12} />{reason}</span>)}</div></div><div className="order-status-line"><StatusBadge tone={archived ? 'gray' : order.status === 'Отказ' ? 'red' : order.status === 'В работе' ? 'green' : order.status === 'Ответили' ? 'orange' : 'blue'}>{archived ? 'Скрыт' : order.status}</StatusBadge><label className="status-select-label"><span className="sr-only">Статус заказа {order.title}</span><select value={order.status} onChange={(event) => onUpdate(order.id, { status: event.target.value })} disabled={busy}>{statuses.map((item) => <option key={item}>{item}</option>)}</select></label></div><p className="order-next-step">Следующий шаг: <strong>{order.next_step}</strong></p><div className="stacked-order-actions">{archived ? <button className="restore-row-action" type="button" onClick={() => onRestore(order.id)} disabled={busy}>{busy ? <LoaderCircle className="spin" size={14} /> : <RotateCcw size={14} />}Вернуть в активные</button> : <button className="primary-row-action" type="button" onClick={() => onUpdate(order.id, { status: order.status === 'Новый' ? 'Написал' : order.status })} disabled={busy}>{busy ? <LoaderCircle className="spin" size={14} /> : <ChevronRight size={15} />}Следующий шаг</button>}<button type="button" onClick={() => order.url && window.open(order.url, '_blank', 'noopener,noreferrer')} disabled={!order.url}><span>{order.url ? 'Открыть' : 'Нет ссылки'}</span>{order.url && <ExternalLink size={13} />}</button>{!archived && <button className="danger-row-action" type="button" onClick={() => onArchive(order.id)} disabled={busy}><X size={14} />Скрыть</button>}</div></div></article>
 }
 
 function ParserSource({ source, active, status }: { source: SourceKey; active: boolean; status?: SourceStatus }) {
@@ -333,4 +366,241 @@ function SettingsModal({ settings, statuses, busy, authBusy, onAuth, onClose, on
 
 function HistoryModal({ runs, selected, loading, onSelect, onClose }: { runs: FreelanceRun[]; selected: { run: FreelanceRun; orders: FreelanceOrder[] } | null; loading: boolean; onSelect: (run: FreelanceRun) => void; onClose: () => void }) {
   return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><section className="compact-modal freelance-history-modal" role="dialog" aria-modal="true" aria-labelledby="freelance-history-title" onMouseDown={(event) => event.stopPropagation()}><header className="parser-modal-header"><span className="metric-icon blue"><Clock3 /></span><div><h2 id="freelance-history-title">История запусков</h2><p className="modal-subtitle">Каждый запуск хранит именно те заказы, которые были увидены в тот момент.</p></div><button className="modal-close" type="button" onClick={onClose} aria-label="Закрыть"><X size={20} /></button></header><div className="freelance-history-body">{loading && <div className="freelance-loading"><LoaderCircle className="spin" size={20} />Загружаю историю…</div>}{!loading && !runs.length && <p className="empty-panel-copy">Запусков ещё не было.</p>}{!loading && runs.length > 0 && <div className="freelance-history-layout"><div className="freelance-run-list">{runs.map((run) => <button className={`freelance-run-item ${selected?.run.id === run.id ? 'active' : ''}`} type="button" key={run.id} onClick={() => onSelect(run)}><strong>Запуск #{run.id}</strong><span>{formatDate(run.started_at)}</span><span>{run.inserted_count} новых · {run.order_count} карточек</span><StatusBadge tone={run.status === 'done' ? 'green' : run.status === 'partial' ? 'orange' : 'red'}>{run.status}</StatusBadge></button>)}</div><div className="freelance-run-detail">{selected ? <><h3>Запуск #{selected.run.id}</h3><p>{formatDate(selected.run.started_at)} · добавлено {selected.run.inserted_count}, дублей {selected.run.duplicate_count}</p>{selected.orders.length ? selected.orders.map((order) => <article key={order.id}><strong>{order.title}</strong><span>{sourceLabel(order.source)} · {formatBudget(order)}</span></article>) : <p className="empty-panel-copy">В этом запуске новых карточек не было.</p>}</> : <p className="empty-panel-copy">Выберите запуск слева.</p>}</div></div>}</div></section></div>
+}
+
+
+/** Склонение существительного по числу: 1 заказ, 2 заказа, 5 заказов. */
+function plural(count: number, one: string, few: string, many: string) {
+  const mod100 = Math.abs(count) % 100
+  const mod10 = mod100 % 10
+  if (mod100 >= 11 && mod100 <= 14) return many
+  if (mod10 === 1) return one
+  if (mod10 >= 2 && mod10 <= 4) return few
+  return many
+}
+
+type CleanupRules = {
+  max_relevance: number | null
+  older_than_days: number | null
+  sources: string[]
+  keep_worked: boolean
+  include_everything: boolean
+}
+
+type CleanupPreview = { matched: number; kept: number; sample: { title: string; relevance: number; source: string }[] }
+
+const emptyRules: CleanupRules = {
+  max_relevance: null,
+  older_than_days: null,
+  sources: [],
+  keep_worked: true,
+  include_everything: false,
+}
+
+/** Готовые сценарии уборки: то, что нужно в 90% случаев, — в один клик. */
+const CLEANUP_PRESETS: { id: string; label: string; hint: string; rules: CleanupRules }[] = [
+  {
+    id: 'irrelevant',
+    label: 'Нерелевантные',
+    hint: 'Всё ниже 40% — не ваш профиль',
+    rules: { ...emptyRules, max_relevance: 40 },
+  },
+  {
+    id: 'stale',
+    label: 'Залежавшиеся',
+    hint: 'Найдены больше недели назад',
+    rules: { ...emptyRules, older_than_days: 7 },
+  },
+  {
+    id: 'stale-irrelevant',
+    label: 'Старые и слабые',
+    hint: 'Старше 3 дней и ниже 60%',
+    rules: { ...emptyRules, older_than_days: 3, max_relevance: 60 },
+  },
+  {
+    id: 'everything',
+    label: 'Весь список',
+    hint: 'Начать с чистого листа',
+    rules: { ...emptyRules, include_everything: true },
+  },
+]
+
+function CleanupModal({
+  stats, onClose, onDone,
+}: {
+  stats: FreelanceStats
+  onClose: () => void
+  onDone: (archived: number) => Promise<void>
+}) {
+  const [rules, setRules] = useState<CleanupRules>({ ...emptyRules, max_relevance: 40 })
+  const [preset, setPreset] = useState('irrelevant')
+  const [preview, setPreview] = useState<CleanupPreview | null>(null)
+  const [previewing, setPreviewing] = useState(false)
+  const [applying, setApplying] = useState(false)
+  const [error, setError] = useState('')
+
+  const update = (patch: Partial<CleanupRules>) => {
+    setPreset('')
+    setRules((current) => ({ ...current, ...patch }))
+  }
+
+  const applyPreset = (id: string) => {
+    const found = CLEANUP_PRESETS.find((item) => item.id === id)
+    if (!found) return
+    setPreset(id)
+    setRules(found.rules)
+  }
+
+  // Считаем заранее: скрывать полторы тысячи заказов вслепую — плохая идея.
+  useEffect(() => {
+    let cancelled = false
+    setPreviewing(true)
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const response = await fetch(`${API_BASE}/api/freelance/orders/cleanup`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'SemixCRM' },
+            body: JSON.stringify({ ...rules, preview: true }),
+          })
+          const payload = await response.json()
+          if (cancelled) return
+          if (!response.ok) throw new Error(payload.detail ?? 'Не удалось посчитать')
+          setPreview(payload)
+          setError('')
+        } catch (previewError) {
+          if (!cancelled) setError(previewError instanceof Error ? previewError.message : 'Не удалось посчитать')
+        } finally {
+          if (!cancelled) setPreviewing(false)
+        }
+      })()
+    }, 250)
+    return () => { cancelled = true; window.clearTimeout(timer) }
+  }, [rules])
+
+  const apply = async () => {
+    setApplying(true)
+    setError('')
+    try {
+      const response = await fetch(`${API_BASE}/api/freelance/orders/cleanup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'SemixCRM' },
+        body: JSON.stringify({ ...rules, preview: false }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.detail ?? 'Не удалось скрыть заказы')
+      await onDone(payload.archived_count ?? 0)
+    } catch (applyError) {
+      setError(applyError instanceof Error ? applyError.message : 'Не удалось скрыть заказы')
+      setApplying(false)
+    }
+  }
+
+  const matched = preview?.matched ?? 0
+  const nothingSelected = !rules.include_everything && rules.max_relevance === null
+    && rules.older_than_days === null && rules.sources.length === 0
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="compact-modal cleanup-modal" role="dialog" aria-modal="true" aria-labelledby="cleanup-title" onMouseDown={(event) => event.stopPropagation()}>
+        <button className="modal-close" type="button" onClick={onClose} aria-label="Закрыть"><X size={20} /></button>
+        <span className="metric-icon orange"><Eraser /></span>
+        <h2 id="cleanup-title">Очистить список заказов</h2>
+        <p className="field-hint">Заказы не удаляются, а уходят во вкладку «Скрытые» — оттуда их можно вернуть.</p>
+
+        <span className="field-label">Быстрые сценарии</span>
+        <div className="cleanup-presets">
+          {CLEANUP_PRESETS.map((item) => (
+            <button
+              className={preset === item.id ? 'active' : ''}
+              type="button"
+              key={item.id}
+              onClick={() => applyPreset(item.id)}
+            >
+              <strong>{item.label}</strong>
+              <span>{item.hint}</span>
+            </button>
+          ))}
+        </div>
+
+        <label htmlFor="cleanup-relevance">Скрыть с релевантностью ниже</label>
+        <select
+          id="cleanup-relevance"
+          value={rules.max_relevance ?? ''}
+          onChange={(event) => update({ max_relevance: event.target.value ? Number(event.target.value) : null })}
+        >
+          <option value="">Не смотреть на релевантность</option>
+          <option value={20}>20%</option>
+          <option value={40}>40%</option>
+          <option value={60}>60%</option>
+          <option value={80}>80%</option>
+        </select>
+
+        <label htmlFor="cleanup-age">Скрыть найденные раньше чем</label>
+        <select
+          id="cleanup-age"
+          value={rules.older_than_days ?? ''}
+          onChange={(event) => update({ older_than_days: event.target.value ? Number(event.target.value) : null })}
+        >
+          <option value="">Не смотреть на возраст</option>
+          <option value={1}>1 день назад</option>
+          <option value={3}>3 дня назад</option>
+          <option value={7}>неделю назад</option>
+          <option value={14}>две недели назад</option>
+          <option value={30}>месяц назад</option>
+        </select>
+
+        <span className="field-label">Только эти источники</span>
+        <div className="source-toggle-row">
+          {sourceKeys.map((item) => (
+            <label className="source-toggle" key={item}>
+              <input
+                type="checkbox"
+                checked={rules.sources.includes(item)}
+                onChange={() => update({
+                  sources: rules.sources.includes(item)
+                    ? rules.sources.filter((value) => value !== item)
+                    : [...rules.sources, item],
+                })}
+              />
+              {sourceLabel(item)}
+            </label>
+          ))}
+        </div>
+
+        <label className="source-toggle cleanup-safety">
+          <input type="checkbox" checked={rules.keep_worked} onChange={(event) => update({ keep_worked: event.target.checked })} />
+          Не трогать заказы, с которыми уже работаю
+        </label>
+
+        <label className="source-toggle">
+          <input type="checkbox" checked={rules.include_everything} onChange={(event) => update({ include_everything: event.target.checked })} />
+          Скрыть вообще всё, что подходит под условия
+        </label>
+
+        <div className={`cleanup-preview ${matched ? '' : 'is-empty'}`} aria-live="polite">
+          {previewing ? <p>Считаю…</p> : nothingSelected ? (
+            <p>Выберите сценарий или условие — иначе скрывать нечего.</p>
+          ) : (
+            <>
+              <p><strong>Будет скрыто: {matched}</strong> из {stats.total}. Останется {preview?.kept ?? stats.total}.</p>
+              {preview?.sample?.length ? (
+                <ul>
+                  {preview.sample.map((item) => (
+                    <li key={`${item.source}-${item.title}`}><b>{item.relevance}%</b> {item.title}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </>
+          )}
+        </div>
+
+        {error && <p className="field-error" role="alert">{error}</p>}
+
+        <button className="solid-action wide-action" type="button" onClick={() => void apply()} disabled={applying || previewing || !matched}>
+          <Eraser size={18} />{applying ? 'Скрываю…' : matched ? `Скрыть ${matched} ${plural(matched, 'заказ', 'заказа', 'заказов')}` : 'Нечего скрывать'}
+        </button>
+      </section>
+    </div>
+  )
 }

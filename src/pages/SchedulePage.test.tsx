@@ -78,12 +78,15 @@ function createScheduleFetch(options: { failTaskUpdates?: boolean } = {}) {
 
 describe('schedule task CRUD', () => {
   beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date('2026-07-22T12:00:00+02:00'))
     vi.stubGlobal('fetch', createScheduleFetch())
     vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
   })
 
   afterEach(() => {
     cleanup()
+    vi.useRealTimers()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })

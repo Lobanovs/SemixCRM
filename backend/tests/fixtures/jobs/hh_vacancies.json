@@ -1,0 +1,50 @@
+{
+  "items": [
+    {
+      "id": "121314151",
+      "name": "Frontend-разработчик (React)",
+      "area": { "id": "1", "name": "Москва" },
+      "salary": { "from": 200000, "to": 280000, "currency": "RUR", "gross": false },
+      "employer": { "id": "1740", "name": "Яндекс" },
+      "published_at": "2026-07-25T10:32:00+0300",
+      "alternate_url": "https://hh.ru/vacancy/121314151",
+      "snippet": {
+        "requirement": "Опыт коммерческой разработки на <highlighttext>React</highlighttext> от 3 лет, TypeScript.",
+        "responsibility": "Разработка интерфейсов сервисов Яндекса."
+      },
+      "schedule": { "id": "remote", "name": "Удаленная работа" },
+      "experience": { "id": "between3And6", "name": "От 3 до 6 лет" }
+    },
+    {
+      "id": "121314152",
+      "name": "Fullstack-разработчик (Node.js)",
+      "area": { "id": "2", "name": "Санкт-Петербург" },
+      "salary": { "from": 180000, "to": null, "currency": "RUR", "gross": true },
+      "employer": { "id": "15478", "name": "VK" },
+      "published_at": "2026-07-24T15:45:00+0300",
+      "alternate_url": "https://hh.ru/vacancy/121314152",
+      "snippet": {
+        "requirement": "Node.js, PostgreSQL, REST.",
+        "responsibility": "Развитие сервисов платформы."
+      },
+      "schedule": { "id": "fullDay", "name": "Полный день" },
+      "experience": { "id": "between1And3", "name": "От 1 года до 3 лет" }
+    },
+    {
+      "id": "121314153",
+      "name": "Стажёр-разработчик",
+      "area": { "id": "1", "name": "Москва" },
+      "salary": null,
+      "employer": { "id": "999", "name": "Стартап" },
+      "published_at": "2026-07-23T09:00:00+0300",
+      "alternate_url": "https://hh.ru/vacancy/121314153",
+      "snippet": { "requirement": "Без опыта.", "responsibility": "Помощь команде." },
+      "schedule": { "id": "flexible", "name": "Гибкий график" },
+      "experience": { "id": "noExperience", "name": "Нет опыта" }
+    }
+  ],
+  "found": 3,
+  "pages": 1,
+  "page": 0,
+  "per_page": 20
+}

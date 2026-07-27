@@ -92,7 +92,7 @@ export default function ParserControlPanel({
         : 'Настройки сохранены'
 
   return <>
-    <div className="parser-control-heading">
+    <div className="parser-control-heading" data-guide="clients-parser">
       <span className="parser-control-icon"><PawPrint size={22} /></span>
       <div>
         <h2>Парсер клиентов</h2>
@@ -187,7 +187,7 @@ export default function ParserControlPanel({
         {isSaving ? <Sparkles className="spin" size={17} /> : <Save size={17} />}
         {isSaving ? 'Сохраняю…' : 'Сохранить настройки'}
       </button>
-      <button className="parser-run-action" type="button" onClick={onRun} disabled={locked || Boolean(validationMessage)}>
+      <button className="parser-run-action" type="button" data-guide="clients-run" onClick={onRun} disabled={locked || Boolean(validationMessage)}>
         {isParsing ? <Sparkles className="spin" size={17} /> : <Play size={17} />}
         {isParsing ? 'Парсер работает…' : 'Запустить парсер'}
       </button>

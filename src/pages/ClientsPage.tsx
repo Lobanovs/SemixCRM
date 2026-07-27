@@ -31,6 +31,10 @@ import {
 } from 'lucide-react'
 import { EmptyState, MetricCard, SidePanel, StatusBadge, Tag } from '../components/DashboardUi'
 import type { UiAccent } from '../components/DashboardUi'
+import PageGuide from '../components/PageGuide'
+import { CLIENTS_GUIDE } from '../guides'
+import ClientMessageModal from './ClientMessageModal'
+import { apiRequest } from '../api'
 import type { LucideIcon } from 'lucide-react'
 import ParserControlPanel from './ParserControlPanel'
 import { API_BASE, persistParserSettings, startParserWithSettings } from './parserSettings'
@@ -214,6 +218,8 @@ export default function ClientsPage() {
   const [backendConnected, setBackendConnected] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
+  const [aiEnabled, setAiEnabled] = useState(false)
+  const [messageClient, setMessageClient] = useState<Client | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<{ kind: 'one'; client: Client } | { kind: 'all' } | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
@@ -246,6 +252,18 @@ export default function ClientsPage() {
       setParserFeedbackKind('error')
       setParserMessage('API недоступен. Запустите проект командой npm run dev — она поднимет frontend и backend вместе.')
     })
+  }, [])
+
+  // Без ключа OpenCode кнопка «Написать» не показывается вовсе.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const status = await apiRequest<{ enabled: boolean }>('/api/ai/status', { fallback: '' })
+        setAiEnabled(Boolean(status.enabled))
+      } catch {
+        setAiEnabled(false)
+      }
+    })()
   }, [])
 
   useEffect(() => {
@@ -438,6 +456,13 @@ export default function ClientsPage() {
         <section className="data-main-column">
           <header className="page-title-block"><h1>Волк с Уолл-стрит</h1><p>Реальная база бизнесов, отсортированная по очкам лида и готовности к контакту.</p></header>
 
+          <PageGuide
+            sectionId="clients"
+            title="Как пользоваться разделом «Волк с Уолл-стрит»"
+            intro="Парсер собирает карточки компаний из 2GIS, считает очки лида и ведёт их по воронке продаж."
+            steps={CLIENTS_GUIDE}
+          />
+
           <div className="metrics-grid">
             <MetricCard icon={Building2} label="Всего клиентов" value={stats.total} hint={`${stats.found_today} найдено сегодня`} accent="blue" />
             <MetricCard icon={Send} label="Написал" value={stats.contacted} hint={stats.total ? `${Math.round(stats.contacted / stats.total * 100)}% от всех` : '0% от всех'} accent="green" />
@@ -452,14 +477,14 @@ export default function ClientsPage() {
             <label className="select-control"><span className="sr-only">Источник</span><select value={source} onChange={(event) => setSource(event.target.value)}><option>Все</option>{sourceOptions.map((item) => <option key={item}>{item}</option>)}</select></label>
             <label className="select-control"><span className="sr-only">Ниша</span><select value={niche} onChange={(event) => setNiche(event.target.value)}><option>Все</option>{nicheOptions.map((item) => <option key={item}>{item}</option>)}</select></label>
             <label className="select-control clients-sort"><span className="sr-only">Сортировка</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option>Сначала лучшие лиды</option><option>Больше отзывов</option><option>Сначала новые</option></select></label>
-            <button className="toolbar-secondary-action" type="button" onClick={() => setPageView('history')}><CalendarClock size={18} />История</button>
-            <button className="toolbar-secondary-action" type="button" onClick={() => setPageView('archive')}><Archive size={18} />Скрытые <span>{archivedClients.length}</span></button>
+            <button className="toolbar-secondary-action" type="button" data-guide="clients-history" onClick={() => setPageView('history')}><CalendarClock size={18} />История</button>
+            <button className="toolbar-secondary-action" type="button" data-guide="clients-archive" onClick={() => setPageView('archive')}><Archive size={18} />Скрытые <span>{archivedClients.length}</span></button>
             <button className="solid-action" type="button" onClick={() => setShowModal(true)}><Plus size={18} />Добавить</button>
             <button className="danger-outline-action" type="button" onClick={() => setDeleteTarget({ kind: 'all' })} disabled={!clients.length}><Trash2 size={18} />Очистить</button>
           </div>
 
           <div className="client-list">
-            {filtered.length ? filtered.map((client) => <ClientRow key={client.id} client={client} onStatusChange={updateStatus} onDetails={setSelectedClient} onDelete={(item) => setDeleteTarget({ kind: 'one', client: item })} />) : <EmptyState>Клиентов пока нет. Настройте город и ниши, затем запустите парсер.</EmptyState>}
+            {filtered.length ? filtered.map((client) => <ClientRow key={client.id} client={client} onStatusChange={updateStatus} onDetails={setSelectedClient} onDelete={(item) => setDeleteTarget({ kind: 'one', client: item })} onWrite={setMessageClient} />) : <EmptyState>Клиентов пока нет. Настройте город и ниши, затем запустите парсер.</EmptyState>}
           </div>
         </section>
 
@@ -495,6 +520,7 @@ export default function ClientsPage() {
       </div>
 
       {showModal && <ClientModal onClose={() => setShowModal(false)} onCreate={(client) => void createClient(client)} nextId={(clients.length ? Math.max(...clients.map((client) => client.id)) : 0) + 1} />}
+      {messageClient && <ClientMessageModal clientId={messageClient.id} clientName={messageClient.name} enabled={aiEnabled} onClose={() => setMessageClient(null)} onSent={() => updateStatus(messageClient.id, 'Написал')} />}
       {selectedClient && <ClientDetails client={selectedClient} onClose={() => setSelectedClient(null)} />}
       {deleteTarget && <ConfirmDeleteModal target={deleteTarget} isDeleting={isDeleting} onClose={() => setDeleteTarget(null)} onConfirm={() => void deleteClients()} />}
     </div>
@@ -545,14 +571,14 @@ function ConfirmRestoreAllModal({ isRestoring, onClose, onConfirm }: { isRestori
   return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><section className="compact-modal confirm-delete-modal restore-confirm-modal" role="alertdialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><span className="metric-icon blue"><RotateCcw size={23} /></span><h2>Восстановить всех клиентов?</h2><p>Все скрытые записи снова появятся в рабочем списке. История запусков останется без изменений.</p><div className="confirm-actions"><button type="button" onClick={onClose} disabled={isRestoring}>Отмена</button><button className="solid-action" type="button" onClick={onConfirm} disabled={isRestoring}>{isRestoring ? 'Восстанавливаю…' : 'Восстановить всех'}</button></div></section></div>
 }
 
-function ClientRow({ client, onStatusChange, onDetails, onDelete }: { client: Client; onStatusChange: (id: number, status: ClientStatus) => void; onDetails: (client: Client) => void; onDelete: (client: Client) => void }) {
+function ClientRow({ client, onStatusChange, onDetails, onDelete, onWrite }: { client: Client; onStatusChange: (id: number, status: ClientStatus) => void; onDetails: (client: Client) => void; onDelete: (client: Client) => void; onWrite: (client: Client) => void }) {
   const Icon = client.icon
   const visibleContacts = client.contacts.filter((item) => item.type !== 'website').slice(0, 4)
   return <article className="client-row">
     <div className="client-identity"><span className={`client-logo ${client.tone}`}><Icon size={24} /></span><div><h2>{client.name}</h2><p className="client-category">{client.category}</p><p className="client-source"><MapPin size={13} />{client.location}<span>·</span>{client.source}<span>·</span>{client.added}</p><div className="client-proof"><span><Star size={14} fill="currentColor" />{client.rating ?? '—'}</span><span><MessageSquareText size={14} />{client.reviews ?? 0} отзывов</span></div><div className="tag-row">{client.tags.slice(0, 4).map((tag) => <Tag key={tag}>{tag}</Tag>)}</div></div></div>
     <div className="client-pain"><p>{client.pain}</p><div className="client-contact-list">{visibleContacts.map((contact) => <ContactLink contact={contact} key={`${contact.type}-${contact.value}`} />)}{!visibleContacts.length && <span className="no-direct-contact">Нет Telegram, e-mail или WhatsApp</span>}</div></div>
     <div className="client-status-column"><StatusBadge tone={toneByStatus[client.status]}>{client.status}</StatusBadge><span>Следующий шаг</span><strong>{client.next}</strong><select aria-label={`Статус клиента ${client.name}`} value={client.status} onChange={(event) => onStatusChange(client.id, event.target.value as ClientStatus)}>{statusOptions.map((item) => <option key={item}>{item}</option>)}</select></div>
-    <div className="client-fit"><div className="client-score-line"><StatusBadge tone={scoreTone(client.score)}>{client.score >= 14 ? 'Горячий лид' : client.score >= 8 ? 'Перспективный' : 'Нужно проверить'}</StatusBadge><strong>{client.score}<small>/{client.scoreMax}</small></strong></div><small>{client.match}% релевантности</small><div className="score-reason-preview">{client.scoreReasons.slice(0, 2).map((reason) => <span key={reason}><Check size={12} />{reason}</span>)}</div><div className="client-actions"><button type="button" onClick={() => onDetails(client)}>Подробнее</button>{client.cardUrl ? <a href={safeHref(client.cardUrl)} target="_blank" rel="noreferrer">Источник <ExternalLink size={13} /></a> : <button type="button" disabled>Нет источника</button>}{client.website ? <a className="client-website-action" href={safeHref(client.website)} target="_blank" rel="noreferrer"><Globe2 size={14} />Сайт</a> : <button type="button" disabled><Globe2 size={14} />Сайт не найден</button>}<button className="client-delete-action" type="button" onClick={() => onDelete(client)} aria-label={`Скрыть клиента ${client.name}`}><Trash2 size={14} />Скрыть</button><button className="primary-row-action" type="button" onClick={() => onStatusChange(client.id, client.status === 'Новый' ? 'Написал' : client.status)}>Изменить статус</button></div></div>
+    <div className="client-fit"><div className="client-score-line" data-guide="clients-score"><StatusBadge tone={scoreTone(client.score)}>{client.score >= 14 ? 'Горячий лид' : client.score >= 8 ? 'Перспективный' : 'Нужно проверить'}</StatusBadge><strong>{client.score}<small>/{client.scoreMax}</small></strong></div><small>{client.match}% релевантности</small><div className="score-reason-preview">{client.scoreReasons.slice(0, 2).map((reason) => <span key={reason}><Check size={12} />{reason}</span>)}</div><div className="client-actions"><button type="button" onClick={() => onDetails(client)}>Подробнее</button>{client.cardUrl ? <a href={safeHref(client.cardUrl)} target="_blank" rel="noreferrer">Источник <ExternalLink size={13} /></a> : <button type="button" disabled>Нет источника</button>}{client.website ? <a className="client-website-action" href={safeHref(client.website)} target="_blank" rel="noreferrer"><Globe2 size={14} />Сайт</a> : <button type="button" disabled><Globe2 size={14} />Сайт не найден</button>}<button className="client-delete-action" type="button" onClick={() => onDelete(client)} aria-label={`Скрыть клиента ${client.name}`}><Trash2 size={14} />Скрыть</button><button className="client-ai-action" type="button" data-guide="clients-write" onClick={() => onWrite(client)}><Sparkles size={14} />Написать</button><button className="primary-row-action" type="button" data-guide="clients-status" onClick={() => onStatusChange(client.id, client.status === 'Новый' ? 'Написал' : client.status)}>Изменить статус</button></div></div>
   </article>
 }
 
@@ -568,7 +594,6 @@ function contactHref(contact: Contact) {
   return safeHref(contact.url || contact.value)
 }
 
-function SourceChip({ icon: Icon, text, tone }: { icon: LucideIcon; text: string; tone: UiAccent }) { return <span className={`source-chip ${tone}`}><i><Icon size={13} /></i>{text}</span> }
 function ClientAction({ icon: Icon, title, meta, badge, tone }: { icon: LucideIcon; title: string; meta: string; badge: string; tone: UiAccent }) { return <div className="nearest-action"><Icon className={tone} size={24} /><p><strong>{title}</strong><span>{meta}</span></p><StatusBadge tone={tone}>{badge}</StatusBadge></div> }
 
 function ClientModal({ onClose, onCreate, nextId }: { onClose: () => void; onCreate: (client: Client) => void; nextId: number }) {

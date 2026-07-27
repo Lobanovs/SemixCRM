@@ -19,7 +19,8 @@ class FreelanceApiTests(unittest.TestCase):
         self.path_patch.start()
         self.registry_patch = patch("backend.main.build_adapters", return_value={})
         self.registry_patch.start()
-        self.client_context = TestClient(app)
+        # Тот же заголовок шлёт фронтенд: без него защищённые маршруты отвечают 403.
+        self.client_context = TestClient(app, headers={"X-Requested-With": "SemixCRM"})
         self.client = self.client_context.__enter__()
 
     def tearDown(self) -> None:

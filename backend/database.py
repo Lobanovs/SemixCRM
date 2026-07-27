@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import uuid
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -19,7 +20,14 @@ from .lead_utils import (
     normalize_domain,
     normalize_phone,
 )
-from .freelance.models import FREELANCE_SOURCES, FREELANCE_STATUSES, FreelanceOrder, FreelanceOrderFilters, FreelanceSettings
+from .freelance.models import (
+    FREELANCE_SOURCES,
+    FREELANCE_STATUSES,
+    FreelanceCleanupRules,
+    FreelanceOrder,
+    FreelanceOrderFilters,
+    FreelanceSettings,
+)
 
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
@@ -32,6 +40,8 @@ DEFAULT_SETTINGS = {
     "start_page": 1,
 }
 STATUS_PRIORITY = {"Новый": 0, "Написал": 1, "Ответили": 2, "Созвон": 3, "КП": 4, "Закрыто": 5, "Отказ": 1}
+# Версия схемы: тяжёлый проход дедупликации выполняется один раз, а не при каждом старте.
+SCHEMA_VERSION = 2
 
 
 @contextmanager
@@ -40,6 +50,10 @@ def _connect() -> Iterator[sqlite3.Connection]:
     connection = sqlite3.connect(DB_PATH, timeout=30)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
+    # WAL даёт читателям работать во время записи: иначе долгий парсинг клиентов
+    # блокирует весь файл и фоновый снайпер падает на «database is locked».
+    connection.execute("PRAGMA journal_mode = WAL")
+    connection.execute("PRAGMA synchronous = NORMAL")
     try:
         yield connection
         connection.commit()
@@ -96,6 +110,12 @@ def init_db() -> None:
         _ensure_column(connection, "clients", "dedupe_key", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(connection, "clients", "archived", "INTEGER NOT NULL DEFAULT 0")
         _ensure_column(connection, "clients", "archived_at", "TEXT NOT NULL DEFAULT ''")
+        # Нормализованные копии полей, по которым ищутся дубли: без них поиск шёл
+        # полным перебором таблицы внутри открытой транзакции записи.
+        _ensure_column(connection, "clients", "phone_norm", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(connection, "clients", "domain_norm", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(connection, "clients", "name_norm", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(connection, "clients", "city_norm", "TEXT NOT NULL DEFAULT ''")
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS parser_settings (
@@ -277,10 +297,17 @@ def init_db() -> None:
             )
             """
         )
+        _ensure_column(connection, "freelance_orders", "relevance_points", "INTEGER NOT NULL DEFAULT 0")
         connection.execute("CREATE INDEX IF NOT EXISTS schedule_tasks_date_idx ON schedule_tasks(task_date)")
         connection.execute("CREATE INDEX IF NOT EXISTS freelance_orders_published_idx ON freelance_orders(published_at)")
-        _migrate_and_deduplicate_clients(connection)
+        if _schema_version(connection) < SCHEMA_VERSION:
+            _migrate_and_deduplicate_clients(connection)
+            _set_schema_version(connection, SCHEMA_VERSION)
+        _backfill_client_norms(connection)
         connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS clients_dedupe_idx ON clients(dedupe_key)")
+        connection.execute("CREATE INDEX IF NOT EXISTS clients_phone_norm_idx ON clients(phone_norm)")
+        connection.execute("CREATE INDEX IF NOT EXISTS clients_domain_norm_idx ON clients(domain_norm)")
+        connection.execute("CREATE INDEX IF NOT EXISTS clients_name_city_idx ON clients(name_norm, city_norm)")
         existing = connection.execute("SELECT id FROM parser_settings WHERE id = 1").fetchone()
         if existing is None:
             connection.execute(
@@ -294,6 +321,60 @@ def init_db() -> None:
                     datetime.now(timezone.utc).isoformat(),
                 ),
             )
+
+
+def _schema_version(connection: sqlite3.Connection) -> int:
+    connection.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    row = connection.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
+    try:
+        return int(row["value"]) if row is not None else 0
+    except (TypeError, ValueError):
+        return 0
+
+
+def _set_schema_version(connection: sqlite3.Connection, version: int) -> None:
+    connection.execute(
+        "INSERT INTO meta (key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (str(version),),
+    )
+
+
+def _backfill_client_norms(connection: sqlite3.Connection) -> None:
+    """Заполняет нормализованные колонки у строк, где их ещё нет."""
+
+    rows = connection.execute(
+        "SELECT id, name, city, phone, website FROM clients WHERE name_norm = '' AND name != ''"
+    ).fetchall()
+    if not rows:
+        return
+    connection.executemany(
+        "UPDATE clients SET phone_norm = ?, domain_norm = ?, name_norm = ?, city_norm = ? WHERE id = ?",
+        [
+            (
+                normalize_phone(row["phone"]),
+                normalize_domain(row["website"]),
+                normalize_business_text(row["name"]),
+                normalize_business_text(row["city"]),
+                row["id"],
+            )
+            for row in rows
+        ],
+    )
+
+
+def _key_rank(key: str) -> int:
+    """Насколько ключ дедупликации точен: id карточки > имя+город+адрес > имя+город."""
+
+    value = str(key or "")
+    if not value:
+        return -1
+    if value.startswith("business:"):
+        return 3 if value.count(":") >= 3 else 2
+    if value.startswith("fallback:"):
+        return 0
+    if value.startswith(("phone:", "domain:")):
+        return 1
+    return 4
 
 
 def _migrate_and_deduplicate_clients(connection: sqlite3.Connection) -> None:
@@ -586,8 +667,17 @@ def _freelance_json_list(value: Any) -> list[str]:
 def _freelance_key(order: FreelanceOrder) -> str:
     source = str(order.source or "manual").strip().lower()
     external_id = str(order.external_id or "").strip()
-    fallback = order.url.strip() or f"{order.title.strip().casefold()}|{order.published_at.strip()}"
-    return f"{source}:{external_id or fallback}"
+    if external_id:
+        return f"{source}:{external_id}"
+    url = order.url.strip()
+    if url:
+        return f"{source}:{url}"
+    published = order.published_at.strip()
+    if published:
+        return f"{source}:{order.title.strip().casefold()}|{published}"
+    # Без идентификатора, ссылки и даты заголовок не является тождеством:
+    # два разных ручных заказа с одинаковым названием затирали друг друга.
+    return f"{source}:manual:{uuid.uuid4().hex}"
 
 
 def _serialize_freelance_order(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
@@ -609,6 +699,7 @@ def _serialize_freelance_order(row: sqlite3.Row | dict[str, Any]) -> dict[str, A
         "published_at": item["published_at"] or "",
         "discovered_at": item["discovered_at"] or "",
         "relevance": int(item["relevance"] or 0),
+        "relevance_points": int(item["relevance_points"] or 0),
         "relevance_reasons": _freelance_json_list(item["relevance_reasons_json"]),
         "status": item["status"] or "Новый",
         "next_step": item["next_step"] or "Изучить заказ",
@@ -633,6 +724,8 @@ def create_freelance_order(order: FreelanceOrder) -> dict[str, Any]:
         order.budget_text.strip(), order.published_at.strip(), order.discovered_at.strip() or now, max(0, min(int(order.relevance), 100)),
         json.dumps(list(order.relevance_reasons), ensure_ascii=False), status, order.next_step.strip() or "Изучить заказ",
         order.note.strip(), int(order.archived), now, now,
+        # Очки дописаны в конец: остальные значения адресуются по индексу ниже.
+        max(0, int(order.relevance_points)),
     )
     with _connect() as connection:
         existing = connection.execute("SELECT * FROM freelance_orders WHERE dedupe_key = ?", (dedupe_key,)).fetchone()
@@ -640,19 +733,53 @@ def create_freelance_order(order: FreelanceOrder) -> dict[str, Any]:
             connection.execute(
                 """UPDATE freelance_orders SET title = ?, description = ?, url = ?, customer = ?, categories_json = ?, tags_json = ?,
                     budget_min = ?, budget_max = ?, currency = ?, budget_text = ?, published_at = ?, relevance = ?,
-                    relevance_reasons_json = ?, updated_at = ? WHERE id = ?""",
-                (values[3], values[4], values[5], values[6], values[7], values[8], values[9], values[10], values[11], values[12], values[13], values[15], values[16], now, existing["id"]),
+                    relevance_points = ?, relevance_reasons_json = ?, updated_at = ? WHERE id = ?""",
+                (values[3], values[4], values[5], values[6], values[7], values[8], values[9], values[10], values[11], values[12], values[13], values[15], values[23], values[16], now, existing["id"]),
             )
             row = connection.execute("SELECT * FROM freelance_orders WHERE id = ?", (existing["id"],)).fetchone()
             return _serialize_freelance_order(row)
         cursor = connection.execute(
             """INSERT INTO freelance_orders (source, external_id, dedupe_key, title, description, url, customer, categories_json, tags_json,
                 budget_min, budget_max, currency, budget_text, published_at, discovered_at, relevance, relevance_reasons_json, status,
-                next_step, note, archived, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                next_step, note, archived, created_at, updated_at, relevance_points)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             values,
         )
         row = connection.execute("SELECT * FROM freelance_orders WHERE id = ?", (cursor.lastrowid,)).fetchone()
     return _serialize_freelance_order(row)
+
+
+def rescore_freelance_orders(scorer: Any, force: bool = False) -> int:
+    """Пересчитывает рейтинг заказов.
+
+    По умолчанию берём только строки с нулевыми очками — так автозапуск при старте
+    не трогает уже посчитанное. force=True пересчитывает всё: это нужно после
+    изменения самой шкалы.
+    """
+
+    clause = "" if force else " WHERE relevance_points = 0"
+    with _connect() as connection:
+        rows = connection.execute(f"SELECT * FROM freelance_orders{clause}").fetchall()
+        updates: list[tuple[Any, ...]] = []
+        for row in rows:
+            item = dict(row)
+            order = FreelanceOrder(
+                source=item["source"], external_id=item["external_id"], title=item["title"],
+                description=item["description"] or "", url=item["url"] or "", customer=item["customer"] or "",
+                categories=tuple(_freelance_json_list(item["categories_json"])),
+                tags=tuple(_freelance_json_list(item["tags_json"])),
+                budget_min=item["budget_min"], budget_max=item["budget_max"],
+                currency=item["currency"] or "RUB", budget_text=item["budget_text"] or "",
+                published_at=item["published_at"] or "", discovered_at=item["discovered_at"] or "",
+            )
+            points, reasons, percent = scorer(order)
+            updates.append((percent, points, json.dumps(list(reasons), ensure_ascii=False), item["id"]))
+        if updates:
+            connection.executemany(
+                "UPDATE freelance_orders SET relevance = ?, relevance_points = ?, relevance_reasons_json = ? WHERE id = ?",
+                updates,
+            )
+    return len(updates)
 
 
 def freelance_order_exists(order: FreelanceOrder) -> bool:
@@ -720,6 +847,83 @@ def update_freelance_order(order_id: int, **changes: Any) -> dict[str, Any] | No
 
 def archive_freelance_order(order_id: int) -> bool:
     return update_freelance_order(order_id, archived=True) is not None
+
+
+def _cleanup_clauses(rules: FreelanceCleanupRules) -> tuple[list[str], list[Any]]:
+    """Собирает условия отбора заказов под уборку."""
+
+    clauses = ["archived = 0"]
+    values: list[Any] = []
+    if rules.max_relevance is not None:
+        clauses.append("relevance < ?")
+        values.append(int(rules.max_relevance))
+    if rules.older_than_days is not None:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=max(0, int(rules.older_than_days)))
+        # Считаем по discovered_at: published_at приходит из площадок текстом
+        # вроде «25 июля» и для сравнения дат не годится.
+        clauses.append("discovered_at < ?")
+        values.append(cutoff.isoformat())
+    if rules.sources:
+        clauses.append(f"source IN ({', '.join('?' for _ in rules.sources)})")
+        values.extend(rules.sources)
+    if rules.statuses:
+        clauses.append(f"status IN ({', '.join('?' for _ in rules.statuses)})")
+        values.extend(rules.statuses)
+    elif rules.keep_worked:
+        # Заказы, по которым уже была переписка, не трогаем.
+        clauses.append("status = ?")
+        values.append("Новый")
+    return clauses, values
+
+
+def preview_freelance_cleanup(rules: FreelanceCleanupRules, sample_size: int = 5) -> dict[str, Any]:
+    """Сколько заказов уберётся и какие именно — до того, как что-то менять."""
+
+    if rules.is_empty():
+        return {"matched": 0, "sample": [], "kept": freelance_stats()["total"]}
+    clauses, values = _cleanup_clauses(rules)
+    where = " AND ".join(clauses)
+    with _connect() as connection:
+        matched = int(connection.execute(f"SELECT COUNT(*) FROM freelance_orders WHERE {where}", values).fetchone()[0])
+        rows = connection.execute(
+            f"SELECT title, relevance, source, discovered_at FROM freelance_orders WHERE {where}"
+            " ORDER BY relevance ASC, discovered_at ASC LIMIT ?",
+            (*values, max(1, sample_size)),
+        ).fetchall()
+        total = int(connection.execute("SELECT COUNT(*) FROM freelance_orders WHERE archived = 0").fetchone()[0])
+    return {
+        "matched": matched,
+        "kept": total - matched,
+        "sample": [
+            {"title": row["title"], "relevance": int(row["relevance"] or 0), "source": row["source"]}
+            for row in rows
+        ],
+    }
+
+
+def cleanup_freelance_orders(rules: FreelanceCleanupRules) -> int:
+    """Скрывает заказы по правилам. Возвращает количество убранных."""
+
+    if rules.is_empty():
+        return 0
+    clauses, values = _cleanup_clauses(rules)
+    with _connect() as connection:
+        cursor = connection.execute(
+            f"UPDATE freelance_orders SET archived = 1, updated_at = ? WHERE {' AND '.join(clauses)}",
+            (_freelance_now(), *values),
+        )
+    return cursor.rowcount
+
+
+def restore_all_freelance_orders() -> int:
+    """Возвращает все скрытые заказы обратно в рабочий список."""
+
+    with _connect() as connection:
+        cursor = connection.execute(
+            "UPDATE freelance_orders SET archived = 0, updated_at = ? WHERE archived = 1",
+            (_freelance_now(),),
+        )
+    return cursor.rowcount
 
 
 def freelance_stats() -> dict[str, Any]:
@@ -1089,6 +1293,7 @@ def insert_clients(leads: list[dict[str, Any]]) -> dict[str, Any]:
     now = datetime.now(timezone.utc).isoformat()
     inserted_count = 0
     duplicate_count = 0
+    restored_count = 0
     inserted_ids: list[int] = []
     results: list[dict[str, Any]] = []
     with _connect() as connection:
@@ -1103,26 +1308,34 @@ def insert_clients(leads: list[dict[str, Any]]) -> dict[str, Any]:
             existing = _find_existing(connection, lead, key)
             if existing is not None:
                 duplicate_count += 1
-                _update_existing(connection, existing, lead, key)
+                if _update_existing(connection, existing, lead, key):
+                    restored_count += 1
                 results.append({"client_id": int(existing["id"]), "outcome": "duplicate", "position": position, "snapshot": _snapshot_from_lead(lead, int(existing["id"]))})
                 continue
 
+            name_value = str(lead.get("name") or "Без названия").strip()
+            city_value = str(lead.get("city") or "")
+            phone_value = str(lead.get("phone") or "").strip()
+            website_value = str(lead.get("website") or "").strip()
             cursor = connection.execute(
                 """
                 INSERT INTO clients (
                     created_at, source, city, niche, name, address, phone, website, rating, reviews,
                     card_url, social_url, contacts_json, branch_count, pain, match_score, lead_score,
-                    lead_score_reasons_json, dedupe_key, tags_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    lead_score_reasons_json, dedupe_key, tags_json,
+                    phone_norm, domain_norm, name_norm, city_norm
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    now, str(lead.get("source") or "2GIS"), str(lead.get("city") or ""), str(lead.get("niche") or "Бизнес"),
-                    str(lead.get("name") or "Без названия").strip(), str(lead.get("address") or "").strip(),
-                    str(lead.get("phone") or "").strip(), str(lead.get("website") or "").strip(), lead.get("rating"),
+                    now, str(lead.get("source") or "2GIS"), city_value, str(lead.get("niche") or "Бизнес"),
+                    name_value, str(lead.get("address") or "").strip(),
+                    phone_value, website_value, lead.get("rating"),
                     lead.get("reviews"), str(lead.get("card_url") or "").strip(), str(lead.get("social_url") or "").strip(),
                     json.dumps(lead["contacts"], ensure_ascii=False), lead.get("branch_count"), str(lead.get("pain") or "").strip(),
                     match_score, score, json.dumps(reasons, ensure_ascii=False), key,
                     json.dumps(lead.get("tags") or [], ensure_ascii=False),
+                    normalize_phone(phone_value), normalize_domain(website_value),
+                    normalize_business_text(name_value), normalize_business_text(city_value),
                 ),
             )
             inserted_count += 1
@@ -1132,7 +1345,8 @@ def insert_clients(leads: list[dict[str, Any]]) -> dict[str, Any]:
 
     return {
         "clients": list_clients(), "inserted_count": inserted_count,
-        "duplicate_count": duplicate_count, "inserted_ids": inserted_ids, "results": results,
+        "duplicate_count": duplicate_count, "restored_count": restored_count,
+        "inserted_ids": inserted_ids, "results": results,
     }
 
 
@@ -1157,17 +1371,33 @@ def _find_existing(connection: sqlite3.Connection, lead: dict[str, Any], key: st
     address = normalize_business_text(lead.get("address"))
     phone = normalize_phone(lead.get("phone"))
     domain = normalize_domain(lead.get("website"))
-    for row in connection.execute("SELECT * FROM clients"):
+
+    if phone:
+        row = connection.execute("SELECT * FROM clients WHERE phone_norm = ? LIMIT 1", (phone,)).fetchone()
+        if row is not None:
+            return row
+    if domain:
+        row = connection.execute("SELECT * FROM clients WHERE domain_norm = ? LIMIT 1", (domain,)).fetchone()
+        if row is not None:
+            return row
+    if not (name and city):
+        return None
+
+    for row in connection.execute("SELECT * FROM clients WHERE name_norm = ? AND city_norm = ?", (name, city)):
+        row_address = normalize_business_text(row["address"])
+        if address and row_address:
+            if address == row_address:
+                return row
+            # Одно название, один город, но разные адреса — это разные филиалы.
+            continue
+        # Адрес известен только с одной стороны: считаем совпадением лишь при
+        # подтверждении телефоном или доменом, либо когда контактов нет вообще.
         if phone and phone == normalize_phone(row["phone"]):
             return row
         if domain and domain == normalize_domain(row["website"]):
             return row
-        if name and city and name == normalize_business_text(row["name"]) and city == normalize_business_text(row["city"]):
-            row_address = normalize_business_text(row["address"])
-            if address and row_address and address == row_address:
-                return row
-            if not address or not row_address:
-                return row
+        if not phone and not domain and not row["phone"] and not row["website"]:
+            return row
     return None
 
 
@@ -1176,7 +1406,9 @@ def _update_existing(
     existing: sqlite3.Row,
     lead: dict[str, Any],
     key: str,
-) -> None:
+) -> bool:
+    """Сливает найденную заново компанию с существующей. Возвращает True, если она была в архиве."""
+
     old = dict(existing)
     old["contacts"] = _json_list(old.get("contacts_json", "[]"), [])
     merged = _merge_client_rows(old, lead)
@@ -1187,11 +1419,17 @@ def _update_existing(
     old_tags = [tag for tag in _json_list(existing["tags_json"], []) if tag not in {"Сайт", "Аудит сайта"}]
     new_tags = [tag for tag in list(lead.get("tags") or []) if tag not in {"Сайт", "Аудит сайта"}]
     merged_tags = list(dict.fromkeys(["Сайт" if not is_real_website(merged.get("website")) else "Аудит сайта", "CRM", "Автоматизация", *old_tags, *new_tags]))
+    # Ключ не понижаем: иначе адресный ключ вырождается в «имя+город» и следующий
+    # филиал с тем же названием сольётся с этой записью.
+    final_key = key if _key_rank(key) > _key_rank(str(existing["dedupe_key"] or "")) else str(existing["dedupe_key"] or key)
+    was_archived = bool(existing["archived"])
     connection.execute(
         """
         UPDATE clients SET address = ?, phone = ?, website = ?, rating = ?, reviews = ?, card_url = ?, social_url = ?,
             contacts_json = ?, branch_count = ?, pain = ?, match_score = ?, lead_score = ?, lead_score_reasons_json = ?,
-            tags_json = ?, dedupe_key = ? WHERE id = ?
+            tags_json = ?, dedupe_key = ?, archived = 0, archived_at = '',
+            phone_norm = ?, domain_norm = ?, name_norm = ?, city_norm = ?
+        WHERE id = ?
         """,
         (
             merged.get("address") or "", merged.get("phone") or "", merged.get("website") or "", merged.get("rating"),
@@ -1199,6 +1437,11 @@ def _update_existing(
             merged.get("card_url") or "", merged.get("social_url") or "", json.dumps(merged_contacts, ensure_ascii=False),
             merged.get("branch_count"), merged.get("pain") or "", merged_match, merged_score,
             json.dumps(merged_reasons, ensure_ascii=False), json.dumps(merged_tags, ensure_ascii=False),
-            key, existing["id"],
+            final_key,
+            normalize_phone(merged.get("phone")), normalize_domain(merged.get("website")),
+            normalize_business_text(merged.get("name") or existing["name"]),
+            normalize_business_text(merged.get("city") or existing["city"]),
+            existing["id"],
         ),
     )
+    return was_archived

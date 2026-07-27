@@ -853,12 +853,19 @@ a:focus-visible {
   font-size: 11px;
 }
 
+/* Переносимый ряд вместо жёсткой сетки: сумма минимумов колонок не влезала
+   в основную колонку на 1280px, и кнопка действия уезжала под боковую панель. */
 .toolbar-row {
-  display: grid;
-  grid-template-columns: minmax(190px, 1.2fr) minmax(115px, 0.72fr) minmax(135px, 0.82fr) minmax(160px, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
   margin-bottom: 17px;
 }
+
+.toolbar-row > .local-search { flex: 1 1 190px; min-width: 170px; }
+.toolbar-row > .select-control { flex: 1 1 130px; min-width: 110px; }
+.toolbar-row > button { flex: 0 0 auto; }
 
 .local-search,
 .select-control {
@@ -1490,10 +1497,6 @@ a:focus-visible {
   gap: 36px;
 }
 
-.jobs-toolbar {
-  grid-template-columns: minmax(200px, 1.2fr) minmax(110px, 0.68fr) minmax(120px, 0.75fr) minmax(170px, 1.1fr) auto;
-}
-
 .opportunity-list {
   display: flex;
   flex-direction: column;
@@ -1869,8 +1872,6 @@ a:focus-visible {
 }
 
 @media (max-width: 760px) {
-  .jobs-toolbar { grid-template-columns: 1fr 1fr; }
-
   .opportunity-row { grid-template-columns: 1fr; }
   .opportunity-row > div:not(:last-child) { border-right: 0; border-bottom: 1px solid #e4e9f0; }
   .opportunity-status { grid-column: auto; grid-template-columns: 1fr; align-items: flex-start; }
@@ -1889,7 +1890,7 @@ a:focus-visible {
 }
 
 .freelance-order-row {
-  grid-template-columns: minmax(330px, 1.35fr) minmax(245px, 0.82fr) minmax(250px, 0.82fr);
+  grid-template-columns: minmax(320px, 1.25fr) minmax(230px, 0.72fr) minmax(285px, 0.95fr);
   min-height: 137px;
 }
 
@@ -1910,9 +1911,41 @@ a:focus-visible {
   padding-top: 19px;
 }
 
+/* Колонка статуса заказа живёт по своим правилам, а не по .opportunity-status.
+   Раньше кнопки лежали абсолютом шириной 158px при padding-right: 175px, и под
+   содержимое оставалось около 60px: рейтинг схлопывался в вертикальную полоску,
+   а «15/20» обрезалось до «15/2». */
 .freelance-order-status {
-  position: relative;
-  padding-right: 175px;
+  position: static;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 14px;
+}
+
+.freelance-order-status > .status-badge { align-self: flex-start; }
+
+.freelance-order-status > span:not(.status-badge) {
+  margin: 0;
+  color: #78849a;
+  font-size: 10px;
+}
+
+.freelance-order-status > strong {
+  margin: 0;
+  color: #273349;
+  font-size: 11px;
+  font-weight: 550;
+}
+
+.freelance-order-status .stacked-order-actions {
+  position: static;
+  top: auto;
+  right: auto;
+  width: 100%;
+  margin-top: auto;
+  padding-top: 4px;
 }
 
 .freelance-order-status > small {
@@ -3834,7 +3867,6 @@ a:focus-visible {
 .freelance-order-title h2 { min-width: 0; margin: 0; }
 .freelance-order-title .status-badge { flex: 0 0 auto; }
 .freelance-order-row .opportunity-identity p { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.freelance-order-row .opportunity-status { padding-right: 175px; }
 .freelance-order-row .status-select-label { display: block; margin-top: 8px; }
 .status-select-label select { width: 100%; min-height: 33px; padding: 0 8px; border: 1px solid #d9e0e9; border-radius: 6px; color: #33415a; background: #fff; cursor: pointer; font: inherit; font-size: 11px; }
 .stacked-order-actions .danger-row-action { border-color: #efc4cb; color: #ad4151; background: #fff7f8; }
@@ -4511,3 +4543,993 @@ a:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .parser-control-actions button { transition: none; }
 }
+
+
+/* ================= Проекты и вакансии: живые данные ================= */
+
+/* Логотип компании: раньше были только четыре именных бренда. */
+.company-logo.blue { background: linear-gradient(145deg, #1d73ee, #0756d3); color: #fff; }
+.company-logo.green { background: linear-gradient(145deg, #35b95e, #158438); color: #fff; }
+.company-logo.orange { background: linear-gradient(145deg, #ff7d15, #f04c00); color: #fff; }
+.company-logo.purple { background: linear-gradient(145deg, #8d4bea, #6d28d9); color: #fff; }
+.company-logo.cyan { background: linear-gradient(145deg, #20b8dc, #087d9b); color: #fff; }
+.company-logo.pink { background: linear-gradient(145deg, #f472b6, #db2777); color: #fff; }
+.company-logo.red { background: linear-gradient(145deg, #f2564b, #d21e14); color: #fff; }
+.company-logo.gray { background: linear-gradient(145deg, #6b7280, #374151); color: #fff; }
+
+.source-chip.green i { background: #159947; }
+.source-chip.orange i { background: #ff6b0a; }
+.source-chip.purple i { background: #7c3aed; }
+.source-chip.pink i { background: #ec4899; }
+.source-chip.gray i { background: #5b6577; }
+
+.project-log-view {
+  max-height: 220px;
+  margin: 0;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid #e1e7ee;
+  border-radius: 9px;
+  background: #f7f9fc;
+  color: #3b475d;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.project-run-error {
+  margin: 8px 0 0;
+  color: #dc2626;
+  font-size: 12px;
+}
+
+.bulk-run-summary {
+  margin-bottom: 15px;
+  padding: 13px 15px;
+  border: 1px solid #dbe6f5;
+  border-radius: 10px;
+  background: #f2f7fe;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.bulk-run-summary p { margin: 0 0 4px; color: #3b475d; }
+.bulk-run-summary p:last-of-type { margin-bottom: 6px; }
+
+.theme-dark .bulk-run-summary {
+  border-color: #2c3746;
+  background: #182029;
+}
+
+.theme-dark .bulk-run-summary p { color: #c4cede; }
+
+.parser-run-state {
+  margin-top: 12px;
+  padding: 11px 13px;
+  border-radius: 9px;
+  background: #f2f6fc;
+  font-size: 12px;
+}
+
+.parser-run-state p {
+  margin: 0 0 4px;
+  color: #3b475d;
+}
+
+.parser-run-state p:last-child { margin-bottom: 0; }
+
+.inline-field {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.inline-field input { flex: 1; min-width: 0; }
+
+.inline-field button {
+  display: inline-flex;
+  height: 42px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  border: 1px solid #d7dfe9;
+  border-radius: 8px;
+  background: #f4f7fb;
+  color: #24303f;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.inline-field button:hover:not(:disabled) { background: #e8eef7; }
+.inline-field button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.field-hint {
+  margin: 2px 0 0;
+  color: #5b6577;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.field-error {
+  margin: 2px 0 0;
+  color: #dc2626;
+  font-size: 12px;
+}
+
+.field-label {
+  margin-top: 5px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.source-toggle-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.source-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.source-toggle input { height: auto; width: auto; accent-color: #1264e8; }
+
+/* Формы проектов и парсера длиннее исходных модалок — даём им прокрутку. */
+.compact-modal {
+  max-height: min(86vh, 780px);
+  overflow-y: auto;
+}
+
+.compact-modal select {
+  height: 42px;
+  padding: 0 11px;
+  border: 1px solid #d7dfe9;
+  border-radius: 8px;
+  background: #fff;
+  color: #24303f;
+  outline: 0;
+}
+
+.compact-modal input[type='range'] {
+  height: 26px;
+  padding: 0;
+  border: 0;
+  accent-color: #1264e8;
+}
+
+.project-modal { width: min(520px, 100%); }
+
+.theme-dark .project-log-view {
+  border-color: #2c3746;
+  background: #151c26;
+  color: #c4cede;
+}
+
+.theme-dark .parser-run-state {
+  background: #182029;
+}
+
+.theme-dark .parser-run-state p { color: #c4cede; }
+
+.theme-dark .inline-field button {
+  border-color: #2c3746;
+  background: #1d2530;
+  color: #f4f7fb;
+}
+
+.theme-dark .inline-field button:hover:not(:disabled) { background: #263140; }
+
+.theme-dark .compact-modal select {
+  border-color: #2c3746;
+  background: #1d2530;
+  color: #f4f7fb;
+}
+
+.theme-dark .field-hint { color: #9aa7ba; }
+
+
+/* ================= Инструкция на странице и тур по кнопкам ================= */
+
+.page-guide {
+  margin-bottom: 18px;
+  border: 1px solid #dbe6f5;
+  border-radius: 13px;
+  background: linear-gradient(180deg, #f6faff, #fff 70%);
+  overflow: hidden;
+}
+
+.page-guide-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 16px 18px;
+}
+
+.page-guide-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 11px;
+  background: linear-gradient(145deg, #1d73ee, #0756d3);
+  color: #fff;
+}
+
+.page-guide-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #17202e;
+}
+
+.page-guide-head p {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #5b6577;
+}
+
+.page-guide-head-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.guide-toggle,
+.guide-tour-start {
+  display: inline-flex;
+  height: 36px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 15px;
+  border: 1px solid #cddcf1;
+  border-radius: 8px;
+  background: #fff;
+  color: #1264e8;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.guide-toggle:hover,
+.guide-tour-start:hover { background: #eef4fd; }
+
+.guide-tour-start {
+  border-color: #1d73ee;
+  background: #1d73ee;
+  color: #fff;
+}
+
+.guide-tour-start:hover { background: #0f62dd; }
+
+.page-guide-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+  margin: 0;
+  padding: 4px 18px 20px;
+  list-style: none;
+  border-top: 1px solid #e6eefb;
+}
+
+.page-guide-steps li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 11px;
+  padding-top: 15px;
+}
+
+.guide-step-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 10px;
+  background: #eaf2ff;
+  color: #1264e8;
+}
+
+.guide-step-icon.green { background: #eaf8ee; color: #159947; }
+.guide-step-icon.orange { background: #fff2e8; color: #ff6b0a; }
+.guide-step-icon.purple { background: #f1eafe; color: #7c3aed; }
+.guide-step-icon.cyan { background: #e6f8fd; color: #0891b2; }
+.guide-step-icon.pink { background: #ffebf4; color: #ec4899; }
+.guide-step-icon.red { background: #ffebeb; color: #dc2626; }
+.guide-step-icon.gray { background: #eef1f5; color: #4b5563; }
+
+.page-guide-steps h3 {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin: 0 0 4px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #17202e;
+}
+
+.page-guide-steps h3 b {
+  display: grid;
+  min-width: 19px;
+  height: 19px;
+  place-items: center;
+  border-radius: 5px;
+  background: #17202e;
+  color: #fff;
+  font-size: 11px;
+}
+
+.page-guide-steps p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: #4b5563;
+}
+
+.guide-control-chip {
+  display: inline-block;
+  margin-top: 7px;
+  padding: 3px 9px;
+  border: 1px solid #cddcf1;
+  border-radius: 6px;
+  background: #fff;
+  color: #1264e8;
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+.page-guide-steps small {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin-top: 7px;
+  color: #6b7280;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.page-guide-steps small svg { flex: 0 0 auto; margin-top: 2px; }
+
+/* --- тур по кнопкам --- */
+
+.guide-tour-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+}
+
+.guide-tour-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* Дыра в затемнении делается огромной тенью вокруг подсвеченного элемента. */
+.guide-tour-spot {
+  position: fixed;
+  border-radius: 10px;
+  box-shadow: 0 0 0 9999px rgba(12, 20, 33, 0.55), 0 0 0 2px #1d73ee inset;
+  outline: 2px solid #1d73ee;
+  outline-offset: 0;
+  pointer-events: none;
+  transition: top 0.18s ease, left 0.18s ease, width 0.18s ease, height 0.18s ease;
+}
+
+.guide-tour-tip {
+  position: fixed;
+  z-index: 2;
+  padding: 16px 18px 14px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 22px 60px rgba(12, 20, 33, 0.28);
+}
+
+.guide-tour-tip h3 {
+  margin: 10px 0 6px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #17202e;
+}
+
+.guide-tour-tip p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: #4b5563;
+}
+
+.guide-tour-tip small {
+  display: block;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #eef1f5;
+  color: #6b7280;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.guide-tour-tip footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.guide-tour-tip footer > span {
+  color: #6b7280;
+  font-size: 11.5px;
+}
+
+.guide-tour-tip footer div {
+  display: flex;
+  gap: 7px;
+}
+
+.guide-tour-tip footer button {
+  display: inline-flex;
+  height: 32px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 12px;
+  border: 1px solid #d7dfe9;
+  border-radius: 7px;
+  background: #fff;
+  color: #24303f;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.guide-tour-tip footer button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.guide-tour-tip footer .guide-tour-finish {
+  border-color: #1d73ee;
+  background: #1d73ee;
+  color: #fff;
+}
+
+.guide-tour-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+}
+
+.guide-tour-close:hover { background: #f1f4f9; }
+
+@media (max-width: 720px) {
+  .page-guide-head {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .page-guide-head-actions {
+    grid-column: 1 / -1;
+  }
+}
+
+/* --- тёмная тема --- */
+
+.theme-dark .page-guide {
+  border-color: #2c3746;
+  background: linear-gradient(180deg, #182029, #141b23 70%);
+}
+
+.theme-dark .page-guide-head h2 { color: #f4f7fb; }
+.theme-dark .page-guide-head p { color: #9aa7ba; }
+.theme-dark .page-guide-steps { border-top-color: #232d3a; }
+.theme-dark .page-guide-steps h3 { color: #f4f7fb; }
+.theme-dark .page-guide-steps h3 b { background: #f4f7fb; color: #17202e; }
+.theme-dark .page-guide-steps p { color: #c4cede; }
+.theme-dark .page-guide-steps small { color: #8b97a9; }
+
+.theme-dark .guide-toggle {
+  border-color: #2c3746;
+  background: #1d2530;
+  color: #7db1ff;
+}
+
+.theme-dark .guide-toggle:hover { background: #263140; }
+
+.theme-dark .guide-control-chip {
+  border-color: #2c3746;
+  background: #1d2530;
+  color: #7db1ff;
+}
+
+.theme-dark .guide-step-icon { background: #1d2942; color: #7db1ff; }
+.theme-dark .guide-step-icon.green { background: #16301f; color: #4ade80; }
+.theme-dark .guide-step-icon.orange { background: #33210f; color: #fb923c; }
+.theme-dark .guide-step-icon.purple { background: #241a3d; color: #c4b5fd; }
+.theme-dark .guide-step-icon.cyan { background: #10303a; color: #67e8f9; }
+.theme-dark .guide-step-icon.pink { background: #331a28; color: #f9a8d4; }
+.theme-dark .guide-step-icon.red { background: #3a1717; color: #fca5a5; }
+.theme-dark .guide-step-icon.gray { background: #232d3a; color: #c4cede; }
+
+.theme-dark .guide-tour-tip {
+  background: #1d2530;
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55);
+}
+
+.theme-dark .guide-tour-tip h3 { color: #f4f7fb; }
+.theme-dark .guide-tour-tip p { color: #c4cede; }
+.theme-dark .guide-tour-tip small { border-top-color: #2c3746; color: #8b97a9; }
+
+.theme-dark .guide-tour-tip footer button {
+  border-color: #2c3746;
+  background: #232d3a;
+  color: #f4f7fb;
+}
+
+.theme-dark .guide-tour-close { color: #9aa7ba; }
+.theme-dark .guide-tour-close:hover { background: #263140; }
+
+
+/* Рейтинг заказа: та же раскладка, что у очков лида в карточке клиента. */
+.order-fit {
+  width: 100%;
+  padding-bottom: 9px;
+  border-bottom: 1px solid #e4e9f0;
+}
+
+.order-score-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.order-score-line strong {
+  color: #17202e;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.order-score-line strong small {
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.order-score-line > span {
+  color: #6b7280;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.order-fit .score-reason-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 6px;
+}
+
+.order-fit .score-reason-preview span {
+  display: grid;
+  grid-template-columns: 13px minmax(0, 1fr);
+  gap: 5px;
+  align-items: start;
+  color: #4b5563;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.order-fit .score-reason-preview svg {
+  margin-top: 2px;
+  color: #159947;
+}
+
+.theme-dark .order-fit { border-bottom-color: #232d3a; }
+.theme-dark .order-score-line strong { color: #f4f7fb; }
+.theme-dark .order-score-line strong small,
+.theme-dark .order-score-line > span { color: #9aa7ba; }
+.theme-dark .order-fit .score-reason-preview span { color: #c4cede; }
+
+
+/* ================= Карточка фриланс-заказа: единая раскладка =================
+   Правила для колонки статуса накопились в шести местах и спорили друг с другом:
+   кнопки абсолютом, padding-right 175px и расстановка детей по grid-column для
+   элементов, которых в разметке уже нет. Из-за этого под содержимое оставалось
+   123px, блок рейтинга схлопывался, а «15/20» обрезалось до «15/2».
+   Ниже — одно описание, действующее на всех ширинах. */
+.freelance-order-row .freelance-order-status {
+  position: static;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+  min-height: 0;
+  padding: 14px;
+}
+
+.freelance-order-row .freelance-order-status > * {
+  grid-column: auto;
+  grid-row: auto;
+  margin: 0;
+}
+
+.freelance-order-row .freelance-order-status > .status-badge { align-self: flex-start; }
+
+.freelance-order-row .stacked-order-actions {
+  position: static;
+  top: auto;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  width: 100%;
+  margin-top: auto;
+  padding-top: 3px;
+  grid-template-columns: 1fr 1fr;
+}
+
+/* Основное действие занимает всю строку, вторичные встают парой. */
+.freelance-order-row .stacked-order-actions .primary-row-action,
+.freelance-order-row .stacked-order-actions .restore-row-action {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 760px) {
+  .freelance-order-row .stacked-order-actions { grid-template-columns: 1fr; }
+}
+
+
+/* Статус и селектор — одной строкой, следующий шаг — одной подписью:
+   раньше это занимало четыре строки и раздувало карточку по высоте. */
+.freelance-order-row .order-status-line {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.freelance-order-row .order-status-line .status-select-label { flex: 1 1 auto; min-width: 0; }
+.freelance-order-row .order-status-line select { width: 100%; }
+
+.freelance-order-row .order-next-step {
+  margin: 0;
+  color: #78849a;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.freelance-order-row .order-next-step strong {
+  color: #273349;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.theme-dark .freelance-order-row .order-next-step { color: #8b97a9; }
+.theme-dark .freelance-order-row .order-next-step strong { color: #f4f7fb; }
+
+
+/* На средних экранах колонка статуса уезжает под карточку во всю ширину.
+   Раскладываем её в две колонки: рейтинг слева, работа с заказом справа —
+   иначе карточка вытягивается почти на 420px. */
+@media (max-width: 1320px) {
+  .freelance-order-row .freelance-order-status {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+    column-gap: 22px;
+    row-gap: 7px;
+    align-content: start;
+  }
+
+  .freelance-order-row .freelance-order-status > .order-fit {
+    grid-column: 1;
+    grid-row: 1 / span 3;
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+
+  .freelance-order-row .freelance-order-status > .order-status-line { grid-column: 2; grid-row: 1; }
+  .freelance-order-row .freelance-order-status > .order-next-step { grid-column: 2; grid-row: 2; }
+  .freelance-order-row .stacked-order-actions { grid-column: 2; grid-row: 3; margin-top: 4px; }
+}
+
+@media (max-width: 760px) {
+  .freelance-order-row .freelance-order-status { display: flex; }
+  .freelance-order-row .freelance-order-status > .order-fit {
+    padding-bottom: 9px;
+    border-bottom: 1px solid #e4e9f0;
+  }
+}
+
+
+/* Подписи «Любая релевантность» и «Сначала релевантные» длиннее «Все»,
+   поэтому этим селектам нужна большая базовая ширина, иначе текст обрезается. */
+.freelance-toolbar > .select-control { flex: 1 1 165px; }
+.freelance-toolbar > .sort-control { flex: 1 1 195px; }
+.jobs-toolbar > .sort-control { flex: 1 1 195px; }
+
+
+/* Перенесённый на вторую строку селект не должен растягиваться во всю ширину. */
+.toolbar-row > .select-control { max-width: 265px; }
+.toolbar-row > .local-search { max-width: 340px; }
+
+
+/* Сортировка почти везде подписана длиннее остальных фильтров. */
+.toolbar-row > .sort-control { flex: 1 1 200px; }
+.toolbar-row > .clients-sort { flex: 1 1 210px; }
+.toolbar-row > .local-search { flex: 1 1 245px; max-width: 360px; }
+
+/* .secondary-wide-action рассчитана на боковые панели и занимает всю ширину.
+   В тулбаре это растягивало «Запустить все» и «Архив» на целую строку. */
+.toolbar-row > button { flex: 0 0 auto; width: auto; }
+
+
+/* ================= Диалог уборки списка заказов ================= */
+.cleanup-modal { width: min(520px, 100%); }
+
+.cleanup-presets {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.cleanup-presets button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid #d7dfe9;
+  border-radius: 9px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cleanup-presets button:hover { border-color: #9fc0f0; background: #f6faff; }
+
+.cleanup-presets button.active {
+  border-color: #1d73ee;
+  background: #eef4fd;
+  box-shadow: inset 0 0 0 1px #1d73ee;
+}
+
+.cleanup-presets strong { color: #17202e; font-size: 12.5px; font-weight: 650; }
+.cleanup-presets span { color: #6b7280; font-size: 11px; line-height: 1.35; }
+
+.cleanup-safety { font-weight: 600; }
+
+.cleanup-preview {
+  margin-top: 4px;
+  padding: 11px 13px;
+  border: 1px solid #dbe6f5;
+  border-radius: 9px;
+  background: #f2f7fe;
+  font-size: 12px;
+}
+
+.cleanup-preview.is-empty { border-color: #e4e9f0; background: #f7f9fc; }
+.cleanup-preview p { margin: 0; color: #3b475d; }
+.cleanup-preview strong { color: #17202e; }
+
+.cleanup-preview ul {
+  margin: 7px 0 0;
+  padding-left: 0;
+  list-style: none;
+  display: grid;
+  gap: 3px;
+}
+
+.cleanup-preview li {
+  overflow: hidden;
+  color: #5b6577;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cleanup-preview li b { color: #1264e8; font-weight: 650; }
+
+.restore-all-tab-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  padding: 0 14px;
+  border: 1px solid #b9ddc5;
+  border-radius: 8px;
+  background: #f1fbf4;
+  color: #137f43;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.restore-all-tab-action:hover:not(:disabled) { border-color: #38a963; background: #e6f7eb; }
+.restore-all-tab-action:disabled { cursor: not-allowed; opacity: .55; }
+
+@media (max-width: 620px) {
+  .cleanup-presets { grid-template-columns: 1fr; }
+}
+
+.theme-dark .cleanup-presets button { border-color: #2c3746; background: #1d2530; }
+.theme-dark .cleanup-presets button:hover { background: #263140; }
+.theme-dark .cleanup-presets button.active { border-color: #1d73ee; background: #1a2536; }
+.theme-dark .cleanup-presets strong { color: #f4f7fb; }
+.theme-dark .cleanup-presets span { color: #9aa7ba; }
+.theme-dark .cleanup-preview { border-color: #2c3746; background: #182029; }
+.theme-dark .cleanup-preview p { color: #c4cede; }
+.theme-dark .cleanup-preview strong { color: #f4f7fb; }
+.theme-dark .cleanup-preview li { color: #9aa7ba; }
+.theme-dark .restore-all-tab-action { border-color: #35694a; background: #193725; color: #9de0b3; }
+
+
+/* ================= AI: разбор клиента и первое сообщение ================= */
+.client-message-modal { width: min(600px, 100%); max-height: min(88vh, 860px); }
+
+/* Во всю ширину: написать первым — то, ради чего вообще собирается база. */
+.client-ai-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  grid-column: 1 / -1;
+  border-color: #cbb8f5 !important;
+  background: #f6f1ff !important;
+  color: #6d28d9 !important;
+  font-weight: 600;
+}
+
+.client-ai-action:hover { border-color: #9d6ff0 !important; background: #efe6ff !important; }
+
+.ai-analysis {
+  padding: 12px 14px;
+  border: 1px solid #dbe6f5;
+  border-radius: 10px;
+  background: #f6faff;
+}
+
+.ai-analysis h3 { margin: 0 0 6px; font-size: 12px; font-weight: 700; color: #17202e; }
+.ai-analysis p { margin: 0 0 6px; font-size: 12.5px; line-height: 1.55; color: #3b475d; }
+.ai-analysis p:last-child { margin-bottom: 0; }
+.ai-pain strong { color: #b4451f; }
+.ai-money strong { color: #137f43; }
+
+.ai-variant-tabs { display: flex; flex-wrap: wrap; gap: 7px; }
+
+.ai-variant-tabs button {
+  padding: 6px 12px;
+  border: 1px solid #d7dfe9;
+  border-radius: 999px;
+  background: #fff;
+  color: #4b5563;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ai-variant-tabs button.active { border-color: #7c3aed; background: #f1eafe; color: #6d28d9; }
+
+.ai-message-text {
+  width: 100%;
+  padding: 12px 13px;
+  border: 1px solid #d7dfe9;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+  outline: 0;
+}
+
+.ai-message-text:focus { border-color: #7c3aed; }
+
+.ai-send-row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.ai-send-row button,
+.ai-send-row .ai-send-link {
+  display: inline-flex;
+  height: 38px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 15px;
+  border: 1px solid #d7dfe9;
+  border-radius: 9px;
+  background: #fff;
+  color: #24303f;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.ai-send-row .ai-send-link { border-color: #b9ddc5; background: #f1fbf4; color: #137f43; }
+.ai-send-row .ai-send-link:hover { border-color: #38a963; background: #e6f7eb; }
+
+.ai-follow-up {
+  padding: 11px 13px;
+  border: 1px dashed #d7dfe9;
+  border-radius: 10px;
+  background: #fbfcfe;
+}
+
+.ai-follow-up h3 { margin: 0 0 5px; font-size: 11.5px; font-weight: 700; color: #4b5563; }
+.ai-follow-up p { margin: 0 0 6px; font-size: 12.5px; line-height: 1.55; color: #3b475d; }
+
+.ai-warnings p {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin: 0 0 4px;
+  color: #b4451f;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.ai-modal-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
+/* Окно без ключа: объясняет, что будет внутри и как это включить. */
+.ai-setup-preview,
+.ai-setup-steps {
+  border: 1px solid #e4e9f2;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: #f8fafd;
+}
+
+.ai-setup-preview h3,
+.ai-setup-steps h3 { margin: 0 0 8px; font-size: 12px; font-weight: 700; color: #17202e; }
+
+.ai-setup-preview ul,
+.ai-setup-steps ol { margin: 0; padding-left: 17px; display: grid; gap: 5px; }
+
+.ai-setup-preview li,
+.ai-setup-steps li { font-size: 12.5px; line-height: 1.5; color: #3b475d; }
+
+.ai-setup-preview { border-color: #d9cdf5; background: #faf7ff; }
+.ai-setup-preview li::marker { color: #7c3aed; }
+
+.ai-setup-steps code {
+  display: block;
+  margin-top: 5px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: #eef2f8;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 11.5px;
+  color: #17202e;
+  overflow-x: auto;
+}
+
+.theme-dark .ai-setup-preview { border-color: #3c2f5e; background: #1c1630; }
+.theme-dark .ai-setup-steps { border-color: #2c3746; background: #151c26; }
+.theme-dark .ai-setup-preview h3,
+.theme-dark .ai-setup-steps h3 { color: #f4f7fb; }
+.theme-dark .ai-setup-preview li,
+.theme-dark .ai-setup-steps li { color: #c4cede; }
+.theme-dark .ai-setup-steps code { background: #10161e; color: #f4f7fb; }
+
+.theme-dark .ai-analysis { border-color: #2c3746; background: #182029; }
+.theme-dark .ai-analysis h3 { color: #f4f7fb; }
+.theme-dark .ai-analysis p { color: #c4cede; }
+.theme-dark .ai-variant-tabs button { border-color: #2c3746; background: #1d2530; color: #c4cede; }
+.theme-dark .ai-variant-tabs button.active { border-color: #7c3aed; background: #241a3d; color: #c4b5fd; }
+.theme-dark .ai-message-text { border-color: #2c3746; background: #151c26; color: #f4f7fb; }
+.theme-dark .ai-send-row button { border-color: #2c3746; background: #1d2530; color: #f4f7fb; }
+.theme-dark .ai-follow-up { border-color: #2c3746; background: #151c26; }
+.theme-dark .ai-follow-up p { color: #c4cede; }
+.theme-dark .client-ai-action { border-color: #4c3a7a !important; background: #241a3d !important; color: #c4b5fd !important; }

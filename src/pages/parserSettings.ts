@@ -17,7 +17,9 @@ type ParserStartOptions = {
   onPersist?: (settings: ParserSettings) => void | Promise<void>
 }
 
-export const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://127.0.0.1:8000'
+import { API_BASE, jsonHeaders, readJson, responseError } from '../api'
+
+export { API_BASE }
 
 const settingsPayload = (settings: ParserSettings) => ({
   city: settings.city.trim(),
@@ -26,22 +28,6 @@ const settingsPayload = (settings: ParserSettings) => ({
   limit: Math.max(1, Math.min(50, Math.round(settings.limit))),
   start_page: Math.max(1, Math.min(999, Math.round(settings.start_page || 1))),
 })
-
-const responseError = (payload: unknown, fallback: string) => {
-  if (!payload || typeof payload !== 'object') return fallback
-  const record = payload as Record<string, unknown>
-  if (typeof record.detail === 'string') return record.detail
-  if (typeof record.error === 'string') return record.error
-  return fallback
-}
-
-const readJson = async (response: Response) => {
-  try {
-    return await response.json() as unknown
-  } catch {
-    return null
-  }
-}
 
 export const parserSettingsEqual = (left: ParserSettings, right: ParserSettings) => (
   left.city === right.city
@@ -61,7 +47,7 @@ export async function persistParserSettings(settings: ParserSettings, request: t
   validateParserSettings(settings)
   const response = await request(`${API_BASE}/api/parser/settings`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: jsonHeaders,
     body: JSON.stringify(settingsPayload(settings)),
   })
   const payload = await readJson(response)
@@ -72,7 +58,7 @@ export async function persistParserSettings(settings: ParserSettings, request: t
 async function requestParserStart(settings: ParserSettings, request: typeof fetch) {
   const response = await request(`${API_BASE}/api/clients/parse`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: jsonHeaders,
     body: JSON.stringify(settingsPayload(settings)),
   })
   const payload = await readJson(response) as { job_id?: string; error?: string } | null

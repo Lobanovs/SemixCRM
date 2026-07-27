@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -329,6 +330,54 @@ class FreelanceAdapterTests(unittest.TestCase):
         self.assertEqual("https://youdo.com/t15001227", order.url)
         self.assertEqual(15000, order.budget_min)
         self.assertEqual(("Веб-разработка",), order.categories)
+
+    def test_youdo_keeps_only_development_categories(self) -> None:
+        html = (FIXTURES / "youdo_mixed.html").read_text(encoding="utf-8")
+        adapter = YoudoAdapter()
+
+        orders = adapter.parse_html(html, "https://youdo.com/tasks")
+
+        self.assertEqual(8, adapter.last_seen_cards)
+        self.assertEqual(
+            ["Разработать лендинг для стоматологии", "Написать телеграм-бота для записи",
+             "Сверстать макет из Figma", "Настроить компьютер и Wi-Fi"],
+            [order.title for order in orders],
+        )
+        dropped = {"Доставить документы по городу", "Убрать квартиру после ремонта",
+                   "Перевезти мебель на дачу", "Сделать маникюр на дому"}
+        self.assertFalse(dropped & {order.title for order in orders})
+
+    def test_youdo_filter_can_be_disabled_by_env(self) -> None:
+        html = (FIXTURES / "youdo_mixed.html").read_text(encoding="utf-8")
+
+        with patch.dict(os.environ, {"FREELANCE_YOUDO_ALL": "yes"}):
+            orders = YoudoAdapter().parse_html(html, "https://youdo.com/tasks")
+
+        self.assertEqual(8, len(orders))
+
+    def test_youdo_categories_can_be_overridden_by_env(self) -> None:
+        html = (FIXTURES / "youdo_mixed.html").read_text(encoding="utf-8")
+
+        with patch.dict(os.environ, {"FREELANCE_YOUDO_CATEGORIES": "грузоперевоз"}):
+            orders = YoudoAdapter().parse_html(html, "https://youdo.com/tasks")
+
+        self.assertEqual(["Перевезти мебель на дачу"], [order.title for order in orders])
+
+    def test_youdo_delivery_task_does_not_pass_by_its_title(self) -> None:
+        # «Доставить компьютер» не должно проходить как компьютерная помощь.
+        self.assertFalse(YoudoAdapter.is_development(["Курьерские услуги"], "Доставить компьютер в офис"))
+        self.assertTrue(YoudoAdapter.is_development([], "Доработать сайт на React"))
+
+    def test_youdo_reports_empty_not_error_when_everything_is_filtered(self) -> None:
+        adapter = YoudoAdapter()
+        adapter.last_seen_cards = 40
+
+        self.assertEqual(("empty", ""), adapter.empty_result_reason())
+
+        adapter.last_seen_cards = 0
+        status, error = adapter.empty_result_reason()
+        self.assertEqual("error", status)
+        self.assertIn("разметка источника", error)
 
     def test_youdo_confirmed_empty_fixture_is_empty(self) -> None:
         html = (FIXTURES / "youdo_empty.html").read_text(encoding="utf-8")
