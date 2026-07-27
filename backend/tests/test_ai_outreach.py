@@ -14,7 +14,7 @@ from backend import database
 from backend.ai import outreach
 from backend.ai.client import AiClient, AiDisabledError, AiError, AiSettings, extract_json
 from backend.ai.profile import ExecutorProfile, get_profile, init_profile_schema, save_profile
-from backend.ai.prompts import build_client_message_prompt
+from backend.ai.prompts import SYSTEM_PROMPT, build_client_message_prompt
 from backend.ai.storage import init_ai_schema
 
 
@@ -41,32 +41,35 @@ CLIENT = {
 }
 
 GOOD_ANSWER = {
-    "analysis": "Клиника с рейтингом 5,0 и 200 отзывами, но вместо сайта только Telegram-канал. "
-                "Поток пациентов есть, а записаться онлайн негде — заявки уходят к соседям.",
-    "pain": "Пациенты находят клинику, но не могут записаться без звонка и уходят к конкурентам",
-    "money_argument": "Даже два-три несостоявшихся импланта в месяц — это сотни тысяч рублей; "
-                      "оценка приблизительная, но порядок такой.",
+    "analysis": {
+        "signal": "Рейтинг 5,0 и 200 отзывов показывают сильное доверие к клинике.",
+        "problem": "В карточке не указан полноценный сайт, следующим шагом остаётся Telegram.",
+        "opportunity": "Можно упростить путь от карточки до обращения и показать услуги клиники.",
+    },
     "variants": [
         {
-            "angle": "наблюдение о них",
-            "text": "Добрый день! Посмотрел вашу карточку в 2ГИС: рейтинг 5,0 и двести отзывов — "
-                    "для стоматологии это редкость. При этом записаться можно только звонком, "
-                    "сайта нет. Часть людей, которые вас нашли вечером или в выходной, до звонка "
-                    "просто не доходят. Могу за три минуты показать на экране, где именно теряются "
-                    "заявки. Прислать разбор? Семён",
+            "tone": "confident",
+            "title": "Уверенный продавец",
+            "text": "Добрый день! У «7R» рейтинг 5,0 и 200 отзывов — доверие уже заработано. "
+                    "При этом в карточке не вижу полноценного сайта, только Telegram: человеку "
+                    "сложнее быстро понять услуги и оставить заявку. Могу прислать короткий разбор "
+                    "с тремя точками роста — куда удобнее отправить? Семён",
         },
         {
-            "angle": "деньги",
-            "text": "Здравствуйте! У вас двести отзывов и рейтинг 5,0 — пациенты вас любят. "
-                    "Но записаться онлайн негде, и те, кто ищет ночью, уходят туда, где есть кнопка "
-                    "записи. Даже пара таких человек в месяц при чеке на имплант — заметные деньги. "
-                    "Хотите, покажу короткий разбор, что можно поправить за неделю? Семён",
+            "tone": "hard_sell",
+            "title": "Жёсткая продажа",
+            "text": "Добрый день! 200 отзывов приводят внимание к «7R», но без сайта часть этого "
+                    "спроса негде превращать в записи. Даже один пациент на дорогое лечение может "
+                    "стоить дороже простой посадочной страницы. Покажу на коротком видео, где "
+                    "сейчас обрывается путь до заявки — прислать сюда? Семён",
         },
         {
-            "angle": "короткий",
-            "text": "Добрый день! Нашёл вас в 2ГИС — рейтинг 5,0, а сайта нет, только Telegram. "
-                    "Похоже, часть заявок теряется по вечерам. Сделать бесплатный трёхминутный "
-                    "видеоразбор? Семён",
+            "tone": "expert",
+            "title": "Эксперт",
+            "text": "Здравствуйте! Посмотрел путь пациента у «7R»: карточка сильная — 5,0 и 200 "
+                    "отзывов, но следующим шагом вижу только Telegram. Гипотеза: часть людей не "
+                    "находит услуги и понятный способ обращения. Могу бесплатно показать прототип "
+                    "первого экрана под вашу клинику — посмотреть? Семён",
         },
     ],
     "follow_up": "Добрый день! Разбор всё ещё в силе, если интересно — пришлю сегодня.",
@@ -168,6 +171,12 @@ class PromptTests(unittest.TestCase):
         self.assertIn("имплант", prompt)
         self.assertIn("не факты о компании", prompt)
 
+    def test_system_prompt_defines_three_tones_and_safe_missing_site_wording(self) -> None:
+        for tone in ("confident", "hard_sell", "expert"):
+            self.assertIn(tone, SYSTEM_PROMPT)
+        self.assertIn("180–320", SYSTEM_PROMPT)
+        self.assertIn("не вижу сайта в карточке", SYSTEM_PROMPT)
+
 
 class JsonExtractionTests(unittest.TestCase):
     def test_plain_json(self) -> None:
@@ -265,11 +274,19 @@ class GenerationTests(unittest.TestCase):
         result = outreach.generate_client_message(CLIENT, ai_client=client_for(transport))
 
         self.assertEqual(3, len(result["variants"]))
+        self.assertEqual(
+            ["confident", "hard_sell", "expert"],
+            [item["tone"] for item in result["variants"]],
+        )
+        self.assertEqual("Уверенный продавец", result["variants"][0]["title"])
         self.assertTrue(result["analysis"])
         self.assertTrue(result["pain"])
         self.assertTrue(result["follow_up"])
         self.assertFalse(result["cached"])
         self.assertEqual([], result["warnings"])
+
+    def test_prompt_version_invalidates_legacy_cached_results(self) -> None:
+        self.assertEqual(2, outreach.build_input(CLIENT, get_profile())["prompt_version"])
 
     def test_whatsapp_link_carries_the_message_text(self) -> None:
         transport = RecordingTransport()
@@ -319,14 +336,18 @@ class GenerationTests(unittest.TestCase):
         self.assertIn("от 90 000 ₽", transport.last_user_prompt)
 
     def test_markdown_and_links_are_stripped_from_the_message(self) -> None:
+        variants = [dict(item) for item in GOOD_ANSWER["variants"]]
+        variants[0] = {
+            **variants[0],
+            "title": "**Уверенный продавец**",
+            "text": "Добрый день! У «7R» рейтинг 5,0 и 200 отзывов — доверие уже заработано. "
+                    "В карточке не вижу сайта, а ссылка https://example.com/promo ведёт в портфолио. "
+                    "Могу прислать **короткий разбор** с тремя точками роста и показать возможный "
+                    "путь клиента — куда удобнее отправить материал? Семён",
+        }
         dirty = {
             **GOOD_ANSWER,
-            "variants": [{
-                "angle": "**жирный**",
-                "text": "Добрый день! Посмотрел карточку — рейтинг высокий, а сайта нет. "
-                        "Подробности тут https://example.com/promo и в **портфолио**. "
-                        "Показать короткий разбор, где теряются заявки? Семён",
-            }],
+            "variants": variants,
         }
         transport = RecordingTransport(dirty)
 
@@ -352,31 +373,87 @@ class GenerationTests(unittest.TestCase):
             result["analysis"],
         )
 
-    def test_spam_phrases_are_reported_as_warnings(self) -> None:
+    def test_spam_phrases_trigger_one_repair(self) -> None:
+        variants = [dict(item) for item in GOOD_ANSWER["variants"]]
+        variants[0] = {
+            **variants[0],
+            "title": "Шаблон",
+            "text": "Здравствуйте! Меня зовут Семён, и у меня для «7R» уникальное предложение: "
+                    "сайт под ключ от команды профессионалов с индивидуальным подходом. Карточка "
+                    "уже собрала 200 отзывов, поэтому можно усилить путь до обращения. Хотите "
+                    "узнать больше о формате, сроках и стоимости работы? Семён",
+        }
         spammy = {
             **GOOD_ANSWER,
-            "variants": [{
-                "angle": "шаблон",
-                "text": "Здравствуйте! Меня зовут Семён, у меня для вас уникальное предложение: "
-                        "сайты под ключ от команды профессионалов с индивидуальным подходом. "
-                        "Хотите узнать больше о наших услугах и ценах на разработку? Семён",
-            }],
+            "variants": variants,
         }
-        transport = RecordingTransport(spammy)
+        transport = RecordingTransport(spammy, GOOD_ANSWER)
 
         result = outreach.generate_client_message(CLIENT, ai_client=client_for(transport))
 
-        self.assertTrue(result["warnings"])
-        self.assertIn("меня зовут", " ".join(result["warnings"]).casefold())
+        self.assertEqual([], result["warnings"])
+        self.assertEqual(2, len(transport.calls))
+        self.assertIn("меня зовут", transport.last_user_prompt.casefold())
 
-    def test_too_short_variants_are_dropped(self) -> None:
-        mixed = {**GOOD_ANSWER, "variants": [{"angle": "обрывок", "text": "Привет!"}, GOOD_ANSWER["variants"][0]]}
-        transport = RecordingTransport(mixed)
+    def test_too_short_variant_triggers_one_repair(self) -> None:
+        variants = [dict(item) for item in GOOD_ANSWER["variants"]]
+        variants[0] = {**variants[0], "text": "Привет?"}
+        transport = RecordingTransport({**GOOD_ANSWER, "variants": variants}, GOOD_ANSWER)
 
         result = outreach.generate_client_message(CLIENT, ai_client=client_for(transport))
 
-        self.assertEqual(1, len(result["variants"]))
-        self.assertIn("слишком короткий", " ".join(result["warnings"]))
+        self.assertEqual(3, len(result["variants"]))
+        self.assertEqual(2, len(transport.calls))
+        self.assertIn("слишком короткий", transport.last_user_prompt)
+
+    def test_too_long_variant_triggers_one_repair(self) -> None:
+        variants = [dict(item) for item in GOOD_ANSWER["variants"]]
+        variants[1] = {**variants[1], "text": variants[1]["text"] + " " + ("Проверим гипотезу. " * 8)}
+        transport = RecordingTransport({**GOOD_ANSWER, "variants": variants}, GOOD_ANSWER)
+
+        result = outreach.generate_client_message(CLIENT, ai_client=client_for(transport))
+
+        self.assertEqual(3, len(result["variants"]))
+        self.assertEqual(2, len(transport.calls))
+        self.assertIn("слишком длинный", transport.last_user_prompt)
+
+    def test_duplicate_or_missing_tones_are_repaired(self) -> None:
+        variants = [dict(item) for item in GOOD_ANSWER["variants"]]
+        variants[1] = {**variants[1], "tone": "confident"}
+        transport = RecordingTransport({**GOOD_ANSWER, "variants": variants}, GOOD_ANSWER)
+
+        result = outreach.generate_client_message(CLIENT, ai_client=client_for(transport))
+
+        self.assertEqual(["confident", "hard_sell", "expert"], [item["tone"] for item in result["variants"]])
+        self.assertEqual(2, len(transport.calls))
+        self.assertIn("ровно три стратегии", transport.last_user_prompt)
+
+    def test_variant_without_question_is_repaired(self) -> None:
+        variants = [dict(item) for item in GOOD_ANSWER["variants"]]
+        variants[2] = {**variants[2], "text": variants[2]["text"].replace("?", ".")}
+        transport = RecordingTransport({**GOOD_ANSWER, "variants": variants}, GOOD_ANSWER)
+
+        outreach.generate_client_message(CLIENT, ai_client=client_for(transport))
+
+        self.assertEqual(2, len(transport.calls))
+        self.assertIn("открытого вопроса", transport.last_user_prompt)
+
+    def test_legacy_angle_variants_are_mapped_by_position(self) -> None:
+        legacy = {
+            **GOOD_ANSWER,
+            "analysis": "Сильная карточка, но путь до обращения можно сделать понятнее.",
+            "pain": "Следующий шаг после карточки неочевиден.",
+            "money_argument": "Даже одно дополнительное обращение может окупить улучшение.",
+            "variants": [
+                {"angle": item["title"], "text": item["text"]}
+                for item in GOOD_ANSWER["variants"]
+            ],
+        }
+        transport = RecordingTransport(legacy)
+
+        result = outreach.generate_client_message(CLIENT, ai_client=client_for(transport))
+
+        self.assertEqual(["confident", "hard_sell", "expert"], [item["tone"] for item in result["variants"]])
 
     def test_answer_without_usable_variants_is_an_error(self) -> None:
         transport = RecordingTransport({**GOOD_ANSWER, "variants": []})
