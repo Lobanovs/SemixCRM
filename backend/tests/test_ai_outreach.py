@@ -10,8 +10,8 @@ from urllib.parse import quote
 
 import httpx
 
-from backend import database
-from backend.ai import outreach
+from backend import database, main
+from backend.ai import outreach, storage
 from backend.ai.client import AiClient, AiDisabledError, AiError, AiSettings, extract_json
 from backend.ai.profile import ExecutorProfile, get_profile, init_profile_schema, save_profile
 from backend.ai.prompts import SYSTEM_PROMPT, build_client_message_prompt
@@ -46,33 +46,79 @@ GOOD_ANSWER = {
         "problem": "В карточке не указан полноценный сайт, следующим шагом остаётся Telegram.",
         "opportunity": "Можно упростить путь от карточки до обращения и показать услуги клиники.",
     },
+    "review_insight": {"summary": "", "evidence_ids": []},
     "variants": [
         {
             "tone": "confident",
-            "title": "Уверенный продавец",
-            "text": "Добрый день! У «7R» рейтинг 5,0 и 200 отзывов — доверие уже заработано. "
-                    "При этом в карточке не вижу полноценного сайта, только Telegram: человеку "
-                    "сложнее быстро понять услуги и оставить заявку. Могу прислать короткий разбор "
-                    "с тремя точками роста — куда удобнее отправить? Семён",
+            "title": "По отзывам и точке роста",
+            "text": "Здравствуйте!\n\n"
+                    "Посмотрел карточку «7R» в 2GIS. У вас рейтинг 5,0 и 200 отзывов — видно, "
+                    "что клиника уже заслужила доверие пациентов.\n\n"
+                    "При этом в карточке 2GIS не увидел отдельного сайта, где человек может "
+                    "спокойно посмотреть услуги, врачей, цены и оставить заявку. Если пациент "
+                    "выбирает клинику вечером или пока не готов звонить, он может закрыть карточку "
+                    "и продолжить поиск.\n\n"
+                    "Я разрабатываю сайты для бизнеса и могу сделать для «7R» понятный сайт с "
+                    "услугами, ценами и онлайн-записью. Новые обращения будут сразу приходить "
+                    "администратору в мессенджер или на почту.\n\n"
+                    "Если сайт для вас сейчас актуален, просто ответьте «да» — пришлю варианты "
+                    "по стоимости и срокам без созвона и длинной презентации.",
         },
         {
             "tone": "hard_sell",
-            "title": "Жёсткая продажа",
-            "text": "Добрый день! 200 отзывов приводят внимание к «7R», но полноценного сайта "
-                    "в карточке не вижу. Гипотеза: часть этого спроса не доходит до записи. "
-                    "Даже один пациент на дорогое лечение может стоить дороже простой посадочной "
-                    "страницы. Покажу на коротком видео, где обрывается путь до заявки — прислать сюда? Семён",
+            "title": "Решение и портфолио",
+            "text": "Здравствуйте!\n\n"
+                    "Нашёл «7R» в 2GIS: у клиники высокий рейтинг и 200 отзывов, но отдельной "
+                    "ссылки на сайт в карточке не увидел. Пациенту приходится сразу переходить "
+                    "в Telegram, не посмотрев в одном месте врачей, услуги и цены.\n\n"
+                    "Я могу собрать понятный сайт клиники с онлайн-записью и передачей заявок "
+                    "администратору. Он поможет превратить уже заработанное доверие в более простой "
+                    "путь до обращения.\n\n"
+                    "Если рассматриваете сайт, ответьте «да» — пришлю варианты по бюджету и срокам "
+                    "без обязательного созвона.",
         },
         {
             "tone": "expert",
-            "title": "Эксперт",
-            "text": "Здравствуйте! Посмотрел путь пациента у «7R»: карточка сильная — 5,0 и 200 "
-                    "отзывов, но следующим шагом вижу только Telegram. Гипотеза: часть людей не "
-                    "находит услуги и понятный способ обращения. Могу бесплатно показать прототип "
-                    "первого экрана под вашу клинику — посмотреть? Семён",
+            "title": "Короткий контакт",
+            "text": "Здравствуйте! Посмотрел карточку «7R» в 2GIS: рейтинг 5,0 и 200 отзывов уже "
+                    "дают сильное доверие, но отдельного сайта с услугами и записью в карточке не "
+                    "увидел. Я делаю такие сайты для бизнеса. Если вопрос актуален, ответьте «да» — "
+                    "пришлю ориентиры по стоимости и срокам без созвона.",
         },
     ],
-    "follow_up": "Добрый день! Разбор всё ещё в силе, если интересно — пришлю сегодня.",
+    "follow_up": "Здравствуйте! Возвращаюсь к вопросу сайта. Если он ещё актуален, пришлю варианты по стоимости и срокам.",
+}
+
+REVIEW_EVIDENCE = [
+    {"id": "R1", "text": "Прекрасная студия, косметолог Анна качественно проводит процедуры."},
+    {"id": "R2", "text": "Очень приятная атмосфера, мастера внимательные и умеют найти подход."},
+]
+
+REVIEW_ANSWER = {
+    **GOOD_ANSWER,
+    "review_insight": {
+        "summary": "Клиенты особенно отмечают косметолога Анну, спокойную атмосферу и внимательное отношение.",
+        "evidence_ids": ["R1", "R2"],
+    },
+    "variants": [
+        {
+            **GOOD_ANSWER["variants"][0],
+            "text": "Здравствуйте!\n\n"
+                    "Посмотрел карточку «7R» в 2GIS и почитал отзывы. Обратил внимание, что клиенты "
+                    "особенно отмечают косметолога Анну, спокойную атмосферу и внимательное "
+                    "отношение. Видно, что у вас уже сложилась хорошая репутация и люди вам доверяют.\n\n"
+                    "При этом в карточке 2GIS не увидел отдельного сайта, где можно спокойно "
+                    "посмотреть все услуги, цены и оставить заявку. Если человек выбирает вечером "
+                    "или пока не готов звонить, он может закрыть карточку и продолжить поиск.\n\n"
+                    "Я разрабатываю сайты для бизнеса и могу сделать для «7R» понятный сайт с "
+                    "услугами, ценами и онлайн-записью. Новые заявки будут сразу приходить "
+                    "администратору в мессенджер или на почту.\n\n"
+                    "Если сайт для вас сейчас актуален, просто ответьте «да» — пришлю варианты по "
+                    "стоимости и срокам без созвона и длинной презентации.",
+        },
+        GOOD_ANSWER["variants"][1],
+        GOOD_ANSWER["variants"][2],
+    ],
 }
 
 
@@ -174,9 +220,24 @@ class PromptTests(unittest.TestCase):
     def test_system_prompt_defines_three_tones_and_safe_missing_site_wording(self) -> None:
         for tone in ("confident", "hard_sell", "expert"):
             self.assertIn(tone, SYSTEM_PROMPT)
-        self.assertIn("180–320", SYSTEM_PROMPT)
-        self.assertIn("не вижу сайта в карточке", SYSTEM_PROMPT)
-        self.assertIn("имя отправителя", SYSTEM_PROMPT.casefold())
+        for title in ("По отзывам и точке роста", "Решение и портфолио", "Короткий контакт"):
+            self.assertIn(title, SYSTEM_PROMPT)
+        self.assertIn("650–1100", SYSTEM_PROMPT)
+        self.assertIn("в карточке 2GIS не увидел отдельного сайта", SYSTEM_PROMPT)
+        self.assertIn("evidence_ids", SYSTEM_PROMPT)
+
+    def test_prompt_contains_review_evidence_and_manual_observation(self) -> None:
+        prompt = build_client_message_prompt(
+            CLIENT,
+            ExecutorProfile(),
+            manual_observation="На сайте нельзя оставить заявку",
+            review_evidence=REVIEW_EVIDENCE,
+        )
+
+        self.assertIn("РУЧНОЕ НАБЛЮДЕНИЕ", prompt)
+        self.assertIn("На сайте нельзя оставить заявку", prompt)
+        self.assertIn("[R1]", prompt)
+        self.assertIn("косметолог Анна", prompt)
 
 
 class JsonExtractionTests(unittest.TestCase):
@@ -279,15 +340,214 @@ class GenerationTests(unittest.TestCase):
             ["confident", "hard_sell", "expert"],
             [item["tone"] for item in result["variants"]],
         )
-        self.assertEqual("Уверенный продавец", result["variants"][0]["title"])
+        self.assertEqual("По отзывам и точке роста", result["variants"][0]["title"])
         self.assertTrue(result["analysis"])
         self.assertTrue(result["pain"])
         self.assertTrue(result["follow_up"])
         self.assertFalse(result["cached"])
+        self.assertEqual([], result["review_evidence"])
+        self.assertEqual("https://semyon-lobanov-portfolio.vercel.app/", result["portfolio_url"])
         self.assertEqual([], result["warnings"])
 
     def test_prompt_version_invalidates_legacy_cached_results(self) -> None:
-        self.assertEqual(5, outreach.build_input(CLIENT, get_profile())["prompt_version"])
+        self.assertEqual(6, outreach.build_input(CLIENT, get_profile())["prompt_version"])
+
+    def test_grounded_review_summary_keeps_its_evidence_ids(self) -> None:
+        client = {**CLIENT, "card_url": "https://2gis.ru/firm/70000001098575869"}
+        transport = RecordingTransport(REVIEW_ANSWER)
+
+        result = outreach.generate_client_message(
+            client,
+            ai_client=client_for(transport),
+            review_loader=lambda _url: REVIEW_EVIDENCE,
+        )
+
+        self.assertEqual(["R1", "R2"], result["review_insight"]["evidence_ids"])
+        self.assertEqual(REVIEW_EVIDENCE, result["review_evidence"])
+        self.assertIn("почитал отзывы", result["variants"][0]["text"])
+        self.assertEqual([], result["warnings"])
+        self.assertIn("[R1]", transport.last_user_prompt)
+
+    def test_unsupported_review_ids_trigger_one_repair(self) -> None:
+        invalid = {
+            **REVIEW_ANSWER,
+            "review_insight": {
+                "summary": "Клиенты хвалят несуществующего специалиста",
+                "evidence_ids": ["R9"],
+            },
+        }
+        client = {**CLIENT, "card_url": "https://2gis.ru/firm/70000001098575869"}
+        transport = RecordingTransport(invalid, REVIEW_ANSWER)
+
+        result = outreach.generate_client_message(
+            client,
+            ai_client=client_for(transport),
+            review_loader=lambda _url: REVIEW_EVIDENCE,
+        )
+
+        self.assertEqual(2, len(transport.calls))
+        self.assertEqual(["R1", "R2"], result["review_insight"]["evidence_ids"])
+        self.assertIn("R9", transport.last_user_prompt)
+
+    def test_review_failure_falls_back_with_a_warning(self) -> None:
+        client = {**CLIENT, "card_url": "https://2gis.ru/firm/70000001098575869"}
+
+        result = outreach.generate_client_message(
+            client,
+            ai_client=client_for(RecordingTransport()),
+            review_loader=lambda _url: [],
+        )
+
+        self.assertEqual([], result["review_evidence"])
+        self.assertEqual({"summary": "", "evidence_ids": []}, result["review_insight"])
+        self.assertTrue(any("Отзывы 2GIS" in warning for warning in result["warnings"]))
+
+    def test_manual_observation_is_sent_and_invalidates_cache(self) -> None:
+        transport = RecordingTransport()
+
+        outreach.generate_client_message(
+            CLIENT,
+            manual_observation="На сайте нет формы записи",
+            ai_client=client_for(transport),
+        )
+        outreach.generate_client_message(
+            CLIENT,
+            manual_observation="На сайте сложно найти цены",
+            ai_client=client_for(transport),
+        )
+
+        self.assertEqual(2, len(transport.calls))
+        self.assertIn("На сайте сложно найти цены", transport.last_user_prompt)
+
+    def test_api_forwards_trimmed_manual_observation(self) -> None:
+        with (
+            patch.object(main, "list_clients", return_value=[CLIENT]),
+            patch.object(
+                main,
+                "generate_client_message",
+                return_value={"cached": False, "variants": []},
+            ) as generate,
+        ):
+            response = main.ai_client_message(
+                28,
+                request=main.AiMessageRequest(
+                    manual_observation="  На сайте нет формы записи  "
+                ),
+                force=False,
+            )
+
+        self.assertTrue(response["ready"])
+        generate.assert_called_once_with(
+            CLIENT,
+            force=False,
+            manual_observation="На сайте нет формы записи",
+        )
+
+    def test_storage_lists_latest_results_with_generation_context(self) -> None:
+        payload = {
+            **GOOD_ANSWER,
+            "manual_observation": "Запись только по телефону",
+            "review_evidence": REVIEW_EVIDENCE,
+        }
+        fingerprint = storage.input_hash(
+            outreach.build_input(
+                CLIENT,
+                get_profile(),
+                payload["manual_observation"],
+                REVIEW_EVIDENCE,
+            )
+        )
+        storage.save_result(
+            "client_message",
+            "client",
+            CLIENT["id"],
+            fingerprint,
+            "mimo-v2.5-pro",
+            payload,
+        )
+
+        latest = storage.list_latest("client_message", "client")
+
+        self.assertEqual({CLIENT["id"]}, set(latest))
+        self.assertEqual(fingerprint, latest[CLIENT["id"]]["input_hash"])
+        self.assertEqual("Запись только по телефону", latest[CLIENT["id"]]["payload"]["manual_observation"])
+        self.assertEqual(REVIEW_EVIDENCE, latest[CLIENT["id"]]["payload"]["review_evidence"])
+
+    def test_clients_report_ready_stale_and_missing_ai_message_statuses(self) -> None:
+        stale_client = {**CLIENT, "id": 29, "name": "Старая карточка", "reviews": 400}
+        missing_client = {**CLIENT, "id": 30, "name": "Без текста"}
+        profile = get_profile()
+        ready_payload = {
+            **GOOD_ANSWER,
+            "manual_observation": "Запись только по телефону",
+            "review_evidence": REVIEW_EVIDENCE,
+        }
+        storage.save_result(
+            "client_message",
+            "client",
+            CLIENT["id"],
+            storage.input_hash(
+                outreach.build_input(
+                    CLIENT,
+                    profile,
+                    ready_payload["manual_observation"],
+                    REVIEW_EVIDENCE,
+                )
+            ),
+            "mimo-v2.5-pro",
+            ready_payload,
+        )
+        storage.save_result(
+            "client_message",
+            "client",
+            stale_client["id"],
+            storage.input_hash(outreach.build_input({**stale_client, "reviews": 10}, profile)),
+            "mimo-v2.5-pro",
+            {**GOOD_ANSWER, "manual_observation": "", "review_evidence": []},
+        )
+
+        with (
+            patch.object(main, "list_clients", return_value=[CLIENT, stale_client, missing_client]),
+            patch.object(main, "client_stats", return_value={"total": 3}),
+        ):
+            response = main.clients()
+
+        statuses = {item["id"]: item["ai_message_status"] for item in response["clients"]}
+        self.assertEqual({28: "ready", 29: "stale", 30: "missing"}, statuses)
+        self.assertTrue(response["clients"][0]["ai_message_created_at"])
+        self.assertEqual("", response["clients"][2]["ai_message_created_at"])
+
+    def test_cached_api_reopens_result_generated_with_observation_and_reviews(self) -> None:
+        payload = {
+            **REVIEW_ANSWER,
+            "manual_observation": "В карточке нет ссылки на сайт",
+            "review_evidence": REVIEW_EVIDENCE,
+            "warnings": [],
+        }
+        storage.save_result(
+            "client_message",
+            "client",
+            CLIENT["id"],
+            storage.input_hash(
+                outreach.build_input(
+                    CLIENT,
+                    get_profile(),
+                    payload["manual_observation"],
+                    REVIEW_EVIDENCE,
+                )
+            ),
+            "mimo-v2.5-pro",
+            payload,
+        )
+
+        with patch.object(main, "list_clients", return_value=[CLIENT]):
+            response = main.ai_client_message_cached(CLIENT["id"])
+
+        self.assertTrue(response["ready"])
+        self.assertEqual("ready", response["status"])
+        self.assertEqual("В карточке нет ссылки на сайт", response["manual_observation"])
+        self.assertEqual(REVIEW_EVIDENCE, response["review_evidence"])
+        self.assertEqual("https://semyon-lobanov-portfolio.vercel.app/", response["portfolio_url"])
 
     def test_whatsapp_link_carries_the_message_text(self) -> None:
         transport = RecordingTransport()
@@ -340,11 +600,10 @@ class GenerationTests(unittest.TestCase):
         variants = [dict(item) for item in GOOD_ANSWER["variants"]]
         variants[0] = {
             **variants[0],
-            "title": "**Уверенный продавец**",
-            "text": "Добрый день! У «7R» рейтинг 5,0 и 200 отзывов — доверие уже заработано. "
-                    "В карточке не вижу сайта, а ссылка https://example.com/promo ведёт в портфолио. "
-                    "Могу прислать **короткий разбор** с тремя точками роста и показать возможный "
-                    "путь клиента — куда удобнее отправить материал? Семён",
+            "title": "**По отзывам и точке роста**",
+            "text": GOOD_ANSWER["variants"][0]["text"]
+                    .replace("Посмотрел карточку", "**Посмотрел карточку**", 1)
+                    .replace("в 2GIS.", "в 2GIS: https://example.com/promo.", 1),
         }
         dirty = {
             **GOOD_ANSWER,
@@ -380,9 +639,8 @@ class GenerationTests(unittest.TestCase):
             **variants[0],
             "title": "Шаблон",
             "text": "Здравствуйте! Меня зовут Семён, и у меня для «7R» уникальное предложение: "
-                    "сайт под ключ от команды профессионалов с индивидуальным подходом. Карточка "
-                    "уже собрала 200 отзывов, поэтому можно усилить путь до обращения. Хотите "
-                    "узнать больше о формате, сроках и стоимости работы? Семён",
+                    "сайт под ключ от команды профессионалов с индивидуальным подходом.\n\n"
+                    + GOOD_ANSWER["variants"][0]["text"],
         }
         spammy = {
             **GOOD_ANSWER,
@@ -409,34 +667,37 @@ class GenerationTests(unittest.TestCase):
 
     def test_too_long_variant_is_compacted_without_an_extra_model_call(self) -> None:
         variants = [dict(item) for item in GOOD_ANSWER["variants"]]
-        variants[1] = {**variants[1], "text": variants[1]["text"] + " " + ("Проверим гипотезу. " * 8)}
+        variants[1] = {
+            **variants[1],
+            "text": variants[1]["text"] + " " + ("Проверим гипотезу. " * 30),
+        }
         transport = RecordingTransport({**GOOD_ANSWER, "variants": variants}, GOOD_ANSWER)
 
         result = outreach.generate_client_message(CLIENT, ai_client=client_for(transport))
 
         self.assertEqual(3, len(result["variants"]))
         self.assertEqual(1, len(transport.calls))
-        self.assertLessEqual(len(result["variants"][1]["text"]), outreach.MAX_LENGTH)
-        self.assertIn("?", result["variants"][1]["text"])
+        self.assertLessEqual(
+            len(result["variants"][1]["text"]),
+            outreach.TONE_LENGTHS["hard_sell"][1],
+        )
+        self.assertIn("ответьте «да»", result["variants"][1]["text"])
 
     def test_repeated_overlong_answer_is_compacted_without_losing_the_next_step(self) -> None:
-        long_text = (
-            "Здравствуйте. У «7R» рейтинг 5,0 и 200 отзывов — доверие пациентов уже заработано. "
-            "В карточке не вижу полноценного сайта, поэтому человеку из поиска приходится "
-            "самостоятельно собирать информацию о клинике и способах записи. "
-            "Гипотеза: часть обращений теряется, когда следующий шаг не виден сразу. "
-            "Это особенно важно для услуг с высоким средним чеком и долгим выбором врача. "
-            "Могу прислать короткий разбор с тремя точками роста. Куда удобнее отправить?"
-        )
-        variants = [{**item, "text": long_text} for item in GOOD_ANSWER["variants"]]
+        variants = [
+            {**item, "text": item["text"] + " " + ("Дополнительный контекст. " * 80)}
+            for item in GOOD_ANSWER["variants"]
+        ]
         overlong = {**GOOD_ANSWER, "variants": variants}
         transport = RecordingTransport(overlong, overlong)
 
         result = outreach.generate_client_message(CLIENT, ai_client=client_for(transport))
 
-        self.assertTrue(all(len(item["text"]) <= outreach.MAX_LENGTH for item in result["variants"]))
-        self.assertTrue(all(item["text"].endswith("?") for item in result["variants"]))
-        self.assertTrue(all("Могу прислать короткий разбор" in item["text"] for item in result["variants"]))
+        self.assertTrue(all(
+            len(item["text"]) <= outreach.TONE_LENGTHS[item["tone"]][1]
+            for item in result["variants"]
+        ))
+        self.assertTrue(all("ответьте «да»" in item["text"] for item in result["variants"]))
 
     def test_compaction_keeps_complete_sentences_instead_of_mid_sentence_ellipsis(self) -> None:
         text = (
@@ -459,10 +720,11 @@ class GenerationTests(unittest.TestCase):
         variants = [dict(item) for item in GOOD_ANSWER["variants"]]
         variants[1] = {
             **variants[1],
-            "text": "У «7R» рейтинг 5,0 и 200 отзывов — сильная репутация. "
-                    "Пока вы без сайта, конкуренты забирают пациентов из поиска. "
-                    "В карточке не вижу полноценного сайта, поэтому путь до записи стоит проверить. "
-                    "Могу прислать короткий разбор с тремя точками роста. Куда удобнее отправить?",
+            "text": GOOD_ANSWER["variants"][1]["text"].replace(
+                "\n\nЯ могу собрать",
+                "\n\nПока вы без сайта, конкуренты забирают пациентов из поиска.\n\nЯ могу собрать",
+                1,
+            ),
         }
         transport = RecordingTransport({**GOOD_ANSWER, "variants": variants})
 
@@ -477,11 +739,13 @@ class GenerationTests(unittest.TestCase):
         variants = [dict(item) for item in GOOD_ANSWER["variants"]]
         variants[1] = {
             **variants[1],
-            "text": "У «7R» рейтинг 5,0 и 200 отзывов — сильная репутация. "
-                    "Но без сайта эта репутация работает только через сарафан. "
-                    "Даже 2–3 дополнительных обращения в месяц могут заметно увеличить выручку. "
-                    "Готов записать бесплатный видеоразбор: покажу, что можно исправить за неделю. "
-                    "Как удобнее получить запись — в WhatsApp или Telegram?",
+            "text": GOOD_ANSWER["variants"][1]["text"].replace(
+                "\n\nЯ могу собрать",
+                "\n\nНо без сайта эта репутация работает только через сарафан. "
+                "Даже 2–3 дополнительных обращения в месяц могут заметно увеличить выручку. "
+                "Покажу, что можно исправить за неделю.\n\nЯ могу собрать",
+                1,
+            ),
         }
         transport = RecordingTransport({**GOOD_ANSWER, "variants": variants})
 
@@ -515,9 +779,12 @@ class GenerationTests(unittest.TestCase):
         variants = [dict(item) for item in GOOD_ANSWER["variants"]]
         variants[1] = {
             **variants[1],
-            "text": "Добрый день. У «7R» рейтинг 5,0 и 200 отзывов, но сайта в карточке не вижу. "
-                    "Часть пациентов может остановиться, если до записи приходится искать детали вручную. "
-                    "Могу прислать короткий разбор с тремя точками роста. Интересно?",
+            "text": GOOD_ANSWER["variants"][1]["text"].replace(
+                "Если рассматриваете сайт, ответьте «да» — пришлю варианты по бюджету и срокам "
+                "без обязательного созвона.",
+                "Могу прислать подробные варианты по бюджету, срокам и составу работ без "
+                "обязательного созвона. Интересно?",
+            ),
         }
         transport = RecordingTransport({**GOOD_ANSWER, "variants": variants})
 
@@ -542,13 +809,19 @@ class GenerationTests(unittest.TestCase):
 
     def test_variant_without_question_is_repaired(self) -> None:
         variants = [dict(item) for item in GOOD_ANSWER["variants"]]
-        variants[2] = {**variants[2], "text": variants[2]["text"].replace("?", ".")}
+        variants[2] = {
+            **variants[2],
+            "text": GOOD_ANSWER["variants"][2]["text"].replace(
+                "Если вопрос актуален, ответьте «да» — пришлю ориентиры по стоимости и срокам без созвона.",
+                "Я подготовлю ориентиры по стоимости и срокам без обязательного созвона.",
+            ),
+        }
         transport = RecordingTransport({**GOOD_ANSWER, "variants": variants}, GOOD_ANSWER)
 
         outreach.generate_client_message(CLIENT, ai_client=client_for(transport))
 
         self.assertEqual(2, len(transport.calls))
-        self.assertIn("открытого вопроса", transport.last_user_prompt)
+        self.assertIn("вопроса или CTA", transport.last_user_prompt)
 
     def test_legacy_angle_variants_are_mapped_by_position(self) -> None:
         legacy = {

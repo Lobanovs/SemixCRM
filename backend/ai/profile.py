@@ -14,11 +14,11 @@ class ExecutorProfile:
     name: str = "Семён"
     role: str = "делаю сайты, онлайн-запись и автоматизацию для клиник и малого бизнеса"
     stack: str = "React, Next.js, Tilda, Telegram-боты, интеграции с CRM и amoCRM"
-    portfolio_url: str = "https://semyon-lobanov.vercel.app"
+    portfolio_url: str = "https://semyon-lobanov-portfolio.vercel.app/"
     price_from: str = "от 35 000 ₽ за сайт с онлайн-записью"
     cases: str = "делал сайты с онлайн-записью для медицинских и сервисных компаний"
     # Маленький первый шаг: просить о покупке в первом сообщении — верный способ получить игнор.
-    offer: str = "бесплатный трёхминутный видеоразбор: показываю на экране, где клиника теряет заявки"
+    offer: str = "варианты по стоимости и срокам без обязательного созвона и длинной презентации"
     tone: str = "по-человечески, коротко, без канцелярита и без пафоса"
     signature: str = "Семён"
 
@@ -78,7 +78,10 @@ def get_profile() -> ExecutorProfile:
     stored = {field: (dict(row).get(field) or "") for field in FIELDS}
     # Пустые поля заменяем значениями по умолчанию: полупустой профиль хуже, чем дефолтный.
     defaults = ExecutorProfile()
-    return replace(defaults, **{key: value for key, value in stored.items() if value.strip()})
+    values = {key: value for key, value in stored.items() if value.strip()}
+    if values.get("portfolio_url", "").rstrip("/") == "https://semyon-lobanov.vercel.app":
+        values["portfolio_url"] = defaults.portfolio_url
+    return replace(defaults, **values)
 
 
 def save_profile(profile: ExecutorProfile) -> ExecutorProfile:

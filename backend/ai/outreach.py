@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import quote
 
 from .client import AiClient, AiDisabledError, AiError
@@ -11,8 +11,10 @@ from .prompts import (
     MESSAGE_MAX_LENGTH,
     MESSAGE_MIN_LENGTH,
     SYSTEM_PROMPT,
+    TONE_LENGTHS,
     build_client_message_prompt,
 )
+from .reviews import fetch_2gis_review_evidence
 from .storage import get_cached, input_hash, save_result
 
 
@@ -20,15 +22,15 @@ logger = logging.getLogger(__name__)
 
 TASK = "client_message"
 ENTITY = "client"
-PROMPT_VERSION = 5
+PROMPT_VERSION = 6
 
 MIN_LENGTH = MESSAGE_MIN_LENGTH
 MAX_LENGTH = MESSAGE_MAX_LENGTH
 TONE_ORDER = ("confident", "hard_sell", "expert")
 TONE_TITLES = {
-    "confident": "Уверенный продавец",
-    "hard_sell": "Жёсткая продажа",
-    "expert": "Эксперт",
+    "confident": "По отзывам и точке роста",
+    "hard_sell": "Решение и портфолио",
+    "expert": "Короткий контакт",
 }
 
 # Фразы, по которым сообщение сразу читается как рассылка.
@@ -56,6 +58,11 @@ WEAK_FINAL_QUESTION = re.compile(
     r"^(?:интересно|актуально|скинуть|посмотрите|посмотреть|"
     r"вам\s+(?:будет\s+)?удобно(?:\s+будет)?\s+посмотреть|"
     r"хотите\s+.+|готовы\s+.+|нужно\s+.+)\?$",
+    re.IGNORECASE,
+)
+REPLY_CTA = re.compile(r"\bответ(?:ьте|ить)\s+[«\"']?да[»\"']?", re.IGNORECASE)
+CLAIMS_REVIEW_READING = re.compile(
+    r"\b(?:почитал|прочитал|посмотрел|изучил)\w*\s+отзыв|\bклиенты\s+(?:часто\s+|особенно\s+)?отмеч",
     re.IGNORECASE,
 )
 UNSUPPORTED_VOLUME_PERIOD = re.compile(
@@ -114,16 +121,20 @@ def _strengthen_final_question(text: str) -> str:
 
 
 def _drop_unsupported_claims(text: str) -> str:
-    sentences = [part.strip() for part in SENTENCE_BREAK.split(text) if part.strip()]
-    grounded: list[str] = []
-    for part in sentences:
-        lowered = part.casefold()
-        if "конкурент" in lowered or DIRECT_SITE_ABSENCE.search(part):
-            continue
-        if UNSUPPORTED_VOLUME_PERIOD.search(part):
-            continue
-        grounded.append(UNSUPPORTED_DEADLINE.sub("в первую очередь", part))
-    return " ".join(grounded) if grounded else text
+    grounded_paragraphs: list[str] = []
+    for paragraph in re.split(r"\n{2,}", text):
+        sentences = [part.strip() for part in SENTENCE_BREAK.split(paragraph) if part.strip()]
+        grounded: list[str] = []
+        for part in sentences:
+            lowered = part.casefold()
+            if "конкурент" in lowered or DIRECT_SITE_ABSENCE.search(part):
+                continue
+            if UNSUPPORTED_VOLUME_PERIOD.search(part):
+                continue
+            grounded.append(UNSUPPORTED_DEADLINE.sub("в первую очередь", part))
+        if grounded:
+            grounded_paragraphs.append(" ".join(grounded))
+    return "\n\n".join(grounded_paragraphs) if grounded_paragraphs else text
 
 
 def _compact_message(text: str, max_length: int = MAX_LENGTH) -> str:
@@ -167,10 +178,39 @@ def _compact_message(text: str, max_length: int = MAX_LENGTH) -> str:
     return result if len(result) <= max_length else result[:max_length].rstrip()
 
 
-def _validate(payload: dict[str, Any], sender_name: str = "") -> tuple[dict[str, Any], list[str]]:
+def _validate(
+    payload: dict[str, Any],
+    sender_name: str = "",
+    review_evidence: list[dict[str, str]] | None = None,
+) -> tuple[dict[str, Any], list[str]]:
     """Приводит ответ модели к ожидаемой форме и собирает замечания."""
 
     warnings: list[str] = []
+    evidence = review_evidence or []
+    allowed_evidence_ids = {
+        str(item.get("id") or "").strip()
+        for item in evidence
+        if str(item.get("id") or "").strip()
+    }
+    raw_review_insight = payload.get("review_insight") or {}
+    if not isinstance(raw_review_insight, dict):
+        raise AiError("review_insight должен быть JSON-объектом")
+    review_summary = _clean_text(raw_review_insight.get("summary"))
+    raw_evidence_ids = raw_review_insight.get("evidence_ids") or []
+    if not isinstance(raw_evidence_ids, list):
+        raise AiError("review_insight.evidence_ids должен быть массивом")
+    evidence_ids = [str(item).strip() for item in raw_evidence_ids if str(item).strip()]
+    unsupported_ids = [item for item in evidence_ids if item not in allowed_evidence_ids]
+    if unsupported_ids:
+        raise AiError(
+            "review_insight содержит неизвестные evidence_ids: "
+            + ", ".join(unsupported_ids)
+        )
+    if evidence and (not review_summary or not evidence_ids):
+        raise AiError("При доступных отзывах review_insight должен содержать summary и evidence_ids")
+    if not evidence and (review_summary or evidence_ids):
+        raise AiError("Нельзя описывать отзывы без переданных доказательств 2GIS")
+
     variants: list[dict[str, str]] = []
     raw_variants = payload.get("variants") or []
     if not isinstance(raw_variants, list) or len(raw_variants) != len(TONE_ORDER):
@@ -193,19 +233,26 @@ def _validate(payload: dict[str, Any], sender_name: str = "") -> tuple[dict[str,
         text = _remove_sender_salutation(text, sender_name)
         text = _strengthen_final_question(text)
         text = _drop_unsupported_claims(text)
-        text = _compact_message(text)
-        if len(text) < MIN_LENGTH:
+        minimum, maximum = TONE_LENGTHS[tone]
+        text = _compact_message(text, maximum)
+        if len(text) < minimum:
             raise AiError(
                 f"Вариант «{TONE_TITLES[tone]}» слишком короткий: "
-                f"{len(text)} символов вместо {MIN_LENGTH}–{MAX_LENGTH}"
+                f"{len(text)} символов вместо {minimum}–{maximum}"
             )
-        if len(text) > MAX_LENGTH:
+        if len(text) > maximum:
             raise AiError(
                 f"Вариант «{TONE_TITLES[tone]}» слишком длинный: "
-                f"{len(text)} символов вместо {MIN_LENGTH}–{MAX_LENGTH}"
+                f"{len(text)} символов вместо {minimum}–{maximum}"
             )
-        if "?" not in text:
-            raise AiError(f"В варианте «{TONE_TITLES[tone]}» нет открытого вопроса")
+        if "?" not in text and REPLY_CTA.search(text) is None:
+            raise AiError(
+                f"В варианте «{TONE_TITLES[tone]}» нет вопроса или CTA с ответом «да»"
+            )
+        if not evidence and CLAIMS_REVIEW_READING.search(text):
+            raise AiError("Нельзя утверждать, что отзывы прочитаны, когда доказательства 2GIS недоступны")
+        if evidence and tone == "confident" and "отзыв" not in text.casefold():
+            raise AiError("Основной вариант должен использовать подтверждённую деталь из отзывов")
         lowered = text.casefold()
         hits = [phrase for phrase in BANNED_PHRASES if phrase in lowered]
         if hits:
@@ -243,6 +290,10 @@ def _validate(payload: dict[str, Any], sender_name: str = "") -> tuple[dict[str,
             "problem": problem,
             "opportunity": opportunity,
         },
+        "review_insight": {
+            "summary": review_summary,
+            "evidence_ids": evidence_ids,
+        },
         "variants": variants,
         "follow_up": _clean_text(payload.get("follow_up")),
     }
@@ -275,7 +326,12 @@ def _channel_links(client: dict[str, Any], text: str) -> list[dict[str, str]]:
     return links
 
 
-def build_input(client: dict[str, Any], profile: ExecutorProfile) -> dict[str, Any]:
+def build_input(
+    client: dict[str, Any],
+    profile: ExecutorProfile,
+    manual_observation: str = "",
+    review_evidence: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
     """Только те поля, изменение которых должно сбрасывать кэш."""
 
     return {
@@ -284,16 +340,20 @@ def build_input(client: dict[str, Any], profile: ExecutorProfile) -> dict[str, A
             key: client.get(key)
             for key in ("name", "city", "niche", "address", "phone", "website", "rating",
                         "reviews", "branch_count", "pain", "lead_score", "match_score",
-                        "lead_score_reasons")
+                        "lead_score_reasons", "card_url")
         },
         "profile": profile.as_dict(),
+        "manual_observation": manual_observation.strip(),
+        "review_evidence": review_evidence or [],
     }
 
 
 def generate_client_message(
     client: dict[str, Any],
     force: bool = False,
+    manual_observation: str = "",
     ai_client: AiClient | None = None,
+    review_loader: Callable[[str], list[dict[str, str]]] = fetch_2gis_review_evidence,
 ) -> dict[str, Any]:
     """Разбирает клиента и пишет варианты первого сообщения.
 
@@ -302,7 +362,14 @@ def generate_client_message(
     """
 
     profile = get_profile()
-    payload_input = build_input(client, profile)
+    observation = manual_observation.strip()[:500]
+    card_url = str(client.get("card_url") or "").strip()
+    try:
+        review_evidence = review_loader(card_url) if card_url else []
+    except Exception as error:  # внешний источник не должен блокировать генерацию
+        logger.info("Отзывы 2GIS не загрузились для клиента %s: %s", client.get("id"), error)
+        review_evidence = []
+    payload_input = build_input(client, profile, observation, review_evidence)
     fingerprint = input_hash(payload_input)
     client_id = int(client["id"])
 
@@ -310,7 +377,11 @@ def generate_client_message(
         cached = get_cached(TASK, ENTITY, client_id, fingerprint)
         if cached is not None:
             first = cached["variants"][0]["text"] if cached.get("variants") else ""
-            return {**cached, "links": _channel_links(client, first)}
+            return {
+                **cached,
+                "portfolio_url": profile.portfolio_url,
+                "links": _channel_links(client, first),
+            }
 
     engine = ai_client or AiClient()
     if not engine.enabled:
@@ -318,15 +389,27 @@ def generate_client_message(
 
     raw = engine.complete_json(
         SYSTEM_PROMPT,
-        build_client_message_prompt(client, profile),
+        build_client_message_prompt(client, profile, observation, review_evidence),
         # Ниже единицы: нужен предсказуемый деловой текст, а не творческий разброс.
-        temperature=0.55,
-        max_tokens=1800,
-        validate=lambda payload: _validate(payload, profile.name),
+        temperature=0.45,
+        max_tokens=3600,
+        validate=lambda payload: _validate(payload, profile.name, review_evidence),
     )
-    result, warnings = _validate(raw, profile.name)
+    result, warnings = _validate(raw, profile.name, review_evidence)
+    if card_url and not review_evidence:
+        warnings.append(
+            "Отзывы 2GIS временно недоступны — текст подготовлен только по данным карточки."
+        )
     result["warnings"] = warnings
+    result["review_evidence"] = review_evidence
+    result["manual_observation"] = observation
     save_result(TASK, ENTITY, client_id, fingerprint, engine.settings.model, result)
 
     first = result["variants"][0]["text"]
-    return {**result, "cached": False, "model": engine.settings.model, "links": _channel_links(client, first)}
+    return {
+        **result,
+        "cached": False,
+        "model": engine.settings.model,
+        "portfolio_url": profile.portfolio_url,
+        "links": _channel_links(client, first),
+    }

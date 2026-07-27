@@ -56,6 +56,48 @@ def get_cached(task: str, entity_type: str, entity_id: int, expected_hash: str) 
     return {"cached": True, "model": row["model"], "created_at": row["created_at"], **payload}
 
 
+def _decode_result(row: Any) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(row["payload_json"])
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return {
+        "input_hash": row["input_hash"],
+        "model": row["model"],
+        "created_at": row["created_at"],
+        "payload": payload,
+    }
+
+
+def get_latest(task: str, entity_type: str, entity_id: int) -> dict[str, Any] | None:
+    """Return the latest saved result even when its input is now stale."""
+
+    with _connect() as connection:
+        row = connection.execute(
+            "SELECT * FROM ai_results WHERE task = ? AND entity_type = ? AND entity_id = ?",
+            (task, entity_type, int(entity_id)),
+        ).fetchone()
+    return _decode_result(row) if row is not None else None
+
+
+def list_latest(task: str, entity_type: str) -> dict[int, dict[str, Any]]:
+    """Return saved results for a task in one query, keyed by entity id."""
+
+    with _connect() as connection:
+        rows = connection.execute(
+            "SELECT * FROM ai_results WHERE task = ? AND entity_type = ?",
+            (task, entity_type),
+        ).fetchall()
+    results: dict[int, dict[str, Any]] = {}
+    for row in rows:
+        decoded = _decode_result(row)
+        if decoded is not None:
+            results[int(row["entity_id"])] = decoded
+    return results
+
+
 def save_result(task: str, entity_type: str, entity_id: int, value_hash: str, model: str, payload: dict[str, Any]) -> None:
     with _connect() as connection:
         connection.execute(

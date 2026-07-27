@@ -82,7 +82,13 @@ from .ai.outreach import (
     _channel_links as ai_channel_links,
 )
 from .ai.profile import ExecutorProfile, get_profile as get_ai_profile, init_profile_schema, save_profile as save_ai_profile
-from .ai.storage import forget_result as forget_ai_result, get_cached as get_cached_ai_result, init_ai_schema, input_hash as ai_input_hash
+from .ai.storage import (
+    forget_result as forget_ai_result,
+    get_latest as get_latest_ai_result,
+    init_ai_schema,
+    input_hash as ai_input_hash,
+    list_latest as list_latest_ai_results,
+)
 from .ai.settings import (
     DEFAULT_BASE_URL as OPENCODE_GO_BASE_URL,
     init_settings_schema as init_ai_settings_schema,
@@ -557,9 +563,39 @@ def update_schedule_week(week_start: str, request: ScheduleWeekRequest) -> dict[
         raise HTTPException(status_code=422, detail=str(error)) from error
 
 
+def _client_ai_message_status(
+    client: dict[str, Any],
+    stored: dict[str, Any] | None,
+    profile: ExecutorProfile,
+) -> str:
+    if stored is None:
+        return "missing"
+    payload = stored.get("payload")
+    if not isinstance(payload, dict):
+        return "stale"
+    observation = str(payload.get("manual_observation") or "").strip()
+    evidence = payload.get("review_evidence")
+    if not isinstance(evidence, list):
+        evidence = []
+    expected = ai_input_hash(build_ai_input(client, profile, observation, evidence))
+    return "ready" if stored.get("input_hash") == expected else "stale"
+
+
 @app.get("/api/clients")
 def clients() -> dict[str, Any]:
-    return {"clients": list_clients(), "stats": client_stats()}
+    items = list_clients()
+    profile = get_ai_profile()
+    saved = list_latest_ai_results("client_message", "client")
+    enriched = []
+    for client in items:
+        result = saved.get(int(client["id"]))
+        status = _client_ai_message_status(client, result, profile)
+        enriched.append({
+            **client,
+            "ai_message_status": status,
+            "ai_message_created_at": result["created_at"] if result is not None else "",
+        })
+    return {"clients": enriched, "stats": client_stats()}
 
 
 @app.get("/api/clients/archived")
@@ -1129,6 +1165,10 @@ class AiSettingsTestRequest(BaseModel):
     timeout: float = Field(ge=5, le=300)
 
 
+class AiMessageRequest(BaseModel):
+    manual_observation: str = Field(default="", max_length=500)
+
+
 @app.get("/api/ai/settings")
 def ai_settings() -> dict[str, Any]:
     return get_safe_ai_settings()
@@ -1214,24 +1254,51 @@ def ai_client_message_cached(client_id: int) -> dict[str, Any]:
     client = next((item for item in list_clients() if item["id"] == client_id), None)
     if client is None:
         raise HTTPException(status_code=404, detail="Клиент не найден")
-    stored = get_cached_ai_result("client_message", "client", client_id, ai_input_hash(
-        build_ai_input(client, get_ai_profile())
-    ))
+    profile = get_ai_profile()
+    stored = get_latest_ai_result("client_message", "client", client_id)
     if stored is None:
-        return {"ready": False}
-    first = stored["variants"][0]["text"] if stored.get("variants") else ""
-    return {"ready": True, **stored, "links": ai_channel_links(client, first)}
+        return {"ready": False, "status": "missing"}
+    status = _client_ai_message_status(client, stored, profile)
+    if status != "ready":
+        return {
+            "ready": False,
+            "status": status,
+            "created_at": stored["created_at"],
+        }
+    payload = stored["payload"]
+    first = payload["variants"][0]["text"] if payload.get("variants") else ""
+    return {
+        "ready": True,
+        "status": "ready",
+        "cached": True,
+        "model": stored["model"],
+        "created_at": stored["created_at"],
+        **payload,
+        "portfolio_url": profile.portfolio_url,
+        "links": ai_channel_links(client, first),
+    }
 
 
 @app.post("/api/ai/clients/{client_id}/message", dependencies=[Depends(guard_powerful_action)])
-def ai_client_message(client_id: int, force: bool = Query(default=False)) -> dict[str, Any]:
+def ai_client_message(
+    client_id: int,
+    request: AiMessageRequest | None = None,
+    force: bool = Query(default=False),
+) -> dict[str, Any]:
     client = next((item for item in list_clients() if item["id"] == client_id), None)
     if client is None:
         raise HTTPException(status_code=404, detail="Клиент не найден")
     try:
         # Генерация занимает секунды, поэтому идёт синхронно: отдельная очередь
         # ради одного клиента усложнила бы код без выигрыша.
-        return {"ready": True, **generate_client_message(client, force=force)}
+        return {
+            "ready": True,
+            **generate_client_message(
+                client,
+                force=force,
+                manual_observation=(request.manual_observation.strip() if request else ""),
+            ),
+        }
     except AiDisabledError as error:
         raise HTTPException(status_code=503, detail="AI выключен: не задан OPENCODE_API_KEY") from error
     except AiError as error:
