@@ -28,7 +28,7 @@
 - Consumes: Vite автоматически публикует содержимое `public` от корня сайта.
 - Produces: `/favicon.svg`, подключённый через `<link rel="icon" type="image/svg+xml" href="/favicon.svg" />`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { readFileSync } from 'node:fs'
@@ -48,13 +48,13 @@ describe('Semix CRM favicon', () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npm.cmd run test:frontend -- src/favicon.test.ts`
 
 Expected: FAIL because `public/favicon.svg` does not exist.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Create `public/favicon.svg`:
 
@@ -73,7 +73,7 @@ Add inside `<head>` in `index.html`:
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 ```
 
-- [ ] **Step 4: Run test and production build**
+- [x] **Step 4: Run test and production build**
 
 Run: `npm.cmd run test:frontend -- src/favicon.test.ts`
 
@@ -83,15 +83,14 @@ Run: `npm.cmd run build`
 
 Expected: exit code 0 and `dist/favicon.svg` exists.
 
-- [ ] **Step 5: Verify in browser**
+- [x] **Step 5: Verify in browser**
 
 Open `http://127.0.0.1:5173/`, verify `document.title === "Semix CRM"`, the favicon link resolves to `/favicon.svg`, and the response status is 200.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/favicon.test.ts public/favicon.svg index.html
 git commit -m "feat: add Semix CRM browser icon"
 git push origin main
 ```
-
