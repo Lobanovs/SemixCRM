@@ -398,7 +398,7 @@ git push origin main
 - Consumes: готовый backend и frontend из Tasks 1–2.
 - Produces: актуальная инструкция и подтверждённый живой результат.
 
-- [ ] **Step 1: Update README**
+- [x] **Step 1: Update README**
 
 Replace the old AI description with:
 
@@ -413,7 +413,7 @@ Replace the old AI description with:
 следующий шаг.
 ```
 
-- [ ] **Step 2: Run full verification**
+- [x] **Step 2: Run full verification**
 
 Run:
 
@@ -426,7 +426,7 @@ git diff --check
 
 Expected: 0 failed tests, build exit code 0 and no whitespace errors.
 
-- [ ] **Step 3: Verify a real 2GIS client**
+- [x] **Step 3: Verify a real 2GIS client**
 
 Restart the local backend if it is not using `PROMPT_VERSION = 7`. Generate a forced
 message for a real client such as Cosmo, then verify all three texts:
