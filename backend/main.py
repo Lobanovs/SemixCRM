@@ -6,7 +6,7 @@ import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -514,14 +514,16 @@ class ScheduleWeekRequest(BaseModel):
 
 class UsefulLinkCreateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=120)
-    url: str = Field(min_length=1, max_length=2048)
-    description: str = Field(default="", max_length=1000)
+    category: Literal["prompt", "website", "shop", "article", "other"] = "website"
+    url: str = Field(default="", max_length=2048)
+    description: str = Field(default="", max_length=5000)
 
 
 class UsefulLinkUpdateRequest(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=120)
-    url: str | None = Field(default=None, min_length=1, max_length=2048)
-    description: str | None = Field(default=None, max_length=1000)
+    category: Literal["prompt", "website", "shop", "article", "other"] | None = None
+    url: str | None = Field(default=None, max_length=2048)
+    description: str | None = Field(default=None, max_length=5000)
 
 
 def _useful_link_http_error(error: ValueError) -> HTTPException:
@@ -541,7 +543,12 @@ def useful_links() -> dict[str, Any]:
 )
 def add_useful_link(request: UsefulLinkCreateRequest) -> dict[str, Any]:
     try:
-        return create_useful_link(request.title, request.url, request.description)
+        return create_useful_link(
+            title=request.title,
+            category=request.category,
+            url=request.url,
+            description=request.description,
+        )
     except ValueError as error:
         raise _useful_link_http_error(error) from error
 
@@ -552,7 +559,13 @@ def add_useful_link(request: UsefulLinkCreateRequest) -> dict[str, Any]:
 )
 def edit_useful_link(link_id: int, request: UsefulLinkUpdateRequest) -> dict[str, Any]:
     try:
-        link = update_useful_link(link_id, request.title, request.url, request.description)
+        link = update_useful_link(
+            link_id,
+            title=request.title,
+            category=request.category,
+            url=request.url,
+            description=request.description,
+        )
     except ValueError as error:
         raise _useful_link_http_error(error) from error
     if link is None:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import closing
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -61,6 +63,81 @@ class UsefulLinksDatabaseTests(unittest.TestCase):
             database.create_useful_link("X" * 121, "example.com", "")
         with self.assertRaisesRegex(ValueError, "слишком длинное"):
             database.create_useful_link("Example", "example.com", "X" * 1001)
+
+    def test_prompts_allow_empty_urls_and_report_category_counts(self) -> None:
+        first = database.create_useful_link(
+            "Аудит лендинга",
+            "",
+            "Проанализируй лендинг и найди точки роста.",
+            category="prompt",
+        )
+        second = database.create_useful_link(
+            "Сильный оффер",
+            "",
+            "Сформулируй три варианта оффера.",
+            category="prompt",
+        )
+        website = database.create_useful_link("Figma", "figma.com", "", category="website")
+
+        payload = database.list_useful_links()
+
+        self.assertEqual("", first["url"])
+        self.assertEqual("", second["url"])
+        self.assertEqual("prompt", first["category"])
+        self.assertEqual("website", website["category"])
+        self.assertEqual(
+            {"prompt": 2, "website": 1, "shop": 0, "article": 0, "other": 0},
+            payload["stats"]["categories"],
+        )
+
+    def test_prompt_text_and_category_are_validated(self) -> None:
+        with self.assertRaisesRegex(ValueError, "текст промпта"):
+            database.create_useful_link("Пустой промпт", "", "   ", category="prompt")
+        with self.assertRaisesRegex(ValueError, "категор"):
+            database.create_useful_link("Неизвестное", "example.com", "", category="video")
+        with self.assertRaisesRegex(ValueError, "слишком длин"):
+            database.create_useful_link("Огромный промпт", "", "X" * 5001, category="prompt")
+
+    def test_legacy_useful_links_table_is_migrated_without_data_loss(self) -> None:
+        with closing(sqlite3.connect(database.DB_PATH)) as connection:
+            connection.execute("DROP TABLE useful_links")
+            connection.execute(
+                """
+                CREATE TABLE useful_links (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    url TEXT NOT NULL UNIQUE,
+                    description TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                INSERT INTO useful_links
+                    (id, title, url, description, created_at, updated_at)
+                VALUES
+                    (7, 'Старый сайт', 'https://example.com', 'Сохранённое описание',
+                     '2026-07-28T10:00:00+00:00', '2026-07-28T11:00:00+00:00')
+                """
+            )
+            connection.commit()
+
+        database.init_db()
+        migrated = database.list_useful_links()["items"]
+        prompt = database.create_useful_link(
+            "Новый промпт",
+            "",
+            "Продолжи текст.",
+            category="prompt",
+        )
+
+        self.assertEqual(1, len(migrated))
+        self.assertEqual(7, migrated[0]["id"])
+        self.assertEqual("website", migrated[0]["category"])
+        self.assertEqual("https://example.com", migrated[0]["url"])
+        self.assertGreater(prompt["id"], 7)
 
 
 class UsefulLinksApiTests(unittest.TestCase):
@@ -134,6 +211,53 @@ class UsefulLinksApiTests(unittest.TestCase):
 
         self.assertEqual(403, response.status_code)
         self.assertIn("X-Requested-With", response.json()["detail"])
+
+    def test_prompt_crud_and_legacy_default_category(self) -> None:
+        prompt = self.client.post(
+            "/api/useful-links",
+            json={
+                "title": "Аудит лендинга",
+                "category": "prompt",
+                "url": "",
+                "description": "Проанализируй первый экран лендинга.",
+            },
+        )
+        legacy = self.client.post(
+            "/api/useful-links",
+            json={"title": "Figma", "url": "figma.com", "description": "Макеты"},
+        )
+
+        self.assertEqual(201, prompt.status_code, prompt.text)
+        self.assertEqual("prompt", prompt.json()["category"])
+        self.assertEqual("", prompt.json()["url"])
+        self.assertEqual(201, legacy.status_code, legacy.text)
+        self.assertEqual("website", legacy.json()["category"])
+
+        changed = self.client.put(
+            f"/api/useful-links/{legacy.json()['id']}",
+            json={
+                "category": "prompt",
+                "url": "",
+                "description": "Сделай прототип интерфейса.",
+            },
+        )
+
+        self.assertEqual(200, changed.status_code, changed.text)
+        self.assertEqual("prompt", changed.json()["category"])
+        self.assertEqual("", changed.json()["url"])
+
+    def test_invalid_prompt_payloads_return_422(self) -> None:
+        empty_prompt = self.client.post(
+            "/api/useful-links",
+            json={"title": "Пустой", "category": "prompt", "url": "", "description": ""},
+        )
+        invalid_category = self.client.post(
+            "/api/useful-links",
+            json={"title": "Видео", "category": "video", "url": "example.com", "description": ""},
+        )
+
+        self.assertEqual(422, empty_prompt.status_code, empty_prompt.text)
+        self.assertEqual(422, invalid_category.status_code, invalid_category.text)
 
 
 if __name__ == "__main__":

@@ -43,6 +43,7 @@ DEFAULT_SETTINGS = {
 STATUS_PRIORITY = {"Новый": 0, "Написал": 1, "Ответили": 2, "Созвон": 3, "КП": 4, "Закрыто": 5, "Отказ": 1}
 # Версия схемы: тяжёлый проход дедупликации выполняется один раз, а не при каждом старте.
 SCHEMA_VERSION = 2
+USEFUL_LINK_CATEGORIES = ("prompt", "website", "shop", "article", "other")
 
 
 @contextmanager
@@ -69,6 +70,56 @@ def _ensure_column(connection: sqlite3.Connection, table: str, column: str, defi
     columns = {row["name"] for row in connection.execute(f"PRAGMA table_info({table})")}
     if column not in columns:
         connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
+def _create_useful_links_table(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS useful_links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT 'website',
+            url TEXT NOT NULL DEFAULT '',
+            description TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS useful_links_url_idx
+        ON useful_links(url)
+        WHERE url <> ''
+        """
+    )
+
+
+def _ensure_useful_links_schema(connection: sqlite3.Connection) -> None:
+    table = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'useful_links'"
+    ).fetchone()
+    if table is None:
+        _create_useful_links_table(connection)
+        return
+
+    columns = {row["name"] for row in connection.execute("PRAGMA table_info(useful_links)")}
+    if "category" not in columns:
+        connection.execute("ALTER TABLE useful_links RENAME TO useful_links_legacy")
+        _create_useful_links_table(connection)
+        connection.execute(
+            """
+            INSERT INTO useful_links
+                (id, title, category, url, description, created_at, updated_at)
+            SELECT
+                id, title, 'website', url, description, created_at, updated_at
+            FROM useful_links_legacy
+            """
+        )
+        connection.execute("DROP TABLE useful_links_legacy")
+        return
+
+    _create_useful_links_table(connection)
 
 
 def init_db() -> None:
@@ -201,18 +252,7 @@ def init_db() -> None:
             )
             """
         )
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS useful_links (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                url TEXT NOT NULL UNIQUE,
-                description TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-            """
-        )
+        _ensure_useful_links_schema(connection)
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS freelance_orders (
@@ -614,22 +654,37 @@ def _normalize_useful_link_url(value: str) -> str:
     )
 
 
-def _useful_link_values(title: str, url: str, description: str) -> tuple[str, str, str]:
+def _useful_link_values(
+    title: str,
+    url: str,
+    description: str,
+    category: str,
+) -> tuple[str, str, str, str]:
     normalized_title = str(title or "").strip()
+    normalized_category = str(category or "website").strip().lower()
     normalized_description = str(description or "").strip()
     if not normalized_title:
-        raise ValueError("Введите название сайта")
+        raise ValueError("Введите название")
     if len(normalized_title) > 120:
-        raise ValueError("Название сайта слишком длинное")
-    if len(normalized_description) > 1000:
+        raise ValueError("Название слишком длинное")
+    if normalized_category not in USEFUL_LINK_CATEGORIES:
+        raise ValueError("Выберите корректную категорию")
+    if normalized_category == "prompt" and not normalized_description:
+        raise ValueError("Введите текст промпта")
+    description_limit = 5000 if normalized_category == "prompt" else 1000
+    if len(normalized_description) > description_limit:
         raise ValueError("Описание сайта слишком длинное")
-    return normalized_title, _normalize_useful_link_url(url), normalized_description
+    normalized_url = _normalize_useful_link_url(url) if str(url or "").strip() else ""
+    if normalized_category != "prompt" and not normalized_url:
+        raise ValueError("Введите адрес сайта")
+    return normalized_title, normalized_category, normalized_url, normalized_description
 
 
 def _serialize_useful_link(row: sqlite3.Row) -> dict[str, Any]:
     return {
         "id": int(row["id"]),
         "title": row["title"],
+        "category": row["category"] or "website",
         "url": row["url"],
         "description": row["description"] or "",
         "created_at": row["created_at"],
@@ -643,20 +698,41 @@ def list_useful_links() -> dict[str, Any]:
             "SELECT * FROM useful_links ORDER BY updated_at DESC, id DESC"
         ).fetchall()
     items = [_serialize_useful_link(row) for row in rows]
-    return {"items": items, "stats": {"total": len(items)}}
+    categories = {category: 0 for category in USEFUL_LINK_CATEGORIES}
+    for item in items:
+        categories[item["category"]] += 1
+    return {"items": items, "stats": {"total": len(items), "categories": categories}}
 
 
-def create_useful_link(title: str, url: str, description: str = "") -> dict[str, Any]:
-    normalized_title, normalized_url, normalized_description = _useful_link_values(title, url, description)
+def create_useful_link(
+    title: str,
+    url: str = "",
+    description: str = "",
+    category: str = "website",
+) -> dict[str, Any]:
+    normalized_title, normalized_category, normalized_url, normalized_description = _useful_link_values(
+        title,
+        url,
+        description,
+        category,
+    )
     now = datetime.now(timezone.utc).isoformat()
     with _connect() as connection:
         try:
             cursor = connection.execute(
                 """
-                INSERT INTO useful_links (title, url, description, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO useful_links
+                    (title, category, url, description, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (normalized_title, normalized_url, normalized_description, now, now),
+                (
+                    normalized_title,
+                    normalized_category,
+                    normalized_url,
+                    normalized_description,
+                    now,
+                    now,
+                ),
             )
         except sqlite3.IntegrityError as error:
             raise ValueError("Этот сайт уже добавлен") from error
@@ -669,25 +745,28 @@ def update_useful_link(
     title: str | None = None,
     url: str | None = None,
     description: str | None = None,
+    category: str | None = None,
 ) -> dict[str, Any] | None:
     with _connect() as connection:
         existing = connection.execute("SELECT * FROM useful_links WHERE id = ?", (link_id,)).fetchone()
         if existing is None:
             return None
-        normalized_title, normalized_url, normalized_description = _useful_link_values(
+        normalized_title, normalized_category, normalized_url, normalized_description = _useful_link_values(
             existing["title"] if title is None else title,
             existing["url"] if url is None else url,
             existing["description"] if description is None else description,
+            existing["category"] if category is None else category,
         )
         try:
             connection.execute(
                 """
                 UPDATE useful_links
-                SET title = ?, url = ?, description = ?, updated_at = ?
+                SET title = ?, category = ?, url = ?, description = ?, updated_at = ?
                 WHERE id = ?
                 """,
                 (
                     normalized_title,
+                    normalized_category,
                     normalized_url,
                     normalized_description,
                     datetime.now(timezone.utc).isoformat(),

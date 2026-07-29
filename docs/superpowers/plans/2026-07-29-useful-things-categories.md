@@ -40,13 +40,13 @@ unittest, Vitest, Testing Library.
 - Produces: `update_useful_link(link_id, title=None, url=None, description=None, category=None)`.
 - Produces: serialized `category` and category counts under `stats.categories`.
 
-- [ ] **Step 1: Write database RED tests**
+- [x] **Step 1: Write database RED tests**
 
 Add tests that create two prompts with empty URLs, reject an empty prompt body,
 reject an unknown category, keep normal URL uniqueness, and rebuild a manually
 created legacy table while preserving its row as `website`.
 
-- [ ] **Step 2: Verify database RED**
+- [x] **Step 2: Verify database RED**
 
 ```powershell
 .\backend\.venv\Scripts\python.exe -m unittest backend.tests.test_useful_links.UsefulLinksDatabaseTests
@@ -54,7 +54,7 @@ created legacy table while preserving its row as `website`.
 
 Expected: failures because `category` is missing and prompt URLs are rejected.
 
-- [ ] **Step 3: Implement schema migration and validation**
+- [x] **Step 3: Implement schema migration and validation**
 
 Create the new table shape:
 
@@ -79,17 +79,17 @@ If `PRAGMA table_info(useful_links)` has no `category` or reports `url` as
 Update normalization, serialization and CRUD signatures. Derive category counts
 from serialized rows in `list_useful_links`.
 
-- [ ] **Step 4: Verify database GREEN**
+- [x] **Step 4: Verify database GREEN**
 
 Run the Step 2 command. Expected: all database tests pass.
 
-- [ ] **Step 5: Write API RED tests**
+- [x] **Step 5: Write API RED tests**
 
 Add API cases for creating a prompt with `url: ""`, defaulting an old request to
 `website`, changing category through PUT and returning `422` for an invalid category
 or a prompt without text.
 
-- [ ] **Step 6: Verify API RED**
+- [x] **Step 6: Verify API RED**
 
 ```powershell
 .\backend\.venv\Scripts\python.exe -m unittest backend.tests.test_useful_links.UsefulLinksApiTests
@@ -97,13 +97,13 @@ or a prompt without text.
 
 Expected: Pydantic or response failures because category-aware requests are absent.
 
-- [ ] **Step 7: Implement API models**
+- [x] **Step 7: Implement API models**
 
 Add `category: Literal[...] = "website"` to creation, optional category and optional
 empty URL to update, pass all fields by keyword to database functions and keep
 existing 409/422/404 mappings.
 
-- [ ] **Step 8: Verify Task 1**
+- [x] **Step 8: Verify Task 1**
 
 ```powershell
 .\backend\.venv\Scripts\python.exe -m unittest backend.tests.test_useful_links
