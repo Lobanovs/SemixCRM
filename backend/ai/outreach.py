@@ -175,8 +175,6 @@ def _validate(
             )
         if not evidence and CLAIMS_REVIEW_READING.search(text):
             raise AiError("Нельзя утверждать, что отзывы прочитаны, когда доказательства 2GIS недоступны")
-        if evidence and tone == "confident" and "отзыв" not in text.casefold():
-            raise AiError("Основной вариант должен использовать подтверждённую деталь из отзывов")
         lowered = text.casefold()
         hits = [phrase for phrase in BANNED_PHRASES if phrase in lowered]
         if hits:

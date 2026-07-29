@@ -365,6 +365,24 @@ class GenerationTests(unittest.TestCase):
         self.assertEqual([], result["warnings"])
         self.assertIn("[R1]", transport.last_user_prompt)
 
+    def test_review_evidence_does_not_force_review_word_into_first_question(self) -> None:
+        client = {**CLIENT, "card_url": "https://2gis.ru/firm/70000001098575869"}
+        answer = {
+            **GOOD_ANSWER,
+            "review_insight": REVIEW_ANSWER["review_insight"],
+        }
+        transport = RecordingTransport(answer)
+
+        result = outreach.generate_client_message(
+            client,
+            ai_client=client_for(transport),
+            review_loader=lambda _url: REVIEW_EVIDENCE,
+        )
+
+        self.assertEqual(1, len(transport.calls))
+        self.assertIn("отдельный прайс", result["variants"][0]["text"])
+        self.assertEqual(["R1", "R2"], result["review_insight"]["evidence_ids"])
+
     def test_unsupported_review_ids_trigger_one_repair(self) -> None:
         invalid = {
             **REVIEW_ANSWER,
