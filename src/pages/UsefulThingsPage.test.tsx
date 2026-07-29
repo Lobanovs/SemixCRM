@@ -1,9 +1,13 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import UsefulThingsPage from './UsefulThingsPage'
 
+const PAGE_CSS = readFileSync(resolve(process.cwd(), 'src/pages/UsefulThingsPage.css'), 'utf8')
 
 type UsefulLink = {
   id: number
@@ -86,6 +90,15 @@ describe('раздел «Полезные вещи»', () => {
     cleanup()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
+  })
+
+  it('keeps card actions at accessible 44px targets', () => {
+    expect(PAGE_CSS).toMatch(
+      /\.useful-open-link\s*\{[^}]*min-height:\s*44px;/s,
+    )
+    expect(PAGE_CSS).toMatch(
+      /\.useful-card-actions button\s*\{[^}]*width:\s*44px;[^}]*height:\s*44px;/s,
+    )
   })
 
   it('загружает полезные сайты и даёт безопасно открыть их', async () => {

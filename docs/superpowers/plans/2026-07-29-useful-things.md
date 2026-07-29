@@ -173,17 +173,17 @@ Expected: page and navigation tests pass.
 - Consumes: completed API and page.
 - Produces: documented, verified and pushed `main`.
 
-- [ ] **Step 1: Update README**
+- [x] **Step 1: Update README**
 
 Add «Полезные вещи» to the capability table and document its stored fields, CRUD,
 URL normalization and SQLite persistence.
 
-- [ ] **Step 2: Restart local backend**
+- [x] **Step 2: Restart local backend**
 
 Stop only the process verified as Semix CRM uvicorn on port 8000, start the updated
 backend hidden, and confirm `/api/health`.
 
-- [ ] **Step 3: Run full verification**
+- [x] **Step 3: Run full verification**
 
 ```powershell
 npm.cmd run test:frontend
@@ -194,7 +194,7 @@ git diff --check
 
 Expected: all tests pass, production build succeeds and diff check is clean.
 
-- [ ] **Step 4: Verify live CRUD**
+- [x] **Step 4: Verify live CRUD**
 
 Create a temporary useful link through the live API, update it, list it and delete it.
 Confirm the final list no longer includes the temporary row.
