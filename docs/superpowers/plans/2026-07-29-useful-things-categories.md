@@ -125,13 +125,13 @@ Expected: all useful catalog backend tests pass.
 - Produces: tabs `all`, `prompt`, `website`, `shop`, `article`, `other`.
 - Produces: prompt card copy action and category-aware shared form.
 
-- [ ] **Step 1: Write tabs RED tests**
+- [x] **Step 1: Write tabs RED tests**
 
 Expand the fixture with prompt, shop and article entries. Assert that every tab has
 its count, `aria-pressed` changes on click, category filtering is local, and search
 applies inside the active category without another fetch.
 
-- [ ] **Step 2: Verify tabs RED**
+- [x] **Step 2: Verify tabs RED**
 
 ```powershell
 npm.cmd run test:frontend -- --run src/pages/UsefulThingsPage.test.tsx
@@ -139,13 +139,13 @@ npm.cmd run test:frontend -- --run src/pages/UsefulThingsPage.test.tsx
 
 Expected: missing category buttons and category fields.
 
-- [ ] **Step 3: Implement category model and derived filters**
+- [x] **Step 3: Implement category model and derived filters**
 
 Add category config with Russian labels and Lucide icons. Store only active category
 and query as state; derive counts and displayed records with `useMemo`. Render a
 horizontal tab list with `aria-pressed`, badge counts and a distinct active state.
 
-- [ ] **Step 4: Write prompt form RED test**
+- [x] **Step 4: Write prompt form RED test**
 
 Select «Промпты», open the form, assert URL is absent, fill «Текст промпта», save,
 and verify POST body:
@@ -159,19 +159,19 @@ and verify POST body:
 }
 ```
 
-- [ ] **Step 5: Implement category-aware form and cards**
+- [x] **Step 5: Implement category-aware form and cards**
 
 Render a category selector. For prompts require description up to 5000 and hide URL;
 for other types require URL and limit description to 1000. Show category badges and
 use «Открыть» for links, «Копировать» for prompts. Keep edit/delete behavior generic.
 
-- [ ] **Step 6: Write and implement copy behavior**
+- [x] **Step 6: Write and implement copy behavior**
 
 Mock `navigator.clipboard.writeText`, click «Копировать Аудит лендинга», assert the
 full prompt is copied and a `role="status"` success message appears. On rejection,
 show an accessible error.
 
-- [ ] **Step 7: Style and verify Task 2**
+- [x] **Step 7: Style and verify Task 2**
 
 Add dense Semix tabs with counts, category colors/icons, 44 px interactions, light
 and dark themes, horizontal overflow only inside the tab row, and reduced motion.
