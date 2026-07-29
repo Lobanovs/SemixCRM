@@ -106,7 +106,7 @@ Expected: all useful-link tests pass.
 - Produces: `UsefulThingsPage` default React component.
 - Produces: new stable section id `useful`.
 
-- [ ] **Step 1: Write page RED tests**
+- [x] **Step 1: Write page RED tests**
 
 Mock `fetch` and assert:
 
@@ -117,7 +117,7 @@ Mock `fetch` and assert:
 - delete requires confirmation before issuing DELETE;
 - failed requests appear as an accessible alert.
 
-- [ ] **Step 2: Verify page RED**
+- [x] **Step 2: Verify page RED**
 
 ```powershell
 npm.cmd run test:frontend -- --run src/pages/UsefulThingsPage.test.tsx
@@ -125,35 +125,35 @@ npm.cmd run test:frontend -- --run src/pages/UsefulThingsPage.test.tsx
 
 Expected: import failure because the page does not exist.
 
-- [ ] **Step 3: Implement the React behavior**
+- [x] **Step 3: Implement the React behavior**
 
 Use controlled inputs and `apiRequest`, keep server data in `items`, derive filtered
 items with `useMemo`, update the local list after successful mutations, and keep
 modal/open/delete/busy/feedback state explicit. External links must use
 `target="_blank"` and `rel="noreferrer"`.
 
-- [ ] **Step 4: Implement the page styling**
+- [x] **Step 4: Implement the page styling**
 
 Build a dense blue-accent directory with a two-to-three-column card grid, visible
 labels, 44 px actions, helpful loading/empty/no-results states, a 150–200 ms hover
 transition, reduced-motion handling and explicit dark-theme overrides.
 
-- [ ] **Step 5: Verify page GREEN**
+- [x] **Step 5: Verify page GREEN**
 
 Run the Task 2 Step 2 command. Expected: all page tests pass.
 
-- [ ] **Step 6: Write navigation RED**
+- [x] **Step 6: Write navigation RED**
 
 Extend `src/App.test.tsx` to click «Полезные вещи» and expect the new level-one
 heading. The test must fail while `SectionId`, `menuItems` and rendering are unchanged.
 
-- [ ] **Step 7: Wire navigation and quick access**
+- [x] **Step 7: Wire navigation and quick access**
 
 Import `Bookmark` and `UsefulThingsPage`, add `useful` to `SectionId`, add a feature
 entry and menu item through the shared `features` list, render the page in the active
 section chain, and renumber the settings guide step.
 
-- [ ] **Step 8: Verify Task 2**
+- [x] **Step 8: Verify Task 2**
 
 ```powershell
 npm.cmd run test:frontend -- --run src/pages/UsefulThingsPage.test.tsx src/App.test.tsx

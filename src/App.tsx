@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   BriefcaseBusiness,
+  Bookmark,
   CalendarDays,
   Check,
   Folder,
@@ -23,6 +24,7 @@ import FreelancePage from './pages/FreelancePage'
 import SchedulePage from './pages/SchedulePage'
 import ClientsPage from './pages/ClientsPage'
 import SettingsPage from './pages/SettingsPage'
+import UsefulThingsPage from './pages/UsefulThingsPage'
 import PageGuide from './components/PageGuide'
 import { HOME_GUIDE } from './guides'
 import { apiRequest } from './api'
@@ -31,7 +33,7 @@ type Accent = 'blue' | 'green' | 'purple' | 'orange' | 'gray'
 
 // Переход между разделами идёт по устойчивому id: раньше сравнивались подписи меню,
 // и переименование пункта молча ломало маршрут.
-type SectionId = 'home' | 'projects' | 'jobs' | 'freelance' | 'schedule' | 'clients' | 'settings'
+type SectionId = 'home' | 'projects' | 'jobs' | 'freelance' | 'schedule' | 'useful' | 'clients' | 'settings'
 
 type Feature = {
   id: SectionId
@@ -74,6 +76,14 @@ const features: Feature[] = [
     guide: 'Планируйте свой день, добавляйте задачи и не забывайте о важных делах.',
     icon: CalendarDays,
     accent: 'orange',
+  },
+  {
+    id: 'useful',
+    title: 'Полезные вещи',
+    description: 'Сайты и рабочие инструменты',
+    guide: 'Сохраняйте полезные сервисы вместе с описанием, чтобы нужная ссылка всегда была под рукой.',
+    icon: Bookmark,
+    accent: 'blue',
   },
 ]
 
@@ -229,6 +239,8 @@ function App() {
           <FreelancePage />
         ) : active === 'schedule' ? (
           <SchedulePage />
+        ) : active === 'useful' ? (
+          <UsefulThingsPage />
         ) : active === 'clients' ? (
           <ClientsPage />
         ) : active === 'settings' ? (
@@ -321,7 +333,7 @@ function Dashboard({
               <article className="guide-step">
                 <IconTile icon={Settings} accent="gray" />
                 <div>
-                  <h3>5. Настройки</h3>
+                  <h3>{features.length + 1}. Настройки</h3>
                   <p>Настройте систему под себя: категории,<br className="desktop-break" /> теги, уведомления и внешний вид.</p>
                 </div>
               </article>
