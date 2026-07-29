@@ -199,7 +199,7 @@ Expected: all tests pass, production build succeeds and diff check is clean.
 Create a temporary useful link through the live API, update it, list it and delete it.
 Confirm the final list no longer includes the temporary row.
 
-- [ ] **Step 5: Commit and push**
+- [x] **Step 5: Commit and push**
 
 ```powershell
 git add backend/database.py backend/main.py backend/tests/test_useful_links.py `
