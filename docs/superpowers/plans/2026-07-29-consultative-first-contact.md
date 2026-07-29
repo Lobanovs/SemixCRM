@@ -249,7 +249,7 @@ git push origin main
 - Consumes: совместимый `ClientMessage` с тремя короткими `variants`.
 - Produces: редактор диагностического вопроса без портфолио и сворачиваемую карту этапов после ответа.
 
-- [ ] **Step 1: Replace the frontend fixture with short diagnostic variants**
+- [x] **Step 1: Replace the frontend fixture with short diagnostic variants**
 
 ```ts
 variants: [
@@ -259,7 +259,7 @@ variants: [
 ],
 ```
 
-- [ ] **Step 2: Add failing UI tests**
+- [x] **Step 2: Add failing UI tests**
 
 ```tsx
 it('не добавляет портфолио в первое диагностическое сообщение', async () => {
@@ -287,7 +287,7 @@ it('показывает три диагностических угла и ка�
 })
 ```
 
-- [ ] **Step 3: Run the modal tests and verify RED**
+- [x] **Step 3: Run the modal tests and verify RED**
 
 Run:
 
@@ -297,7 +297,7 @@ npm.cmd run test:frontend -- src/pages/ClientMessageModal.test.tsx
 
 Expected: FAIL because the old portfolio switch and old commercial labels are still present.
 
-- [ ] **Step 4: Implement the diagnostic workspace**
+- [x] **Step 4: Implement the diagnostic workspace**
 
 In `ClientMessageModal.tsx`:
 
@@ -367,7 +367,7 @@ textarea while preserving desktop scrolling, focus visibility and dark mode.
 }
 ```
 
-- [ ] **Step 5: Run frontend tests and build**
+- [x] **Step 5: Run frontend tests and build**
 
 Run:
 
