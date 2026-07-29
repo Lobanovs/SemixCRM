@@ -194,16 +194,16 @@ Expected: all page and application navigation tests pass.
 - Consumes: completed backend and frontend.
 - Produces: verified and published `main`.
 
-- [ ] **Step 1: Update README**
+- [x] **Step 1: Update README**
 
 Document all categories, prompt behavior, filters, migration and copy action.
 
-- [ ] **Step 2: Restart backend and verify migration**
+- [x] **Step 2: Restart backend and verify migration**
 
 Restart only the verified Semix CRM uvicorn process on port 8000, confirm health and
 that existing useful records remain available with `category: "website"`.
 
-- [ ] **Step 3: Run full verification**
+- [x] **Step 3: Run full verification**
 
 ```powershell
 npm.cmd run test:frontend
@@ -214,7 +214,7 @@ git diff --check
 
 Expected: all tests pass, build succeeds and diff check is clean.
 
-- [ ] **Step 4: Verify live UI CRUD**
+- [x] **Step 4: Verify live UI CRUD**
 
 Through the browser create a temporary prompt and article, switch tabs, search,
 copy and edit the prompt, then delete both temporary records. Confirm the catalog

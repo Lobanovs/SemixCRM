@@ -66,6 +66,10 @@ describe('навигация приложения', () => {
     vi.stubGlobal('fetch', createAppFetch())
     render(<App />)
 
+    expect(
+      screen.getByRole('button', { name: /Полезные вещи\s*Промпты, сайты и статьи/ }),
+    ).toBeInTheDocument()
+
     await userEvent.setup().click(screen.getByRole('button', { name: 'Полезные вещи' }))
 
     expect(await screen.findByRole('heading', { name: 'Полезные вещи', level: 1 })).toBeInTheDocument()
