@@ -220,7 +220,7 @@ Through the browser create a temporary prompt and article, switch tabs, search,
 copy and edit the prompt, then delete both temporary records. Confirm the catalog
 returns to its original contents.
 
-- [ ] **Step 5: Commit and push**
+- [x] **Step 5: Commit and push**
 
 Commit backend, frontend, tests, README and this completed plan, push `main`, then
 verify local HEAD equals `refs/heads/main` on `origin` and the worktree is clean.
