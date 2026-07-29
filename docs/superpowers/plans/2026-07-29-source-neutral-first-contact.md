@@ -29,7 +29,7 @@
 - Consumes: `generate_client_message(client, force, manual_observation, ai_client, review_loader)`.
 - Produces: три source-neutral `variants`; `PROMPT_VERSION = 8`.
 
-- [ ] **Step 1: Replace the valid fixtures**
+- [x] **Step 1: Replace the valid fixtures**
 
 Заменить тексты `GOOD_ANSWER` на вопросы без указания источника:
 
@@ -42,7 +42,7 @@
 `REVIEW_ANSWER` использует подтверждённую услугу или специалиста, но не говорит,
 что деталь взята из отзывов.
 
-- [ ] **Step 2: Write failing prompt and validation tests**
+- [x] **Step 2: Write failing prompt and validation tests**
 
 ```python
 def test_prompt_forbids_disclosing_lead_source(self) -> None:
@@ -73,7 +73,7 @@ def test_source_disclosure_triggers_one_repair(self) -> None:
     self.assertEqual(2, len(transport.calls))
 ```
 
-- [ ] **Step 3: Run the new tests and verify RED**
+- [x] **Step 3: Run the new tests and verify RED**
 
 Run:
 
@@ -86,7 +86,7 @@ Run:
 Expected: FAIL because the old prompt recommends “в карточке 2GIS”, and the validator
 does not reject source disclosure.
 
-- [ ] **Step 4: Implement the prompt and validator**
+- [x] **Step 4: Implement the prompt and validator**
 
 In `backend/ai/prompts.py`, teach the model to ask directly about the process:
 
@@ -110,7 +110,7 @@ SOURCE_DISCLOSURE = re.compile(
 
 Reject `SOURCE_DISCLOSURE` in the raw variant before cleaning.
 
-- [ ] **Step 5: Run the AI regression suite**
+- [x] **Step 5: Run the AI regression suite**
 
 Run:
 
@@ -132,18 +132,18 @@ Expected: all tests pass.
 - Consumes: unchanged `ClientMessage` JSON.
 - Produces: source-neutral UI fixtures and current README behavior.
 
-- [ ] **Step 1: Replace frontend fixture messages**
+- [x] **Step 1: Replace frontend fixture messages**
 
 Use the same three direct process questions as backend fixtures. Keep the existing
 tests for three tabs, draft editing, WhatsApp encoding and absence of portfolio.
 
-- [ ] **Step 2: Update README**
+- [x] **Step 2: Update README**
 
 Document that 2GIS and reviews are internal sources only. The first message does not
 say where the company was found and instead asks directly about prices, booking or
 request handling.
 
-- [ ] **Step 3: Run frontend tests and build**
+- [x] **Step 3: Run frontend tests and build**
 
 Run:
 
@@ -165,7 +165,7 @@ Expected: 75 tests pass and build exits with code 0.
 - Consumes: completed backend and frontend.
 - Produces: verified live Cosmo result and pushed `main`.
 
-- [ ] **Step 1: Restart backend and generate Cosmo**
+- [x] **Step 1: Restart backend and generate Cosmo**
 
 Force-generate client `139`, then assert for each variant:
 
@@ -176,7 +176,7 @@ ends_with_question == true
 does_not_match == 2GIS|2ГИС|карточк|отзыв|нашёл вас|увидел вас
 ```
 
-- [ ] **Step 2: Run full regression**
+- [x] **Step 2: Run full regression**
 
 ```powershell
 npm.cmd run test:frontend

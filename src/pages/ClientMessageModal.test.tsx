@@ -22,9 +22,9 @@ const GENERATED = {
     opportunity: 'Ответ владельца поможет продолжить диагностику',
   },
   variants: [
-    { tone: 'confident', title: 'Цены и информация', angle: 'Цены и информация', text: 'Здравствуйте! В карточке 2GIS не увидел отдельного сайта с услугами и ценами. Клиенты уточняют стоимость у администратора или есть отдельный прайс?' },
-    { tone: 'hard_sell', title: 'Запись и заявки', angle: 'Запись и заявки', text: 'Здравствуйте! В карточке вижу телефон и Telegram, но не вижу онлайн-записи. Клиенты записываются сообщением администратору или через другую систему?' },
-    { tone: 'expert', title: 'Обработка обращений', angle: 'Обработка обращений', text: 'Здравствуйте! У 7R высокий рейтинг и 200 отзывов. Кто отвечает пациентам, если они пишут вечером или администратор занят?' },
+    { tone: 'confident', title: 'Цены и информация', angle: 'Цены и информация', text: 'Здравствуйте! Подскажите, пожалуйста, как у вас сейчас клиенты узнают цены на процедуры: есть отдельный онлайн-прайс или всё уточняют у администратора?' },
+    { tone: 'hard_sell', title: 'Запись и заявки', angle: 'Запись и заявки', text: 'Здравствуйте! Подскажите, пожалуйста, как у вас сейчас устроена запись: клиенты выбирают удобное время онлайн или всё согласовывают с администратором?' },
+    { tone: 'expert', title: 'Обработка обращений', angle: 'Обработка обращений', text: 'Здравствуйте! Подскажите, пожалуйста, как вы обрабатываете обращения вечером: они сохраняются автоматически или их разбирает сотрудник на следующий день?' },
   ],
   follow_up: '',
   warnings: [],
@@ -135,11 +135,11 @@ describe('диалог первого сообщения клиенту', () => 
     expect(within(dialog).getByRole('tab', { name: /Цены и информация/ })).toHaveAttribute('aria-selected', 'true')
     expect(within(dialog).getByRole('tab', { name: /Запись и заявки/ })).toBeInTheDocument()
     expect(within(dialog).getByRole('tab', { name: /Обработка обращений/ })).toBeInTheDocument()
-    expect((screen.getByLabelText('Первый диагностический вопрос') as HTMLTextAreaElement).value).toContain('отдельный прайс')
+    expect((screen.getByLabelText('Первый диагностический вопрос') as HTMLTextAreaElement).value).toContain('онлайн-прайс')
 
     await user.click(within(dialog).getByRole('tab', { name: /Обработка обращений/ }))
 
-    expect((screen.getByLabelText('Первый диагностический вопрос') as HTMLTextAreaElement).value).toContain('пишут вечером')
+    expect((screen.getByLabelText('Первый диагностический вопрос') as HTMLTextAreaElement).value).toContain('обрабатываете обращения вечером')
   })
 
   it('подставляет текст выбранного варианта в ссылку WhatsApp', async () => {
@@ -148,7 +148,7 @@ describe('диалог первого сообщения клиенту', () => 
 
     const link = await screen.findByRole('link', { name: /Открыть WhatsApp/ })
     expect(link).toHaveAttribute('href', expect.stringContaining('https://wa.me/79636775777?text='))
-    expect(link.getAttribute('href')).toContain(encodeURIComponent('отдельный прайс'))
+    expect(link.getAttribute('href')).toContain(encodeURIComponent('онлайн-прайс'))
   })
 
   it('сохраняет отдельный черновик каждой стратегии и меняет ссылку отправки', async () => {

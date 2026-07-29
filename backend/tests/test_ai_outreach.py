@@ -52,27 +52,27 @@ GOOD_ANSWER = {
             "tone": "confident",
             "title": "Цены и информация",
             "text": (
-                "Здравствуйте! Увидел, что в карточке 2GIS не указан отдельный сайт "
-                "с услугами и ценами. Пациенты уточняют стоимость у администратора "
-                "или у вас есть отдельный прайс?"
+                "Здравствуйте! Подскажите, пожалуйста, как у вас сейчас клиенты узнают "
+                "цены на процедуры: есть отдельный онлайн-прайс или всё уточняют "
+                "у администратора?"
             ),
         },
         {
             "tone": "hard_sell",
             "title": "Запись и заявки",
             "text": (
-                "Здравствуйте! В карточке 7R вижу телефон и Telegram, но не вижу "
-                "онлайн-записи. Пациенты записываются сообщением администратору "
-                "или через другую систему?"
+                "Здравствуйте! Подскажите, пожалуйста, как у вас сейчас устроена запись: "
+                "клиенты выбирают удобное время онлайн или всё согласовывают "
+                "с администратором?"
             ),
         },
         {
             "tone": "expert",
             "title": "Обработка обращений",
             "text": (
-                "Здравствуйте! У 7R высокий рейтинг и 200 отзывов, а из быстрых "
-                "контактов вижу Telegram. Кто отвечает пациентам, если они пишут "
-                "вечером или администратор занят?"
+                "Здравствуйте! Подскажите, пожалуйста, как вы обрабатываете обращения "
+                "вечером: они сохраняются автоматически или их разбирает сотрудник "
+                "на следующий день?"
             ),
         },
     ],
@@ -94,9 +94,9 @@ REVIEW_ANSWER = {
         {
             **GOOD_ANSWER["variants"][0],
             "text": (
-                "Здравствуйте! Почитал отзывы 2GIS: клиенты особенно отмечают "
-                "косметолога Анну и внимательное отношение. Новые пациенты чаще "
-                "записываются по рекомендации или через администратора?"
+                "Здравствуйте! Подскажите, пожалуйста, как у вас устроена запись "
+                "к косметологу Анне: клиент выбирает время онлайн или всё "
+                "согласовывает с администратором?"
             ),
         },
         GOOD_ANSWER["variants"][1],
@@ -218,8 +218,13 @@ class PromptTests(unittest.TestCase):
         self.assertIn("70–260 символов", SYSTEM_PROMPT)
         self.assertIn("Ровно один вопросительный знак", SYSTEM_PROMPT)
         self.assertIn("Предлагать сайт", SYSTEM_PROMPT)
-        self.assertIn("в карточке 2GIS не увидел отдельного сайта", SYSTEM_PROMPT)
         self.assertIn("evidence_ids", SYSTEM_PROMPT)
+
+    def test_prompt_forbids_disclosing_lead_source(self) -> None:
+        self.assertIn("не упоминай 2GIS", SYSTEM_PROMPT)
+        self.assertIn("не упоминай карточку", SYSTEM_PROMPT)
+        self.assertIn("не упоминай отзывы", SYSTEM_PROMPT)
+        self.assertNotIn("в карточке 2GIS не увидел отдельного сайта", SYSTEM_PROMPT)
 
     def test_prompt_contains_review_evidence_and_manual_observation(self) -> None:
         prompt = build_client_message_prompt(
@@ -347,7 +352,7 @@ class GenerationTests(unittest.TestCase):
         self.assertEqual([], result["warnings"])
 
     def test_prompt_version_invalidates_legacy_cached_results(self) -> None:
-        self.assertEqual(7, outreach.build_input(CLIENT, get_profile())["prompt_version"])
+        self.assertEqual(8, outreach.build_input(CLIENT, get_profile())["prompt_version"])
 
     def test_grounded_review_summary_keeps_its_evidence_ids(self) -> None:
         client = {**CLIENT, "card_url": "https://2gis.ru/firm/70000001098575869"}
@@ -361,7 +366,7 @@ class GenerationTests(unittest.TestCase):
 
         self.assertEqual(["R1", "R2"], result["review_insight"]["evidence_ids"])
         self.assertEqual(REVIEW_EVIDENCE, result["review_evidence"])
-        self.assertIn("Почитал отзывы", result["variants"][0]["text"])
+        self.assertIn("косметологу Анне", result["variants"][0]["text"])
         self.assertEqual([], result["warnings"])
         self.assertIn("[R1]", transport.last_user_prompt)
 
@@ -380,8 +385,43 @@ class GenerationTests(unittest.TestCase):
         )
 
         self.assertEqual(1, len(transport.calls))
-        self.assertIn("отдельный прайс", result["variants"][0]["text"])
+        self.assertIn("онлайн-прайс", result["variants"][0]["text"])
         self.assertEqual(["R1", "R2"], result["review_insight"]["evidence_ids"])
+
+    def test_source_disclosure_triggers_one_repair(self) -> None:
+        variants = [dict(item) for item in GOOD_ANSWER["variants"]]
+        variants[0] = {
+            **variants[0],
+            "text": (
+                "Здравствуйте! В карточке 2GIS не увидел отдельного прайса. "
+                "Клиенты уточняют цены у администратора или есть другой способ?"
+            ),
+        }
+        transport = RecordingTransport({**GOOD_ANSWER, "variants": variants}, GOOD_ANSWER)
+
+        result = outreach.generate_client_message(CLIENT, ai_client=client_for(transport))
+
+        self.assertEqual(2, len(transport.calls))
+        self.assertNotIn("2GIS", result["variants"][0]["text"])
+        self.assertIn("источник", transport.last_user_prompt.casefold())
+
+    def test_other_platform_or_search_story_triggers_one_repair(self) -> None:
+        variants = [dict(item) for item in GOOD_ANSWER["variants"]]
+        variants[0] = {
+            **variants[0],
+            "text": (
+                "Здравствуйте! Посмотрел ваш профиль на Яндекс Картах. "
+                "Подскажите, цены на процедуры клиенты узнают онлайн "
+                "или уточняют у администратора?"
+            ),
+        }
+        transport = RecordingTransport({**GOOD_ANSWER, "variants": variants}, GOOD_ANSWER)
+
+        result = outreach.generate_client_message(CLIENT, ai_client=client_for(transport))
+
+        self.assertEqual(2, len(transport.calls))
+        self.assertNotIn("Яндекс", result["variants"][0]["text"])
+        self.assertIn("источник", transport.last_user_prompt.casefold())
 
     def test_unsupported_review_ids_trigger_one_repair(self) -> None:
         invalid = {
@@ -573,7 +613,7 @@ class GenerationTests(unittest.TestCase):
         self.assertEqual("WhatsApp", result["links"][0]["channel"])
         whatsapp = result["links"][0]
         self.assertTrue(whatsapp["url"].startswith("https://wa.me/79636775777?text="))
-        self.assertIn(quote("Пациенты уточняют")[:20], whatsapp["url"])
+        self.assertIn(quote("Подскажите, пожалуйста")[:20], whatsapp["url"])
 
     def test_second_call_is_served_from_cache(self) -> None:
         transport = RecordingTransport()
@@ -726,8 +766,8 @@ class GenerationTests(unittest.TestCase):
         variants[2] = {
             **variants[2],
             "text": (
-                "Семён, здравствуйте! У 7R рейтинг 5,0 и 200 отзывов. Кто отвечает "
-                "пациентам, если они пишут вечером или администратор занят?"
+                "Семён, здравствуйте! Подскажите, пожалуйста, если пациент пишет "
+                "вечером или администратор занят, кто обычно отвечает на обращение?"
             ),
         }
         transport = RecordingTransport({**GOOD_ANSWER, "variants": variants})
@@ -742,8 +782,8 @@ class GenerationTests(unittest.TestCase):
         variants[1] = {
             **variants[1],
             "text": (
-                "Здравствуйте! В карточке 2GIS не вижу онлайн-записи для пациентов. "
-                "Сайт сейчас актуален?"
+                "Здравствуйте! Подскажите, пожалуйста, как у вас сейчас устроена "
+                "онлайн-запись для пациентов, и сайт сейчас актуален?"
             ),
         }
         transport = RecordingTransport({**GOOD_ANSWER, "variants": variants}, GOOD_ANSWER)

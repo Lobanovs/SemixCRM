@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 TASK = "client_message"
 ENTITY = "client"
-PROMPT_VERSION = 7
+PROMPT_VERSION = 8
 
 MIN_LENGTH = MESSAGE_MIN_LENGTH
 MAX_LENGTH = MESSAGE_MAX_LENGTH
@@ -72,6 +72,14 @@ COMMERCIAL_FIRST_CONTACT = re.compile(
     r"\bпришлю\s+(?:варианты|стоимость|сроки|презентацию)|"
     r"\bответ(?:ьте|ить)\s+[«\"']?да[»\"']?",
     re.IGNORECASE,
+)
+SOURCE_DISCLOSURE = re.compile(
+    r"\b2\s*(?:gis|гис)\b|\bдвухгис\w*\b|"
+    r"\b(?:яндекс(?:\.?\s*карт\w*)?|yandex(?:\s+maps?)?|google\s+maps?)\b|"
+    r"\b(?:карточк|отзыв|площадк|профил)\w*\b|"
+    r"\b(?:наш[её]л|увидел|заметил|посмотрел|изучил|наткнулся)\b.{0,48}"
+    r"\b(?:вас|ваш\w*|компани\w*|бизнес\w*)\b",
+    re.IGNORECASE | re.DOTALL,
 )
 
 
@@ -150,6 +158,11 @@ def _validate(
             )
         seen_tones.add(tone)
         raw_text = str(item.get("text") or "").strip()
+        if SOURCE_DISCLOSURE.search(raw_text):
+            raise AiError(
+                f"Вариант «{TONE_TITLES[tone]}» раскрывает источник лида: "
+                "не упоминай 2GIS, карточку, отзывы или способ поиска компании"
+            )
         if COMMERCIAL_FIRST_CONTACT.search(raw_text):
             raise AiError(
                 f"Вариант «{TONE_TITLES[tone]}» содержит коммерческое предложение, "
