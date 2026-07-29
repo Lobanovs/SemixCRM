@@ -22,15 +22,15 @@ logger = logging.getLogger(__name__)
 
 TASK = "client_message"
 ENTITY = "client"
-PROMPT_VERSION = 6
+PROMPT_VERSION = 7
 
 MIN_LENGTH = MESSAGE_MIN_LENGTH
 MAX_LENGTH = MESSAGE_MAX_LENGTH
 TONE_ORDER = ("confident", "hard_sell", "expert")
 TONE_TITLES = {
-    "confident": "По отзывам и точке роста",
-    "hard_sell": "Решение и портфолио",
-    "expert": "Короткий контакт",
+    "confident": "Цены и информация",
+    "hard_sell": "Запись и заявки",
+    "expert": "Обработка обращений",
 }
 
 # Фразы, по которым сообщение сразу читается как рассылка.
@@ -44,6 +44,12 @@ BANNED_PHRASES = (
     "под ключ",
     "в топ яндекса",
     "продающий сайт",
+    "актуально?",
+    "актуален?",
+    "актуальна?",
+    "актуальны?",
+    "интересно?",
+    "хотите?",
 )
 
 MARKDOWN = re.compile(r"[*_`#]{1,}")
@@ -52,31 +58,21 @@ MARKDOWN = re.compile(r"[*_`#]{1,}")
 LINK = re.compile(r"https?://[\w\-./?%&=+#:@~]*[\w\-/#@~]")
 EMPTY_BRACKETS = re.compile(r"[(\[]\s*[)\]]")
 SPACE_BEFORE_PUNCT = re.compile(r"\s+([,.;:!?)\]])")
-SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+")
-STANDALONE_GREETING = re.compile(r"^(?:здравствуйте|добрый день|добрый вечер|привет)[!.]?$", re.IGNORECASE)
-WEAK_FINAL_QUESTION = re.compile(
-    r"^(?:интересно|актуально|скинуть|посмотрите|посмотреть|"
-    r"вам\s+(?:будет\s+)?удобно(?:\s+будет)?\s+посмотреть|"
-    r"хотите\s+.+|готовы\s+.+|нужно\s+.+)\?$",
-    re.IGNORECASE,
-)
-REPLY_CTA = re.compile(r"\bответ(?:ьте|ить)\s+[«\"']?да[»\"']?", re.IGNORECASE)
 CLAIMS_REVIEW_READING = re.compile(
     r"\b(?:почитал|прочитал|посмотрел|изучил)\w*\s+отзыв|\bклиенты\s+(?:часто\s+|особенно\s+)?отмеч",
     re.IGNORECASE,
 )
-UNSUPPORTED_VOLUME_PERIOD = re.compile(
-    r"\b\d+(?:\s*[–—-]\s*\d+)?\s+"
-    r"(?:(?:нов\w*|дополнительн\w*|лишн\w*)\s+)?"
-    r"(?:обращен\w*|заяв\w*|запис\w*|пациент\w*|клиент\w*)\s+"
-    r"в\s+(?:день|недел\w*|месяц\w*|квартал\w*|год\w*)",
+COMMERCIAL_FIRST_CONTACT = re.compile(
+    r"https?://|www\.|портфолио|(?:\d[\d\s]*)?\s*(?:₽|руб(?:\.|ля|лей|ль)?)|"
+    r"\b(?:демо|прототип|презентаци\w*|созвон\w*|сотрудничеств\w*)\b|"
+    r"\bпредлагаю\s+(?:сотрудничество|сделать|разработать)|"
+    r"\b(?:сделаю|разработаю|соберу)\s+(?:для\s+вас\s+)?сайт|"
+    r"\bя\s+(?:делаю|разрабатываю|создаю)\s+сайт|"
+    r"\bмогу\s+(?:сделать|разработать|собрать|показать|прислать)|"
+    r"\bпришлю\s+(?:варианты|стоимость|сроки|презентацию)|"
+    r"\bответ(?:ьте|ить)\s+[«\"']?да[»\"']?",
     re.IGNORECASE,
 )
-UNSUPPORTED_DEADLINE = re.compile(
-    r"\bза\s+(?:\d+\s+)?(?:дн\w*|недел\w*|месяц\w*)",
-    re.IGNORECASE,
-)
-DIRECT_SITE_ABSENCE = re.compile(r"\bбез\s+(?:полноценного\s+)?сайта\b", re.IGNORECASE)
 
 
 def _clean_text(value: Any) -> str:
@@ -91,17 +87,6 @@ def _clean_text(value: Any) -> str:
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
-def _truncate_at_word(text: str, limit: int, suffix: str = "…") -> str:
-    if len(text) <= limit:
-        return text
-    if limit <= len(suffix):
-        return suffix[:limit]
-    head = text[:limit - len(suffix)].rstrip()
-    if " " in head:
-        head = head.rsplit(" ", 1)[0]
-    return head.rstrip(" ,;:—-") + suffix
-
-
 def _remove_sender_salutation(text: str, sender_name: str) -> str:
     name = sender_name.strip()
     if not name:
@@ -110,72 +95,6 @@ def _remove_sender_salutation(text: str, sender_name: str) -> str:
     if cleaned == text or not cleaned:
         return text
     return cleaned[:1].upper() + cleaned[1:]
-
-
-def _strengthen_final_question(text: str) -> str:
-    sentences = [part.strip() for part in SENTENCE_BREAK.split(text) if part.strip()]
-    if not sentences or not WEAK_FINAL_QUESTION.fullmatch(sentences[-1]):
-        return text
-    sentences[-1] = "Куда удобнее прислать короткий разбор?"
-    return " ".join(sentences)
-
-
-def _drop_unsupported_claims(text: str) -> str:
-    grounded_paragraphs: list[str] = []
-    for paragraph in re.split(r"\n{2,}", text):
-        sentences = [part.strip() for part in SENTENCE_BREAK.split(paragraph) if part.strip()]
-        grounded: list[str] = []
-        for part in sentences:
-            lowered = part.casefold()
-            if "конкурент" in lowered or DIRECT_SITE_ABSENCE.search(part):
-                continue
-            if UNSUPPORTED_VOLUME_PERIOD.search(part):
-                continue
-            grounded.append(UNSUPPORTED_DEADLINE.sub("в первую очередь", part))
-        if grounded:
-            grounded_paragraphs.append(" ".join(grounded))
-    return "\n\n".join(grounded_paragraphs) if grounded_paragraphs else text
-
-
-def _compact_message(text: str, max_length: int = MAX_LENGTH) -> str:
-    """Сжимает редкий длинный ответ модели, сохраняя оффер и финальный вопрос."""
-
-    if len(text) <= max_length:
-        return text
-
-    sentences = [part.strip() for part in SENTENCE_BREAK.split(text) if part.strip()]
-    if len(sentences) > 1 and STANDALONE_GREETING.fullmatch(sentences[0]):
-        sentences = sentences[1:]
-    compact = " ".join(sentences)
-    if len(compact) <= max_length:
-        return compact
-
-    question_index = next(
-        (index for index in range(len(sentences) - 1, -1, -1) if "?" in sentences[index]),
-        len(sentences) - 1,
-    )
-    # Обычно предпоследнее предложение содержит конкретный следующий шаг,
-    # а последнее — лёгкий вопрос. Их нельзя потерять при сокращении.
-    tail_start = max(0, question_index - 1)
-    tail = sentences[tail_start:question_index + 1]
-    tail_text = " ".join(tail)
-    if len(tail_text) > max_length:
-        question = sentences[question_index]
-        if len(question) >= max_length:
-            return _truncate_at_word(question.rstrip("?"), max_length - 1, "") + "?"
-        offer_limit = max_length - len(question) - 1
-        offer = _truncate_at_word(sentences[tail_start], offer_limit)
-        return f"{offer} {question}".strip()
-
-    selected: list[str] = []
-    context = sentences[:tail_start]
-    for sentence in context:
-        candidate = " ".join([*selected, sentence, *tail])
-        if len(candidate) <= max_length:
-            selected.append(sentence)
-
-    result = " ".join([*selected, *tail]).strip()
-    return result if len(result) <= max_length else result[:max_length].rstrip()
 
 
 def _validate(
@@ -220,6 +139,7 @@ def _validate(
 
     legacy = all(isinstance(item, dict) and not item.get("tone") for item in raw_variants)
     seen_tones: set[str] = set()
+    seen_questions: set[str] = set()
     for index, item in enumerate(raw_variants):
         if not isinstance(item, dict):
             raise AiError("Каждый вариант сообщения должен быть JSON-объектом")
@@ -229,12 +149,15 @@ def _validate(
                 "Модель должна вернуть ровно три стратегии: confident, hard_sell и expert"
             )
         seen_tones.add(tone)
-        text = _clean_text(item.get("text"))
+        raw_text = str(item.get("text") or "").strip()
+        if COMMERCIAL_FIRST_CONTACT.search(raw_text):
+            raise AiError(
+                f"Вариант «{TONE_TITLES[tone]}» содержит коммерческое предложение, "
+                "ссылку, цену или преждевременный следующий шаг"
+            )
+        text = _clean_text(raw_text)
         text = _remove_sender_salutation(text, sender_name)
-        text = _strengthen_final_question(text)
-        text = _drop_unsupported_claims(text)
         minimum, maximum = TONE_LENGTHS[tone]
-        text = _compact_message(text, maximum)
         if len(text) < minimum:
             raise AiError(
                 f"Вариант «{TONE_TITLES[tone]}» слишком короткий: "
@@ -245,9 +168,10 @@ def _validate(
                 f"Вариант «{TONE_TITLES[tone]}» слишком длинный: "
                 f"{len(text)} символов вместо {minimum}–{maximum}"
             )
-        if "?" not in text and REPLY_CTA.search(text) is None:
+        if text.count("?") != 1 or not text.endswith("?"):
             raise AiError(
-                f"В варианте «{TONE_TITLES[tone]}» нет вопроса или CTA с ответом «да»"
+                f"Вариант «{TONE_TITLES[tone]}» должен содержать ровно один вопрос "
+                "и заканчиваться им"
             )
         if not evidence and CLAIMS_REVIEW_READING.search(text):
             raise AiError("Нельзя утверждать, что отзывы прочитаны, когда доказательства 2GIS недоступны")
@@ -257,7 +181,11 @@ def _validate(
         hits = [phrase for phrase in BANNED_PHRASES if phrase in lowered]
         if hits:
             raise AiError(f"В варианте остались шаблонные фразы: {', '.join(hits)}")
-        title = _clean_text(item.get("title") or item.get("angle")) or TONE_TITLES[tone]
+        normalized_question = re.sub(r"\s+", " ", text).casefold()
+        if normalized_question in seen_questions:
+            raise AiError("Модель должна вернуть три варианта с разными вопросами")
+        seen_questions.add(normalized_question)
+        title = TONE_TITLES[tone]
         variants.append({
             "tone": tone,
             "title": title,

@@ -30,7 +30,7 @@
 - Consumes: `build_client_message_prompt(client, profile, manual_observation, review_evidence) -> str`.
 - Produces: три `variants` с тонами `confident`, `hard_sell`, `expert`, длиной 70–260 символов и ровно одним финальным вопросом.
 
-- [ ] **Step 1: Replace the shared test fixture with valid diagnostic questions**
+- [x] **Step 1: Replace the shared test fixture with valid diagnostic questions**
 
 ```python
 GOOD_ANSWER["variants"] = [
@@ -64,7 +64,7 @@ GOOD_ANSWER["variants"] = [
 ]
 ```
 
-- [ ] **Step 2: Add failing prompt and validator tests**
+- [x] **Step 2: Add failing prompt and validator tests**
 
 ```python
 def test_prompt_requires_consultative_first_contact(self) -> None:
@@ -103,7 +103,7 @@ def test_rejects_two_questions_in_first_contact(self) -> None:
     self.assertEqual(2, len(transport.requests))
 ```
 
-- [ ] **Step 3: Run the targeted backend tests and verify RED**
+- [x] **Step 3: Run the targeted backend tests and verify RED**
 
 Run:
 
@@ -116,7 +116,7 @@ Run:
 
 Expected: FAIL because the prompt, titles, length rules and commercial-content checks still describe the old long pitch.
 
-- [ ] **Step 4: Implement the prompt and validation contract**
+- [x] **Step 4: Implement the prompt and validation contract**
 
 In `backend/ai/prompts.py`:
 
@@ -218,7 +218,7 @@ if text.count("?") != 1 or not text.endswith("?"):
     raise AiError("Первое сообщение должно содержать ровно один вопрос и заканчиваться им")
 ```
 
-- [ ] **Step 5: Run the AI regression suite**
+- [x] **Step 5: Run the AI regression suite**
 
 Run:
 
@@ -228,7 +228,7 @@ Run:
 
 Expected: all tests pass after updating old long-message assertions to the new contract.
 
-- [ ] **Step 6: Commit and push Task 1**
+- [x] **Step 6: Commit and push Task 1**
 
 ```powershell
 git add backend/ai/prompts.py backend/ai/outreach.py backend/tests/test_ai_outreach.py
