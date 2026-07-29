@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
+from urllib.parse import urlsplit, urlunsplit
 
 from .lead_utils import (
     LEAD_SCORE_MAX,
@@ -196,6 +197,18 @@ def init_db() -> None:
                 summary TEXT NOT NULL DEFAULT '',
                 goals_json TEXT NOT NULL DEFAULT '[]',
                 focus TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS useful_links (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                url TEXT NOT NULL UNIQUE,
+                description TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
             """
@@ -574,6 +587,122 @@ def update_schedule_task(
 def delete_schedule_task(task_id: int) -> bool:
     with _connect() as connection:
         cursor = connection.execute("DELETE FROM schedule_tasks WHERE id = ?", (task_id,))
+    return cursor.rowcount > 0
+
+
+def _normalize_useful_link_url(value: str) -> str:
+    raw_url = str(value or "").strip()
+    if not raw_url:
+        raise ValueError("Введите адрес сайта")
+    if len(raw_url) > 2048:
+        raise ValueError("Адрес сайта слишком длинный")
+    candidate = raw_url if "://" in raw_url else f"https://{raw_url}"
+    parsed = urlsplit(candidate)
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
+        raise ValueError("Введите корректный адрес сайта с HTTP или HTTPS")
+    if any(character.isspace() for character in parsed.netloc):
+        raise ValueError("Введите корректный адрес сайта без пробелов")
+    path = parsed.path.rstrip("/") if parsed.path != "/" else ""
+    return urlunsplit(
+        (
+            parsed.scheme.lower(),
+            parsed.netloc.lower(),
+            path,
+            parsed.query,
+            "",
+        )
+    )
+
+
+def _useful_link_values(title: str, url: str, description: str) -> tuple[str, str, str]:
+    normalized_title = str(title or "").strip()
+    normalized_description = str(description or "").strip()
+    if not normalized_title:
+        raise ValueError("Введите название сайта")
+    if len(normalized_title) > 120:
+        raise ValueError("Название сайта слишком длинное")
+    if len(normalized_description) > 1000:
+        raise ValueError("Описание сайта слишком длинное")
+    return normalized_title, _normalize_useful_link_url(url), normalized_description
+
+
+def _serialize_useful_link(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "id": int(row["id"]),
+        "title": row["title"],
+        "url": row["url"],
+        "description": row["description"] or "",
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def list_useful_links() -> dict[str, Any]:
+    with _connect() as connection:
+        rows = connection.execute(
+            "SELECT * FROM useful_links ORDER BY updated_at DESC, id DESC"
+        ).fetchall()
+    items = [_serialize_useful_link(row) for row in rows]
+    return {"items": items, "stats": {"total": len(items)}}
+
+
+def create_useful_link(title: str, url: str, description: str = "") -> dict[str, Any]:
+    normalized_title, normalized_url, normalized_description = _useful_link_values(title, url, description)
+    now = datetime.now(timezone.utc).isoformat()
+    with _connect() as connection:
+        try:
+            cursor = connection.execute(
+                """
+                INSERT INTO useful_links (title, url, description, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (normalized_title, normalized_url, normalized_description, now, now),
+            )
+        except sqlite3.IntegrityError as error:
+            raise ValueError("Этот сайт уже добавлен") from error
+        row = connection.execute("SELECT * FROM useful_links WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    return _serialize_useful_link(row)
+
+
+def update_useful_link(
+    link_id: int,
+    title: str | None = None,
+    url: str | None = None,
+    description: str | None = None,
+) -> dict[str, Any] | None:
+    with _connect() as connection:
+        existing = connection.execute("SELECT * FROM useful_links WHERE id = ?", (link_id,)).fetchone()
+        if existing is None:
+            return None
+        normalized_title, normalized_url, normalized_description = _useful_link_values(
+            existing["title"] if title is None else title,
+            existing["url"] if url is None else url,
+            existing["description"] if description is None else description,
+        )
+        try:
+            connection.execute(
+                """
+                UPDATE useful_links
+                SET title = ?, url = ?, description = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    normalized_title,
+                    normalized_url,
+                    normalized_description,
+                    datetime.now(timezone.utc).isoformat(),
+                    link_id,
+                ),
+            )
+        except sqlite3.IntegrityError as error:
+            raise ValueError("Этот сайт уже добавлен") from error
+        row = connection.execute("SELECT * FROM useful_links WHERE id = ?", (link_id,)).fetchone()
+    return _serialize_useful_link(row)
+
+
+def delete_useful_link(link_id: int) -> bool:
+    with _connect() as connection:
+        cursor = connection.execute("DELETE FROM useful_links WHERE id = ?", (link_id,))
     return cursor.rowcount > 0
 
 

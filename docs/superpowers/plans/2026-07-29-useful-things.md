@@ -37,14 +37,14 @@ unittest, Vitest, Testing Library.
 - Produces: `delete_useful_link(link_id) -> bool`.
 - Produces: `GET/POST /api/useful-links`, `PUT/DELETE /api/useful-links/{link_id}`.
 
-- [ ] **Step 1: Write database RED tests**
+- [x] **Step 1: Write database RED tests**
 
 Create tests that initialize a temporary database, create `figma.com`, assert storage
 as `https://figma.com`, update all three fields, list newest first, delete the row, and
 receive `False` on a repeated delete. Add validation cases for unsupported protocols,
 empty hostname and duplicate normalized URL.
 
-- [ ] **Step 2: Verify database RED**
+- [x] **Step 2: Verify database RED**
 
 ```powershell
 .\backend\.venv\Scripts\python.exe -m unittest backend.tests.test_useful_links.UsefulLinksDatabaseTests
@@ -52,23 +52,23 @@ empty hostname and duplicate normalized URL.
 
 Expected: import or attribute failures because the table/functions do not exist.
 
-- [ ] **Step 3: Implement the SQLite contract**
+- [x] **Step 3: Implement the SQLite contract**
 
 Add `useful_links` to `init_db`, URL normalization through `urllib.parse.urlsplit`,
 row serialization, sorted listing and the four database operations. Convert SQLite
 uniqueness failures to `ValueError("Этот сайт уже добавлен")`.
 
-- [ ] **Step 4: Verify database GREEN**
+- [x] **Step 4: Verify database GREEN**
 
 Run the Task 1 Step 2 command. Expected: all database tests pass.
 
-- [ ] **Step 5: Write API RED tests**
+- [x] **Step 5: Write API RED tests**
 
 Add a `TestClient` group that checks HTTP 201 creation, GET listing, PUT update,
 DELETE removal, HTTP 404 for an absent id, HTTP 422 for an invalid URL, HTTP 409 for
 a duplicate and HTTP 403 for mutations without the custom header.
 
-- [ ] **Step 6: Verify API RED**
+- [x] **Step 6: Verify API RED**
 
 ```powershell
 .\backend\.venv\Scripts\python.exe -m unittest backend.tests.test_useful_links.UsefulLinksApiTests
@@ -76,13 +76,13 @@ a duplicate and HTTP 403 for mutations without the custom header.
 
 Expected: 404 responses because routes are absent.
 
-- [ ] **Step 7: Implement the FastAPI routes**
+- [x] **Step 7: Implement the FastAPI routes**
 
 Add Pydantic create/update models, import the database functions, map missing resources
 to 404, URL validation to 422 and duplicate errors to 409. Apply
 `Depends(guard_powerful_action)` to POST, PUT and DELETE.
 
-- [ ] **Step 8: Verify Task 1**
+- [x] **Step 8: Verify Task 1**
 
 ```powershell
 .\backend\.venv\Scripts\python.exe -m unittest backend.tests.test_useful_links

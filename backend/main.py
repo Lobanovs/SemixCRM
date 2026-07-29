@@ -36,6 +36,10 @@ from .database import (
     get_schedule,
     save_schedule_note,
     save_schedule_week,
+    create_useful_link,
+    delete_useful_link,
+    list_useful_links,
+    update_useful_link,
     archive_freelance_order,
     cleanup_freelance_orders,
     create_freelance_order,
@@ -506,6 +510,64 @@ class ScheduleWeekRequest(BaseModel):
     summary: str = Field(default="", max_length=2000)
     goals: list[dict[str, Any]] = Field(default_factory=list, max_length=30)
     focus: str = Field(default="", max_length=160)
+
+
+class UsefulLinkCreateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
+    url: str = Field(min_length=1, max_length=2048)
+    description: str = Field(default="", max_length=1000)
+
+
+class UsefulLinkUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    url: str | None = Field(default=None, min_length=1, max_length=2048)
+    description: str | None = Field(default=None, max_length=1000)
+
+
+def _useful_link_http_error(error: ValueError) -> HTTPException:
+    detail = str(error)
+    return HTTPException(status_code=409 if detail == "Этот сайт уже добавлен" else 422, detail=detail)
+
+
+@app.get("/api/useful-links")
+def useful_links() -> dict[str, Any]:
+    return list_useful_links()
+
+
+@app.post(
+    "/api/useful-links",
+    status_code=201,
+    dependencies=[Depends(guard_powerful_action)],
+)
+def add_useful_link(request: UsefulLinkCreateRequest) -> dict[str, Any]:
+    try:
+        return create_useful_link(request.title, request.url, request.description)
+    except ValueError as error:
+        raise _useful_link_http_error(error) from error
+
+
+@app.put(
+    "/api/useful-links/{link_id}",
+    dependencies=[Depends(guard_powerful_action)],
+)
+def edit_useful_link(link_id: int, request: UsefulLinkUpdateRequest) -> dict[str, Any]:
+    try:
+        link = update_useful_link(link_id, request.title, request.url, request.description)
+    except ValueError as error:
+        raise _useful_link_http_error(error) from error
+    if link is None:
+        raise HTTPException(status_code=404, detail="Полезный сайт не найден")
+    return link
+
+
+@app.delete(
+    "/api/useful-links/{link_id}",
+    dependencies=[Depends(guard_powerful_action)],
+)
+def remove_useful_link(link_id: int) -> dict[str, Any]:
+    if not delete_useful_link(link_id):
+        raise HTTPException(status_code=404, detail="Полезный сайт не найден")
+    return {"ok": True, "deleted_id": link_id}
 
 
 def _current_week_start() -> str:
