@@ -185,7 +185,7 @@ npm.cmd run build
 git diff --check
 ```
 
-- [ ] **Step 3: Commit and push**
+- [x] **Step 3: Commit and push**
 
 ```powershell
 git add backend/ai/prompts.py backend/ai/outreach.py backend/tests/test_ai_outreach.py `
