@@ -441,7 +441,7 @@ contains_url_or_price_or_offer == false
 Open the saved result in the CRM and confirm the three diagnostic tabs, compact editor,
 absence of the portfolio switch and the expanded conversation map.
 
-- [ ] **Step 4: Commit and push documentation**
+- [x] **Step 4: Commit and push documentation**
 
 ```powershell
 git add README.md docs/superpowers/plans/2026-07-29-consultative-first-contact.md
