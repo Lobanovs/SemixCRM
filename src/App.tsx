@@ -158,7 +158,10 @@ function App() {
   }
 
   return (
-    <div className={`app-shell ${isDark ? 'theme-dark' : ''}`}>
+    <div
+      className={`app-shell ${isDark ? 'theme-dark' : ''}`}
+      data-theme={isDark ? 'premium-dark' : undefined}
+    >
       <aside className={`sidebar ${isSidebarOpen ? 'is-open' : ''}`} aria-label="Главная навигация">
         <div className="brand-row">
           <a className="brand" href="#home" onClick={() => selectSection('home')}>Semix CRM</a>

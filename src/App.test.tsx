@@ -74,4 +74,18 @@ describe('навигация приложения', () => {
 
     expect(await screen.findByRole('heading', { name: 'Полезные вещи', level: 1 })).toBeInTheDocument()
   })
+
+  it('activates and persists the premium dark theme', async () => {
+    vi.stubGlobal('fetch', createAppFetch())
+    const { container } = render(<App />)
+    const shell = container.querySelector('.app-shell')
+
+    expect(shell).not.toHaveAttribute('data-theme')
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Включить тёмную тему' }))
+
+    expect(shell).toHaveClass('theme-dark')
+    expect(shell).toHaveAttribute('data-theme', 'premium-dark')
+    expect(window.localStorage.getItem('semix-crm-theme')).toBe('dark')
+  })
 })
