@@ -93,6 +93,13 @@ class AiSettingsStorageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Таймаут"):
             save_settings(api_key="key", model=DEFAULT_MODEL, timeout=2)
 
+    def test_gpt_5_6_luna_is_supported(self) -> None:
+        models = {item["id"]: item["label"] for item in safe_settings()["supported_models"]}
+        self.assertEqual("GPT-5.6 Luna", models["gpt-5.6-luna"])
+
+        save_settings(api_key="key", model="gpt-5.6-luna", timeout=45)
+        self.assertEqual("gpt-5.6-luna", load_settings().model)
+
 
 class AiSettingsApiTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -187,7 +194,12 @@ class AiSettingsApiTests(unittest.TestCase):
 
         self.assertEqual(200, response.status_code)
         self.assertTrue(response.json()["ok"])
-        complete.assert_called_once()
+        complete.assert_called_once_with(
+            "Ты проверяешь подключение к OpenCode Go.",
+            "Ответь одним словом: OK",
+            temperature=0,
+            max_tokens=128,
+        )
         self.assertFalse(self.client.get("/api/ai/settings").json()["api_key_configured"])
 
     def test_connection_check_maps_rejected_key(self) -> None:

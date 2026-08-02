@@ -17,6 +17,7 @@ MAX_TIMEOUT = 300.0
 # Только модели с официальным OpenAI-совместимым /chat/completions.
 # Модели OpenCode Go с Anthropic-style /messages здесь намеренно не показываем.
 SUPPORTED_MODELS: tuple[tuple[str, str], ...] = (
+    ("gpt-5.6-luna", "GPT-5.6 Luna"),
     ("deepseek-v4-flash", "DeepSeek V4 Flash"),
     ("deepseek-v4-pro", "DeepSeek V4 Pro"),
     ("glm-5.2", "GLM-5.2"),

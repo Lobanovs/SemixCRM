@@ -1285,7 +1285,7 @@ def test_ai_settings(request: AiSettingsTestRequest) -> dict[str, Any]:
             "Ты проверяешь подключение к OpenCode Go.",
             "Ответь одним словом: OK",
             temperature=0,
-            max_tokens=8,
+            max_tokens=128,
         )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error

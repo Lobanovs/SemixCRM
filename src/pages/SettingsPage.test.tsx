@@ -15,6 +15,7 @@ const SETTINGS = {
   timeout: 45,
   updated_at: '2026-07-27T10:00:00+00:00',
   supported_models: [
+    { id: 'gpt-5.6-luna', label: 'GPT-5.6 Luna' },
     { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
     { id: 'glm-5.2', label: 'GLM-5.2' },
   ],
@@ -78,6 +79,8 @@ describe('настройки OpenCode Go', () => {
     expect(screen.getByText('••••1234')).toBeInTheDocument()
     expect(screen.getByLabelText('API-ключ OpenCode Go')).toHaveValue('')
     expect(screen.queryByDisplayValue('go-secret-1234')).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'GPT-5.6 Luna' })).toHaveValue('gpt-5.6-luna')
+    expect(screen.getByText('Доступные модели OpenCode, проверенные с текущим API Semix CRM.')).toBeInTheDocument()
   })
 
   it('saves a replacement key and selected model', async () => {

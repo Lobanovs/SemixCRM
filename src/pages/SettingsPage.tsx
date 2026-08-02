@@ -282,7 +282,7 @@ export default function SettingsPage() {
                   ))}
                 </select>
               </div>
-              <p className="settings-field-hint">Только модели OpenCode Go с поддержкой chat/completions.</p>
+              <p className="settings-field-hint">Доступные модели OpenCode, проверенные с текущим API Semix CRM.</p>
             </div>
 
             <div className="settings-field">
