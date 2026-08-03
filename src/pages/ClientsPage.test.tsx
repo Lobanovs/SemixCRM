@@ -251,7 +251,9 @@ describe('client parser controls', () => {
     vi.stubGlobal('fetch', fetchMock)
     render(<ClientsPage />)
 
+    expect(document.getElementById('client-retention-filter-panel')).toHaveAttribute('hidden')
     await user.click(await screen.findByRole('button', { name: /Кто остаётся/ }))
+    expect(document.getElementById('client-retention-filter-panel')).not.toHaveAttribute('hidden')
     await user.click(screen.getByRole('button', { name: '15+ очков' }))
 
     expect(screen.getByText('Осталось 2 из 3')).toBeVisible()
@@ -272,5 +274,8 @@ describe('client parser controls', () => {
     expect(screen.getByRole('heading', { name: 'Лид только с телефоном' })).toBeVisible()
     expect(screen.getByRole('heading', { name: 'Слабый лид с Telegram' })).toBeVisible()
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false)
+
+    await user.type(screen.getByRole('textbox', { name: 'Поиск клиентов' }), 'нет совпадений')
+    expect(screen.getByText('По текущим фильтрам клиентов нет. Измените поиск, статус, источник или нишу.')).toBeVisible()
   })
 })

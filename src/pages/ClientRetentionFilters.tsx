@@ -56,12 +56,12 @@ export default function ClientRetentionFilters({
 
   return (
     <>
-      {isOpen && (
-        <section
-          className="client-retention-panel"
-          id="client-retention-filter-panel"
-          aria-labelledby="client-retention-filter-title"
-        >
+      <section
+        className="client-retention-panel"
+        id="client-retention-filter-panel"
+        aria-labelledby="client-retention-filter-title"
+        hidden={!isOpen}
+      >
           <header className="retention-panel-header">
             <span className="retention-panel-icon"><SlidersHorizontal size={20} /></span>
             <div>
@@ -172,8 +172,7 @@ export default function ClientRetentionFilters({
               />
             </fieldset>
           </div>
-        </section>
-      )}
+      </section>
 
       {activeCount > 0 && (
         <div className="client-retention-summary" aria-live="polite">

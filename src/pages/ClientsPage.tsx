@@ -306,6 +306,11 @@ export default function ClientsPage() {
   const sourceOptions = useMemo(() => Array.from(new Set(clients.map((client) => client.source))).sort(), [clients])
   const nicheOptions = useMemo(() => Array.from(new Set(clients.map((client) => client.category))).sort(), [clients])
   const activeRetentionFilterCount = countActiveClientFilters(retentionFilters)
+  const emptyClientsMessage = !clients.length
+    ? 'Клиентов пока нет. Настройте город и ниши, затем запустите парсер.'
+    : activeRetentionFilterCount
+      ? 'По выбранным условиям клиентов нет. Ослабьте фильтр «Кто остаётся».'
+      : 'По текущим фильтрам клиентов нет. Измените поиск, статус, источник или нишу.'
 
   const derivedStats = useMemo<ApiStats>(() => {
     const stages = Object.fromEntries(stageOrder.map((stage) => [stage, clients.filter((client) => client.status === stage).length])) as Record<ClientStatus, number>
@@ -507,7 +512,7 @@ export default function ClientsPage() {
               onClick={() => setShowRetentionFilters((value) => !value)}
             >
               <ListFilter size={18} />Кто остаётся
-              {activeRetentionFilterCount > 0 && <span aria-label={`${activeRetentionFilterCount} активных условий`}>{activeRetentionFilterCount}</span>}
+              {activeRetentionFilterCount > 0 && <span aria-hidden="true">{activeRetentionFilterCount}</span>}
             </button>
             <button className="toolbar-secondary-action" type="button" data-guide="clients-history" onClick={() => setPageView('history')}><CalendarClock size={18} />История</button>
             <button className="toolbar-secondary-action" type="button" data-guide="clients-archive" onClick={() => setPageView('archive')}><Archive size={18} />Скрытые <span>{archivedClients.length}</span></button>
@@ -526,7 +531,7 @@ export default function ClientsPage() {
           />
 
           <div className="client-list">
-            {filtered.length ? filtered.map((client) => <ClientRow key={client.id} client={client} onStatusChange={updateStatus} onDetails={setSelectedClient} onDelete={(item) => setDeleteTarget({ kind: 'one', client: item })} onWrite={setMessageClient} />) : <EmptyState>{clients.length ? 'По выбранным условиям клиентов нет. Ослабьте фильтр «Кто остаётся».' : 'Клиентов пока нет. Настройте город и ниши, затем запустите парсер.'}</EmptyState>}
+            {filtered.length ? filtered.map((client) => <ClientRow key={client.id} client={client} onStatusChange={updateStatus} onDetails={setSelectedClient} onDelete={(item) => setDeleteTarget({ kind: 'one', client: item })} onWrite={setMessageClient} />) : <EmptyState>{emptyClientsMessage}</EmptyState>}
           </div>
         </section>
 
