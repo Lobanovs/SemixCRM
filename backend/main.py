@@ -33,6 +33,7 @@ from .database import (
     create_schedule_task,
     update_schedule_task,
     delete_schedule_task,
+    apply_schedule_task_batch,
     get_schedule,
     save_schedule_note,
     save_schedule_week,
@@ -80,6 +81,7 @@ from .projects.detect import detect_project
 from .projects.models import PROJECT_CATEGORIES, PROJECT_STATUSES, Project
 from .projects.runner import ProjectRunner
 from .ai.client import AiClient, AiDisabledError, AiError, AiSettings
+from .ai.schedule import generate_week_plan
 from .ai.outreach import (
     build_input as build_ai_input,
     generate_client_message,
@@ -512,6 +514,27 @@ class ScheduleWeekRequest(BaseModel):
     focus: str = Field(default="", max_length=160)
 
 
+class AiSchedulePlanRequest(BaseModel):
+    week_start: str = Field(min_length=10, max_length=10)
+    objective: str = Field(min_length=3, max_length=1200)
+    intensity: Literal["light", "balanced", "intensive"] = "balanced"
+    include_weekend: bool = False
+
+
+class AiScheduleDraftTask(BaseModel):
+    date: str = Field(min_length=10, max_length=10)
+    title: str = Field(min_length=3, max_length=160)
+    time: str = Field(default="", max_length=5)
+    kind: Literal["task", "meeting"] = "task"
+    reason: str = Field(default="", max_length=240)
+
+
+class AiScheduleApplyRequest(BaseModel):
+    week_start: str = Field(min_length=10, max_length=10)
+    focus: str = Field(default="", max_length=160)
+    tasks: list[AiScheduleDraftTask] = Field(min_length=1, max_length=20)
+
+
 class UsefulLinkCreateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=120)
     category: Literal["prompt", "website", "shop", "article", "other"] = "website"
@@ -634,6 +657,41 @@ def update_schedule_note(day_date: str, request: ScheduleNoteRequest) -> dict[st
 def update_schedule_week(week_start: str, request: ScheduleWeekRequest) -> dict[str, Any]:
     try:
         return save_schedule_week(week_start, request.summary, request.goals, request.focus)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/api/ai/schedule/plan", dependencies=[Depends(guard_powerful_action)])
+def ai_schedule_plan(request: AiSchedulePlanRequest) -> dict[str, Any]:
+    try:
+        schedule_context = get_schedule(request.week_start)
+        return generate_week_plan(
+            week_start=request.week_start,
+            objective=request.objective,
+            intensity=request.intensity,
+            include_weekend=request.include_weekend,
+            schedule=schedule_context,
+        )
+    except AiDisabledError as error:
+        raise HTTPException(
+            status_code=503,
+            detail="ИИ выключен: добавьте API-ключ OpenCode Go в Настройках",
+        ) from error
+    except AiError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/api/ai/schedule/plan/apply", dependencies=[Depends(guard_powerful_action)])
+def apply_ai_schedule_plan(request: AiScheduleApplyRequest) -> dict[str, Any]:
+    try:
+        result = apply_schedule_task_batch(
+            request.week_start,
+            [task.model_dump() for task in request.tasks],
+            request.focus,
+        )
+        return {**result, "schedule": get_schedule(request.week_start)}
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 

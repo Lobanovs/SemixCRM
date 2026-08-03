@@ -555,7 +555,12 @@ def _serialize_schedule_task(row: sqlite3.Row) -> dict[str, Any]:
     }
 
 
-def create_schedule_task(task_date: str, title: str, task_time: str = "", kind: str = "task") -> dict[str, Any]:
+def _normalize_schedule_task_values(
+    task_date: str,
+    title: str,
+    task_time: str = "",
+    kind: str = "task",
+) -> tuple[str, str, str, str]:
     normalized_date = _schedule_date(task_date)
     normalized_title = str(title or "").strip()
     normalized_time = str(task_time or "").strip()
@@ -571,6 +576,16 @@ def create_schedule_task(task_date: str, title: str, task_time: str = "", kind: 
             datetime.strptime(normalized_time, "%H:%M")
         except ValueError as error:
             raise ValueError("Время должно быть в формате HH:MM") from error
+    return normalized_date, normalized_title, normalized_time, normalized_kind
+
+
+def create_schedule_task(task_date: str, title: str, task_time: str = "", kind: str = "task") -> dict[str, Any]:
+    normalized_date, normalized_title, normalized_time, normalized_kind = _normalize_schedule_task_values(
+        task_date,
+        title,
+        task_time,
+        kind,
+    )
     now = datetime.now(timezone.utc).isoformat()
     with _connect() as connection:
         cursor = connection.execute(
@@ -579,6 +594,86 @@ def create_schedule_task(task_date: str, title: str, task_time: str = "", kind: 
         )
         row = connection.execute("SELECT * FROM schedule_tasks WHERE id = ?", (cursor.lastrowid,)).fetchone()
     return _serialize_schedule_task(row)
+
+
+def apply_schedule_task_batch(
+    week_start: str,
+    tasks: list[dict[str, Any]],
+    focus: str = "",
+) -> dict[str, Any]:
+    normalized_week = _schedule_week_start(week_start)
+    start_date = date.fromisoformat(normalized_week)
+    end_date = start_date + timedelta(days=6)
+    if not isinstance(tasks, list) or not tasks:
+        raise ValueError("Выберите хотя бы одну задачу")
+    if len(tasks) > 20:
+        raise ValueError("За один раз можно добавить не более 20 задач")
+
+    normalized_tasks: list[tuple[str, str, str, str]] = []
+    for task in tasks:
+        if not isinstance(task, dict):
+            raise ValueError("Каждая задача должна быть объектом")
+        values = _normalize_schedule_task_values(
+            str(task.get("date") or ""),
+            str(task.get("title") or ""),
+            str(task.get("time") or ""),
+            str(task.get("kind") or "task"),
+        )
+        task_day = date.fromisoformat(values[0])
+        if not start_date <= task_day <= end_date:
+            raise ValueError("Все задачи должны быть внутри выбранной недели")
+        normalized_tasks.append(values)
+
+    normalized_focus = str(focus or "").strip()
+    if len(normalized_focus) > 160:
+        raise ValueError("Фокус недели слишком длинный")
+
+    now = datetime.now(timezone.utc).isoformat()
+    created: list[dict[str, Any]] = []
+    skipped_count = 0
+    with _connect() as connection:
+        existing_rows = connection.execute(
+            "SELECT task_date, title FROM schedule_tasks WHERE task_date BETWEEN ? AND ?",
+            (normalized_week, end_date.isoformat()),
+        ).fetchall()
+        existing_keys = {
+            (str(row["task_date"]), str(row["title"]).strip().casefold())
+            for row in existing_rows
+        }
+        for normalized_date, normalized_title, normalized_time, normalized_kind in normalized_tasks:
+            key = (normalized_date, normalized_title.casefold())
+            if key in existing_keys:
+                skipped_count += 1
+                continue
+            cursor = connection.execute(
+                "INSERT INTO schedule_tasks (task_date, title, task_time, kind, done, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)",
+                (normalized_date, normalized_title, normalized_time, normalized_kind, now, now),
+            )
+            row = connection.execute(
+                "SELECT * FROM schedule_tasks WHERE id = ?",
+                (cursor.lastrowid,),
+            ).fetchone()
+            created.append(_serialize_schedule_task(row))
+            existing_keys.add(key)
+
+        connection.execute(
+            """
+            INSERT INTO schedule_weeks (week_start, summary, goals_json, focus, updated_at)
+            VALUES (?, '', '[]', ?, ?)
+            ON CONFLICT(week_start) DO UPDATE SET
+                focus = excluded.focus,
+                updated_at = excluded.updated_at
+            """,
+            (normalized_week, normalized_focus, now),
+        )
+
+    return {
+        "week_start": normalized_week,
+        "focus": normalized_focus,
+        "created": created,
+        "created_count": len(created),
+        "skipped_count": skipped_count,
+    }
 
 
 def update_schedule_task(
