@@ -20,7 +20,7 @@ function jsonResponse(payload: unknown, status = 200) {
   })
 }
 
-function createScheduleFetch(options: { failTaskUpdates?: boolean } = {}) {
+function createScheduleFetch(options: { failTaskUpdates?: boolean; failAi?: boolean } = {}) {
   let tasks: TestTask[] = [{ id: 7, date: '2026-07-22', title: 'Позвонить клиенту', time: '10:00', kind: 'task', done: false }]
 
   const schedulePayload = () => ({
@@ -46,6 +46,39 @@ function createScheduleFetch(options: { failTaskUpdates?: boolean } = {}) {
     const method = init?.method || 'GET'
 
     if (method === 'GET' && url.includes('/api/schedule?')) return jsonResponse(schedulePayload())
+    if (method === 'POST' && url.endsWith('/api/ai/schedule/plan')) {
+      if (options.failAi) return jsonResponse({ detail: 'Модель временно недоступна' }, 502)
+      return jsonResponse({
+        week_start: '2026-07-20',
+        week_end: '2026-07-26',
+        focus: 'Подготовить лендинг к запуску',
+        summary: 'Сначала структура, затем проверка формы.',
+        tasks: [
+          { id: 'ai-1', date: '2026-07-23', time: '09:00', title: 'Подготовить структуру лендинга', kind: 'task', reason: 'Чтобы собрать основу страницы.' },
+          { id: 'ai-2', date: '2026-07-24', time: '', title: 'Проверить форму заявки', kind: 'task', reason: 'Чтобы заявки не терялись после запуска.' },
+        ],
+      })
+    }
+    if (method === 'POST' && url.endsWith('/api/ai/schedule/plan/apply')) {
+      const body = JSON.parse(String(init?.body || '{}'))
+      const created = body.tasks.map((task: Omit<TestTask, 'id' | 'done'>, index: number) => ({
+        id: 20 + index,
+        date: task.date,
+        title: task.title,
+        time: task.time,
+        kind: task.kind,
+        done: false,
+      }))
+      tasks = [...tasks, ...created]
+      return jsonResponse({
+        week_start: '2026-07-20',
+        focus: body.focus,
+        created,
+        created_count: created.length,
+        skipped_count: 0,
+        schedule: { ...schedulePayload(), focus: body.focus },
+      })
+    }
     if (method === 'POST' && url.endsWith('/api/schedule/tasks')) {
       const body = JSON.parse(String(init?.body || '{}'))
       const task: TestTask = { id: 8, date: body.task_date, title: body.title, time: body.task_time, kind: body.kind, done: false }
@@ -167,5 +200,50 @@ describe('schedule task CRUD', () => {
 
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('Не удалось сохранить задачу')
     expect(screen.getByRole('dialog', { name: 'Редактирование задачи' })).toBeVisible()
+  })
+
+  it('generates a guarded weekly draft and applies only selected tasks', async () => {
+    const user = userEvent.setup()
+    render(<SchedulePage />)
+
+    await user.click(await screen.findByRole('button', { name: 'Составить неделю с ИИ' }))
+    const dialog = screen.getByRole('dialog', { name: 'ИИ-планировщик недели' })
+    await user.type(within(dialog).getByLabelText('Главный результат недели'), 'Запустить лендинг')
+    await user.click(within(dialog).getByRole('button', { name: 'Составить черновик' }))
+
+    expect(await within(dialog).findByText('Подготовить структуру лендинга')).toBeVisible()
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Добавить задачу «Подготовить структуру лендинга»' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Добавить 1 задачу' }))
+
+    await waitFor(() => {
+      const generateCall = vi.mocked(fetch).mock.calls.find(([url]) => String(url).endsWith('/api/ai/schedule/plan'))
+      expect(generateCall?.[1]?.headers).toMatchObject({ 'X-Requested-With': 'SemixCRM' })
+      expect(JSON.parse(String(generateCall?.[1]?.body))).toEqual({
+        week_start: '2026-07-20',
+        objective: 'Запустить лендинг',
+        intensity: 'balanced',
+        include_weekend: false,
+      })
+      const applyCall = vi.mocked(fetch).mock.calls.find(([url]) => String(url).endsWith('/api/ai/schedule/plan/apply'))
+      const applyBody = JSON.parse(String(applyCall?.[1]?.body))
+      expect(applyBody.tasks).toHaveLength(1)
+      expect(applyBody.tasks[0].title).toBe('Проверить форму заявки')
+    })
+    expect(await screen.findByText('Добавлена 1 задача')).toBeVisible()
+  })
+
+  it('keeps the AI brief open and announces provider errors without saving', async () => {
+    vi.stubGlobal('fetch', createScheduleFetch({ failAi: true }))
+    const user = userEvent.setup()
+    render(<SchedulePage />)
+
+    await user.click(await screen.findByRole('button', { name: 'Составить неделю с ИИ' }))
+    const dialog = screen.getByRole('dialog', { name: 'ИИ-планировщик недели' })
+    await user.type(within(dialog).getByLabelText('Главный результат недели'), 'Подготовить неделю')
+    await user.click(within(dialog).getByRole('button', { name: 'Составить черновик' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Модель временно недоступна')
+    expect(screen.getByRole('dialog', { name: 'ИИ-планировщик недели' })).toBeVisible()
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('/api/ai/schedule/plan/apply'))).toBe(false)
   })
 })

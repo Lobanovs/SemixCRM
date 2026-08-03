@@ -9,6 +9,7 @@ import {
   ListChecks,
   Plus,
   SquarePen,
+  Sparkles,
   Target,
   Trash2,
   X,
@@ -16,6 +17,7 @@ import {
 import { MetricCard, SidePanel } from '../components/DashboardUi'
 import PageGuide from '../components/PageGuide'
 import { SCHEDULE_GUIDE } from '../guides'
+import AiWeekPlannerModal from './AiWeekPlannerModal'
 
 type TaskKind = 'task' | 'meeting'
 type Task = { id: number; date: string; title: string; time: string; kind: TaskKind; done: boolean }
@@ -93,6 +95,7 @@ export default function SchedulePage() {
   const [saving, setSaving] = useState(false)
   const [taskModal, setTaskModal] = useState<{ date: string; task: Task | null } | null>(null)
   const [showGoalModal, setShowGoalModal] = useState(false)
+  const [showAiPlanner, setShowAiPlanner] = useState(false)
   const [notice, setNotice] = useState('')
 
   const loadSchedule = async (targetWeek = weekStart) => {
@@ -228,7 +231,10 @@ export default function SchedulePage() {
               <button type="button" aria-label="Следующая неделя" onClick={() => changeWeek(1)}><ChevronRight /></button>
               <button className="today-button" type="button" onClick={goToday}><CalendarDays size={16} />Сегодня</button>
             </div>
-            <button className="solid-action" type="button" data-guide="schedule-add" onClick={() => openCreateTask()}><Plus size={19} />Добавить задачу</button>
+            <div className="schedule-control-actions">
+              <button className="ai-schedule-action" type="button" data-guide="schedule-ai-plan" onClick={() => setShowAiPlanner(true)}><Sparkles size={18} />Составить неделю с ИИ</button>
+              <button className="solid-action" type="button" data-guide="schedule-add" onClick={() => openCreateTask()}><Plus size={19} />Добавить задачу</button>
+            </div>
           </div>
           {loading && <div className="schedule-loading" role="status">Загружаем сохранённое расписание…</div>}
           {error && <div className="schedule-error" role="alert">{error}<button type="button" onClick={() => void loadSchedule()}>Повторить</button></div>}
@@ -266,6 +272,13 @@ export default function SchedulePage() {
       {notice && <div className="schedule-toast" role="status">{notice}</div>}
       {taskModal && <TaskModal defaultDate={taskModal.date} task={taskModal.task} onClose={() => setTaskModal(null)} onSaved={taskSaved} onDeleted={taskDeleted} />}
       {showGoalModal && <GoalModal onClose={() => setShowGoalModal(false)} onCreated={async (title) => { await addGoal(title); setShowGoalModal(false) }} />}
+      {showAiPlanner && <AiWeekPlannerModal weekStart={weekStart} weekEnd={addDays(weekStart, 6)} goals={data?.goals ?? []} onClose={() => setShowAiPlanner(false)} onApplied={async (createdCount, skippedCount) => {
+        setShowAiPlanner(false)
+        await loadSchedule()
+        const createdText = createdCount === 1 ? 'Добавлена 1 задача' : `Добавлено ${createdCount} задач`
+        setNotice(skippedCount ? `${createdText}, пропущено дублей: ${skippedCount}` : createdText)
+        window.setTimeout(() => setNotice(''), 2200)
+      }} />}
     </div>
   )
 }
