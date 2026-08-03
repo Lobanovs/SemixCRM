@@ -115,7 +115,7 @@ class ParseRequest(BaseModel):
     niches: list[str] | None = None
     source: str | None = Field(default=None, max_length=20)
     sources: list[str] | None = None
-    limit: int = Field(default=10, ge=1, le=50)
+    limit: int = Field(default=10, ge=0)
     start_page: int = Field(default=1, ge=1, le=999)
 
     def normalized_niches(self) -> list[str]:
@@ -780,7 +780,7 @@ class ParserSettingsRequest(BaseModel):
     city: str = Field(min_length=2, max_length=80)
     niches: list[str] = Field(min_length=1, max_length=20)
     sources: list[str] = Field(min_length=1, max_length=4)
-    limit: int = Field(default=10, ge=1, le=50)
+    limit: int = Field(default=10, ge=0)
     start_page: int = Field(default=1, ge=1, le=999)
 
 

@@ -20,6 +20,19 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 LEADHUNT_DIR = Path(os.getenv("LEADHUNT_ROOT", r"C:\Users\Admin\Desktop\LeadHunt"))
 YANDEX_RUNNER = ROOT_DIR / "backend" / "yandex_runner.py"
 OUTPUT_DIR = ROOT_DIR / "backend" / "data" / "parser_output"
+UNLIMITED_LIMIT = 0
+# parser-2gis validates max_records as a positive integer. Its own page walker
+# stops at the last available 2GIS page, so this value only disables an early stop.
+UPSTREAM_UNLIMITED_MAX_RECORDS = 2_147_483_647
+YANDEX_SAFE_LIMIT = 50
+
+
+def _is_unlimited(limit: int) -> bool:
+    return int(limit) == UNLIMITED_LIMIT
+
+
+def _upstream_2gis_limit(limit: int) -> int:
+    return UPSTREAM_UNLIMITED_MAX_RECORDS if _is_unlimited(limit) else max(1, int(limit))
 
 
 def resolve_city_code(city: str, parser_python: str | None = None) -> str:
@@ -92,7 +105,7 @@ def _kill_process_tree(process: subprocess.Popen[str]) -> None:
         process.kill()
 
 
-def _run_parser_process(cmd: list[str], environment: dict[str, str], timeout: int) -> subprocess.CompletedProcess[str]:
+def _run_parser_process(cmd: list[str], environment: dict[str, str], timeout: int | None) -> subprocess.CompletedProcess[str]:
     creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0
     process = subprocess.Popen(
         cmd, cwd=str(ROOT_DIR), env=environment, text=True,
@@ -131,15 +144,16 @@ def collect_2gis(
         "--chrome.headless", os.getenv("PARSER2GIS_HEADLESS", os.getenv("LEADHUNT_HEADLESS", "no")),
         "--chrome.start-maximized", "yes",
         "--chrome.silent-browser", "yes",
-        "--parser.max-records", str(max(1, min(int(limit), 200))),
+        "--parser.max-records", str(_upstream_2gis_limit(limit)),
         "--writer.verbose", "yes",
     ]
     if on_status:
         page_label = f", страница {max(1, int(start_page))}" if int(start_page) > 1 else ""
-        on_status(f"Открываю 2GIS: {city}, {niche}{page_label}")
+        scope_label = ", до конца выдачи" if _is_unlimited(limit) else f", до {max(1, int(limit))} компаний"
+        on_status(f"Открываю 2GIS: {city}, {niche}{page_label}{scope_label}")
     environment = os.environ.copy()
     environment.update({"PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"})
-    timeout = max(180, min(600, 20 + int(limit) * 12))
+    timeout = None if _is_unlimited(limit) else max(180, 20 + max(1, int(limit)) * 12)
     try:
         try:
             completed = _run_parser_process(cmd, environment, timeout)
@@ -173,9 +187,10 @@ def collect_yandex(city: str, niche: str, limit: int, on_status: Callable[[str],
     output_path = OUTPUT_DIR / f"yandex_{uuid.uuid4().hex[:10]}.json"
     if on_status:
         on_status(f"Открываю Яндекс Карты: {city}, {niche}")
+    effective_limit = YANDEX_SAFE_LIMIT if _is_unlimited(limit) else max(1, int(limit))
     command = _python_command() + [
         str(YANDEX_RUNNER), "--city", city, "--niche", niche,
-        "--limit", str(max(1, min(limit, 50))), "--output", str(output_path),
+        "--limit", str(min(effective_limit, YANDEX_SAFE_LIMIT)), "--output", str(output_path),
     ]
     environment = os.environ.copy()
     environment.update({
@@ -184,7 +199,7 @@ def collect_yandex(city: str, niche: str, limit: int, on_status: Callable[[str],
         "LEADHUNT_ROOT": str(LEADHUNT_DIR),
         "LEADHUNT_BROWSER_HEADLESS": os.getenv("LEADHUNT_BROWSER_HEADLESS", "true"),
     })
-    timeout = max(180, min(600, 30 + int(limit) * 15))
+    timeout = max(180, 30 + min(effective_limit, YANDEX_SAFE_LIMIT) * 15)
     try:
         completed = subprocess.run(
             command, cwd=str(ROOT_DIR), env=environment, text=True, encoding="utf-8",
@@ -211,7 +226,7 @@ def collect_yandex(city: str, niche: str, limit: int, on_status: Callable[[str],
         }
         lead["contacts"] = _flat_contacts(lead)
         result.append(lead)
-    return result[:limit]
+    return result[: min(effective_limit, YANDEX_SAFE_LIMIT)]
 
 
 def collect_leads(
@@ -225,7 +240,7 @@ def collect_leads(
     normalized_sources = [source.lower().strip() for source in sources]
     collected: list[dict[str, Any]] = []
     errors: list[str] = []
-    per_source_limit = max(1, limit)
+    per_source_limit = UNLIMITED_LIMIT if _is_unlimited(limit) else max(1, int(limit))
     for source in normalized_sources:
         try:
             if source == "2gis":
@@ -241,7 +256,9 @@ def collect_leads(
         identity = business_identity_key(lead)
         if identity.strip("|"):
             unique[identity] = lead
-    result = list(unique.values())[: max(1, limit * len(normalized_sources))]
+    result = list(unique.values())
+    if not _is_unlimited(limit):
+        result = result[: max(1, int(limit) * len(normalized_sources))]
     if not result and errors:
         raise RuntimeError("; ".join(errors))
     if on_status and errors:
@@ -275,7 +292,7 @@ def load_2gis_json(path: Path, city: str, niche: str, limit: int) -> list[dict[s
             "branch_count": _json_branch_count(item),
         }
         leads.append(lead)
-        if len(leads) >= limit:
+        if not _is_unlimited(limit) and len(leads) >= max(1, int(limit)):
             break
     return leads
 

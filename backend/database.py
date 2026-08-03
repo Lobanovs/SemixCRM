@@ -37,7 +37,7 @@ DEFAULT_SETTINGS = {
     "city": "Москва",
     "niches": ["салоны красоты", "стоматологии", "автосервисы"],
     "sources": ["2gis"],
-    "limit": 10,
+    "limit": 0,
     "start_page": 1,
 }
 STATUS_PRIORITY = {"Новый": 0, "Написал": 1, "Ответили": 2, "Созвон": 3, "КП": 4, "Закрыто": 5, "Отказ": 1}
@@ -1390,7 +1390,7 @@ def save_parser_settings(city: str, niches: list[str], sources: list[str], limit
     with _connect() as connection:
         connection.execute(
             "UPDATE parser_settings SET city = ?, niches_json = ?, sources_json = ?, limit_count = ?, start_page = ?, updated_at = ? WHERE id = 1",
-            (city.strip(), json.dumps(cleaned_niches, ensure_ascii=False), json.dumps(cleaned_sources, ensure_ascii=False), max(1, min(limit, 50)), max(1, min(int(start_page), 999)), now),
+            (city.strip(), json.dumps(cleaned_niches, ensure_ascii=False), json.dumps(cleaned_sources, ensure_ascii=False), max(0, int(limit)), max(1, min(int(start_page), 999)), now),
         )
     return get_parser_settings()
 
