@@ -154,29 +154,35 @@ def collect_2gis(
     environment = os.environ.copy()
     environment.update({"PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"})
     timeout = None if _is_unlimited(limit) else max(180, 20 + max(1, int(limit)) * 12)
+    leads: list[dict[str, Any]] = []
     try:
-        try:
-            completed = _run_parser_process(cmd, environment, timeout)
-        except subprocess.TimeoutExpired as error:
-            raise RuntimeError(f"Парсер 2GIS превысил лимит {timeout} секунд") from error
-        output = completed.stdout or ""
-        if on_status and output:
-            lines = [line.strip() for line in output.splitlines() if line.strip()]
-            if lines:
-                on_status(lines[-1][:180])
-        if completed.returncode != 0:
-            tail = "\n".join(output.splitlines()[-8:])
-            raise RuntimeError(f"parser-2gis завершился с кодом {completed.returncode}: {tail}")
-        if not output_path.exists() or output_path.stat().st_size <= 4:
-            raise RuntimeError("parser-2gis завершился без результатов. Возможно, 2GIS показал CAPTCHA.")
-        leads = load_2gis_json(output_path, city, niche, limit)
+        for attempt in range(2):
+            output_path.unlink(missing_ok=True)
+            try:
+                completed = _run_parser_process(cmd, environment, timeout)
+            except subprocess.TimeoutExpired as error:
+                raise RuntimeError(f"Парсер 2GIS превысил лимит {timeout} секунд") from error
+            output = completed.stdout or ""
+            if on_status and output:
+                lines = [line.strip() for line in output.splitlines() if line.strip()]
+                if lines:
+                    on_status(lines[-1][:180])
+            if completed.returncode != 0:
+                tail = "\n".join(output.splitlines()[-8:])
+                raise RuntimeError(f"parser-2gis завершился с кодом {completed.returncode}: {tail}")
+            if output_path.exists() and output_path.stat().st_size > 4:
+                leads = load_2gis_json(output_path, city, niche, limit)
+            if leads:
+                break
+            if attempt == 0 and on_status:
+                on_status("2GIS не отдал карточки с первого раза — повторяю запуск")
     finally:
         # Промежуточный дамп содержит телефоны и адреса и больше не нужен:
         # данные уже в SQLite, где работают архив и удаление.
         if os.getenv("PARSER2GIS_KEEP_OUTPUT", "").strip().lower() not in {"1", "yes", "true"}:
             output_path.unlink(missing_ok=True)
     if not leads:
-        raise RuntimeError("parser-2gis не вернул карточки. Оставьте PARSER2GIS_HEADLESS=no и повторите запуск.")
+        raise RuntimeError("parser-2gis не вернул карточки после двух попыток. Оставьте PARSER2GIS_HEADLESS=no и повторите запуск.")
     return leads
 
 

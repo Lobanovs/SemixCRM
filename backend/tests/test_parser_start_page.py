@@ -157,6 +157,35 @@ class ParserStartPageTests(unittest.TestCase):
         max_records = int(command[command.index("--parser.max-records") + 1])
         self.assertEqual(275, max_records)
 
+    def test_collect_2gis_retries_once_when_first_attempt_is_empty(self) -> None:
+        attempts = 0
+        statuses: list[str] = []
+
+        def fake_run(command: list[str], *_: object) -> subprocess.CompletedProcess[str]:
+            nonlocal attempts
+            attempts += 1
+            output_path = Path(command[command.index("-o") + 1])
+            payload = [] if attempts == 1 else [{"name": "Клиника после повтора"}]
+            output_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0, stdout="Готово")
+
+        with (
+            patch.object(parser, "OUTPUT_DIR", Path(self.temp_dir.name)),
+            patch.object(parser, "ensure_parser2gis_command", return_value=["parser-2gis"]),
+            patch.object(parser, "resolve_parser2gis_city_code", return_value="novosibirsk"),
+            patch.object(parser, "_run_parser_process", side_effect=fake_run),
+        ):
+            leads = parser.collect_2gis(
+                "Новосибирск",
+                "стоматологии",
+                0,
+                on_status=statuses.append,
+            )
+
+        self.assertEqual(2, attempts)
+        self.assertEqual(["Клиника после повтора"], [lead["name"] for lead in leads])
+        self.assertTrue(any("повтор" in status.lower() for status in statuses))
+
     def test_collect_leads_does_not_slice_unlimited_results(self) -> None:
         cards = [
             {"source": "2GIS", "city": "Новосибирск", "name": f"Клиника {index}"}
