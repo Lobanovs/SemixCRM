@@ -62,6 +62,15 @@ function initialObjective(goals: Goal[]) {
   return goals.filter((goal) => !goal.done).map((goal) => goal.title.trim()).filter(Boolean).join('; ')
 }
 
+function taskWord(count: number) {
+  const lastTwo = count % 100
+  const last = count % 10
+  if (lastTwo >= 11 && lastTwo <= 14) return 'задач'
+  if (last === 1) return 'задачу'
+  if (last >= 2 && last <= 4) return 'задачи'
+  return 'задач'
+}
+
 export default function AiWeekPlannerModal({ weekStart, weekEnd, goals, onClose, onApplied }: Props) {
   const [objective, setObjective] = useState(() => initialObjective(goals))
   const [intensity, setIntensity] = useState<Intensity>('balanced')
@@ -212,7 +221,7 @@ export default function AiWeekPlannerModal({ weekStart, weekEnd, goals, onClose,
               <span><strong>Планировать задачи на выходные</strong><small>По умолчанию суббота и воскресенье остаются свободными.</small></span>
             </label>
 
-            {error && <div className="ai-week-planner-error" role="alert">{error}</div>}
+            {error && <div className="ai-week-planner-error" role="alert"><strong>Не удалось получить план</strong><span>{error}</span><small>Проверьте подключение в «Настройках» или повторите генерацию.</small></div>}
             {busy === 'generate' && <p className="ai-week-planner-status" role="status"><LoaderCircle className="spin" size={17} />ИИ анализирует цели и свободные дни…</p>}
 
             <footer className="ai-week-planner-footer">
@@ -255,13 +264,13 @@ export default function AiWeekPlannerModal({ weekStart, weekEnd, goals, onClose,
               ))}
             </div>
 
-            {error && <div className="ai-week-planner-error" role="alert">{error}</div>}
-            {busy === 'apply' && <p className="ai-week-planner-status" role="status"><LoaderCircle className="spin" size={17} />Добавляем выбранные задачи…</p>}
+            {error && <div className="ai-week-planner-error" role="alert"><strong>Не удалось выполнить действие</strong><span>{error}</span><small>Черновик сохранён в окне — можно повторить без новой генерации.</small></div>}
+            {busy && <p className="ai-week-planner-status" role="status"><LoaderCircle className="spin" size={17} />{busy === 'apply' ? 'Добавляем выбранные задачи…' : 'ИИ пересобирает черновик…'}</p>}
 
             <footer className="ai-week-planner-footer ai-week-planner-preview-footer">
               <button className="ai-week-planner-secondary" type="button" onClick={() => { setPlan(null); setError('') }} disabled={Boolean(busy)}><ArrowLeft size={17} />Назад к цели</button>
-              <button className="ai-week-planner-secondary" type="button" onClick={() => void generate()} disabled={Boolean(busy)}><RefreshCw size={17} />Составить заново</button>
-              <button className="solid-action" type="button" onClick={() => void apply()} disabled={selectedTasks.length === 0 || Boolean(busy)}><Check size={18} />{busy === 'apply' ? 'Добавляем…' : `Добавить ${selectedTasks.length} ${selectedTasks.length === 1 ? 'задачу' : 'задач'}`}</button>
+              <button className="ai-week-planner-secondary" type="button" onClick={() => void generate()} disabled={Boolean(busy)}><RefreshCw size={17} />{busy === 'generate' ? 'Составляем…' : 'Составить заново'}</button>
+              <button className="solid-action" type="button" onClick={() => void apply()} disabled={selectedTasks.length === 0 || Boolean(busy)}><Check size={18} />{busy === 'apply' ? 'Добавляем…' : `Добавить ${selectedTasks.length} ${taskWord(selectedTasks.length)}`}</button>
             </footer>
           </div>
         )}

@@ -72,4 +72,13 @@ describe('инструкции разделов', () => {
       expect(new Set(selectors).size, `повторяющийся селектор в разделе ${section}`).toBe(selectors.length)
     }
   })
+
+  it('объясняет безопасный сценарий ИИ-планирования недели', () => {
+    const step = SCHEDULE_GUIDE.find((item) => item.selector === '[data-guide="schedule-ai-plan"]')
+
+    expect(step).toBeDefined()
+    expect(step?.body).toMatch(/черновик/i)
+    expect(step?.body).toMatch(/выбрать/i)
+    expect(step?.body).toMatch(/подтвержден/i)
+  })
 })

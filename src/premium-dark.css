@@ -548,6 +548,121 @@
   box-shadow: 0 12px 30px rgba(36, 105, 218, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.24);
 }
 
+/* AI week planner */
+.theme-dark[data-theme='premium-dark'] .ai-schedule-action {
+  border-color: rgba(117, 167, 255, 0.3);
+  color: var(--premium-accent-bright);
+  background: linear-gradient(180deg, rgba(76, 141, 255, 0.14), rgba(76, 141, 255, 0.08));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 8px 22px rgba(0, 0, 0, 0.13);
+}
+
+.theme-dark[data-theme='premium-dark'] .ai-schedule-action:hover {
+  border-color: rgba(117, 167, 255, 0.46);
+  background: rgba(76, 141, 255, 0.17);
+}
+
+.theme-dark[data-theme='premium-dark'] .ai-week-planner-modal {
+  --ai-surface: var(--premium-surface);
+  --ai-surface-soft: var(--premium-surface-raised);
+  --ai-surface-accent: var(--premium-accent-soft);
+  --ai-border: var(--premium-border);
+  --ai-border-strong: var(--premium-border-strong);
+  --ai-text: var(--premium-text);
+  --ai-text-soft: var(--premium-text-soft);
+  --ai-text-muted: var(--premium-text-muted);
+  --ai-accent: var(--premium-accent-bright);
+  border-color: var(--premium-border-strong);
+  background: var(--premium-surface);
+  box-shadow: 0 32px 100px rgba(0, 0, 0, 0.62), inset 0 1px 0 rgba(255, 255, 255, 0.025);
+}
+
+.theme-dark[data-theme='premium-dark'] .ai-week-planner-header {
+  background: linear-gradient(180deg, #11161e, var(--premium-surface));
+}
+
+.theme-dark[data-theme='premium-dark'] .ai-week-planner-icon {
+  border-color: rgba(117, 167, 255, 0.26);
+  background: var(--premium-accent-soft);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.theme-dark[data-theme='premium-dark'] .ai-week-planner-close:hover:not(:disabled),
+.theme-dark[data-theme='premium-dark'] .ai-week-planner-secondary:hover:not(:disabled),
+.theme-dark[data-theme='premium-dark'] .ai-week-plan-toolbar button:hover:not(:disabled) {
+  border-color: var(--premium-border-strong);
+  color: var(--premium-text);
+  background: var(--premium-surface-hover);
+}
+
+.theme-dark[data-theme='premium-dark'] .ai-week-planner-intro {
+  border-color: rgba(117, 167, 255, 0.2);
+  color: #c9dcff;
+  background: rgba(76, 141, 255, 0.09);
+}
+
+.theme-dark[data-theme='premium-dark'] .ai-week-planner-field textarea,
+.theme-dark[data-theme='premium-dark'] .ai-week-planner-intensity > label,
+.theme-dark[data-theme='premium-dark'] .ai-week-planner-weekend,
+.theme-dark[data-theme='premium-dark'] .ai-week-planner-secondary,
+.theme-dark[data-theme='premium-dark'] .ai-week-plan-day,
+.theme-dark[data-theme='premium-dark'] .ai-week-plan-task {
+  border-color: var(--premium-border);
+  color: var(--premium-text);
+  background: var(--premium-surface-raised);
+}
+
+.theme-dark[data-theme='premium-dark'] .ai-week-planner-field textarea:hover,
+.theme-dark[data-theme='premium-dark'] .ai-week-planner-intensity > label:hover {
+  border-color: var(--premium-border-strong);
+}
+
+.theme-dark[data-theme='premium-dark'] .ai-week-planner-intensity > label.selected,
+.theme-dark[data-theme='premium-dark'] .ai-week-plan-task.selected {
+  border-color: rgba(117, 167, 255, 0.38);
+  background: rgba(76, 141, 255, 0.09);
+  box-shadow: inset 3px 0 0 rgba(117, 167, 255, 0.62);
+}
+
+.theme-dark[data-theme='premium-dark'] .ai-week-plan-summary {
+  border-color: rgba(117, 167, 255, 0.22);
+  background: radial-gradient(circle at 100% 0%, rgba(76, 141, 255, 0.13), transparent 48%), var(--premium-surface-raised);
+}
+
+.theme-dark[data-theme='premium-dark'] .ai-week-plan-day > header {
+  border-color: var(--premium-border);
+  background: #10141b;
+}
+
+.theme-dark[data-theme='premium-dark'] .ai-week-plan-day > header span {
+  color: var(--premium-text-soft);
+  background: #202733;
+}
+
+.theme-dark[data-theme='premium-dark'] .ai-week-plan-task:hover {
+  background: var(--premium-surface-hover);
+}
+
+.theme-dark[data-theme='premium-dark'] .ai-week-plan-check {
+  border-color: #49566a;
+  background: #0a0d12;
+}
+
+.theme-dark[data-theme='premium-dark'] .ai-week-plan-task.selected .ai-week-plan-check {
+  border-color: var(--premium-accent);
+  background: var(--premium-accent);
+}
+
+.theme-dark[data-theme='premium-dark'] .ai-week-planner-footer {
+  border-color: var(--premium-border);
+  background: rgba(13, 16, 21, 0.94);
+}
+
+.theme-dark[data-theme='premium-dark'] .ai-week-planner-error {
+  border-color: rgba(255, 135, 147, 0.3);
+  color: #ffadb5;
+  background: rgba(255, 81, 99, 0.09);
+}
+
 /* Dashboard */
 .theme-dark[data-theme='premium-dark'] .quick-card {
   background:

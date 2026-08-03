@@ -1,0 +1,448 @@
+.schedule-control-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-schedule-action {
+  display: inline-flex;
+  min-height: 35px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 15px;
+  border: 1px solid #bcd3f4;
+  border-radius: 7px;
+  color: #0c5dce;
+  background: linear-gradient(180deg, #f8fbff, #edf5ff);
+  box-shadow: 0 3px 10px rgba(18, 100, 232, 0.07);
+  font-size: 12px;
+  font-weight: 700;
+  transition: border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+}
+
+.ai-schedule-action:hover {
+  border-color: #87b3ed;
+  background: #e6f1ff;
+  box-shadow: 0 5px 16px rgba(18, 100, 232, 0.13);
+}
+
+.ai-schedule-action:focus-visible,
+.ai-week-planner-modal button:focus-visible,
+.ai-week-planner-modal textarea:focus-visible,
+.ai-week-planner-modal input:focus-visible {
+  outline: 3px solid rgba(18, 100, 232, 0.22);
+  outline-offset: 2px;
+}
+
+.ai-week-planner-backdrop {
+  z-index: 70;
+  background: rgba(11, 18, 29, 0.52);
+  backdrop-filter: blur(6px);
+}
+
+.ai-week-planner-modal {
+  --ai-surface: #fff;
+  --ai-surface-soft: #f7f9fc;
+  --ai-surface-accent: #f1f6ff;
+  --ai-border: #dfe5ed;
+  --ai-border-strong: #cbd7e7;
+  --ai-text: #172033;
+  --ai-text-soft: #526078;
+  --ai-text-muted: #78869b;
+  --ai-accent: #1264e8;
+  position: relative;
+  display: flex;
+  width: min(900px, 100%);
+  max-height: min(820px, calc(100dvh - 40px));
+  min-height: 540px;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--ai-border);
+  border-radius: 16px;
+  color: var(--ai-text);
+  background: var(--ai-surface);
+  box-shadow: 0 28px 90px rgba(15, 29, 50, 0.26);
+  animation: ai-week-planner-enter 200ms ease-out both;
+}
+
+@keyframes ai-week-planner-enter {
+  from { opacity: 0; transform: translateY(8px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.ai-week-planner-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 20px 22px 18px;
+  border-bottom: 1px solid var(--ai-border);
+  background: var(--ai-surface);
+}
+
+.ai-week-planner-heading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 13px;
+}
+
+.ai-week-planner-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  place-items: center;
+  border: 1px solid #c7dbf8;
+  border-radius: 11px;
+  color: var(--ai-accent);
+  background: var(--ai-surface-accent);
+}
+
+.ai-week-planner-eyebrow {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--ai-accent);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ai-week-planner-heading h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+}
+
+.ai-week-planner-heading p {
+  margin: 4px 0 0;
+  color: var(--ai-text-muted);
+  font-size: 12px;
+}
+
+.ai-week-planner-close {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: var(--ai-text-muted);
+  background: transparent;
+  transition: border-color 180ms ease, color 180ms ease, background-color 180ms ease;
+}
+
+.ai-week-planner-close:hover:not(:disabled) {
+  border-color: var(--ai-border);
+  color: var(--ai-text);
+  background: var(--ai-surface-soft);
+}
+
+.ai-week-planner-close:disabled,
+.ai-week-planner-modal button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.ai-week-planner-brief,
+.ai-week-planner-preview {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.ai-week-planner-brief {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px 22px 0;
+}
+
+.ai-week-planner-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 13px 14px;
+  border: 1px solid #d4e2f7;
+  border-radius: 10px;
+  color: #214c85;
+  background: var(--ai-surface-accent);
+}
+
+.ai-week-planner-intro > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--ai-accent);
+}
+
+.ai-week-planner-intro strong,
+.ai-week-planner-intro p {
+  display: block;
+  margin: 0;
+}
+
+.ai-week-planner-intro strong { font-size: 12px; }
+.ai-week-planner-intro p { margin-top: 3px; font-size: 11px; line-height: 1.5; }
+
+.ai-week-planner-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.ai-week-planner-field label,
+.ai-week-planner-intensity legend {
+  color: var(--ai-text);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.ai-week-planner-field textarea {
+  width: 100%;
+  min-height: 112px;
+  resize: vertical;
+  padding: 13px 14px;
+  border: 1px solid var(--ai-border-strong);
+  border-radius: 10px;
+  outline: 0;
+  color: var(--ai-text);
+  background: var(--ai-surface);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.55;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.ai-week-planner-field textarea:hover { border-color: #aebed3; }
+.ai-week-planner-field textarea:focus { border-color: #7eace9; box-shadow: 0 0 0 3px rgba(18, 100, 232, 0.09); }
+.ai-week-planner-field textarea::placeholder { color: #94a0b1; }
+.ai-week-planner-field small { color: var(--ai-text-muted); font-size: 10px; line-height: 1.45; }
+
+.ai-week-planner-intensity {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 0;
+  padding: 22px 0 0;
+  border: 0;
+}
+
+.ai-week-planner-intensity legend {
+  position: absolute;
+  transform: translateY(-22px);
+}
+
+.ai-week-planner-intensity > label {
+  position: relative;
+  display: flex;
+  min-height: 62px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--ai-border);
+  border-radius: 10px;
+  background: var(--ai-surface);
+  cursor: pointer;
+  transition: border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+}
+
+.ai-week-planner-intensity > label:hover { border-color: #a9bdda; background: var(--ai-surface-soft); }
+.ai-week-planner-intensity > label.selected { border-color: #8eb5ed; background: var(--ai-surface-accent); box-shadow: inset 0 0 0 1px rgba(18, 100, 232, 0.06); }
+.ai-week-planner-intensity input { position: absolute; opacity: 0; }
+.ai-week-planner-intensity label:focus-within { outline: 3px solid rgba(18, 100, 232, 0.22); outline-offset: 2px; }
+.ai-week-planner-intensity label > span { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 2px; }
+.ai-week-planner-intensity strong { font-size: 11px; }
+.ai-week-planner-intensity small { color: var(--ai-text-muted); font-size: 10px; }
+.ai-week-planner-intensity label > svg { flex: 0 0 auto; color: var(--ai-accent); }
+
+.ai-week-planner-weekend {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 12px;
+  border: 1px solid var(--ai-border);
+  border-radius: 10px;
+  background: var(--ai-surface-soft);
+  cursor: pointer;
+}
+
+.ai-week-planner-weekend input { width: 17px; height: 17px; flex: 0 0 auto; accent-color: var(--ai-accent); }
+.ai-week-planner-weekend > span { display: flex; flex-direction: column; gap: 2px; }
+.ai-week-planner-weekend strong { font-size: 11px; }
+.ai-week-planner-weekend small { color: var(--ai-text-muted); font-size: 10px; line-height: 1.4; }
+
+.ai-week-planner-error {
+  display: grid;
+  gap: 2px;
+  padding: 11px 13px;
+  border: 1px solid #efc2c9;
+  border-radius: 9px;
+  color: #9d3444;
+  background: #fff6f7;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.ai-week-planner-error strong { font-size: 11px; }
+.ai-week-planner-error span { font-weight: 600; }
+.ai-week-planner-error small { color: inherit; font-size: 10px; font-weight: 500; opacity: 0.86; }
+
+.ai-week-planner-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--ai-accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ai-week-planner-status .spin { animation: ai-week-planner-spin 850ms linear infinite; }
+@keyframes ai-week-planner-spin { to { transform: rotate(360deg); } }
+
+.ai-week-planner-footer {
+  position: sticky;
+  z-index: 2;
+  bottom: 0;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: auto -22px 0;
+  padding: 14px 22px;
+  border-top: 1px solid var(--ai-border);
+  background: color-mix(in srgb, var(--ai-surface) 96%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.ai-week-planner-footer .solid-action,
+.ai-week-planner-secondary {
+  min-height: 40px;
+}
+
+.ai-week-planner-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 13px;
+  border: 1px solid var(--ai-border-strong);
+  border-radius: 8px;
+  color: var(--ai-text-soft);
+  background: var(--ai-surface);
+  font-size: 11px;
+  font-weight: 700;
+  transition: border-color 180ms ease, color 180ms ease, background-color 180ms ease;
+}
+
+.ai-week-planner-secondary:hover:not(:disabled) { border-color: #a8bad2; color: var(--ai-text); background: var(--ai-surface-soft); }
+
+.ai-week-planner-preview {
+  padding: 18px 22px 0;
+}
+
+.ai-week-plan-summary {
+  padding: 16px 17px;
+  border: 1px solid #cfddf2;
+  border-radius: 11px;
+  background: linear-gradient(135deg, var(--ai-surface-accent), #fbfdff);
+}
+
+.ai-week-plan-summary > span { color: var(--ai-accent); font-size: 9px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+.ai-week-plan-summary h3 { margin: 5px 0 6px; font-size: 16px; letter-spacing: -0.02em; }
+.ai-week-plan-summary p { max-width: 72ch; margin: 0; color: var(--ai-text-soft); font-size: 11px; line-height: 1.55; }
+
+.ai-week-plan-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 1px 10px;
+  color: var(--ai-text-soft);
+  font-size: 11px;
+}
+
+.ai-week-plan-toolbar strong { color: var(--ai-text); }
+.ai-week-plan-toolbar button { min-height: 32px; padding: 0 10px; border: 0; border-radius: 7px; color: var(--ai-accent); background: var(--ai-surface-accent); font-size: 10px; font-weight: 750; }
+.ai-week-plan-toolbar button:hover:not(:disabled) { background: #e5efff; }
+
+.ai-week-plan-days { display: grid; gap: 10px; padding-bottom: 14px; }
+.ai-week-plan-day { overflow: hidden; border: 1px solid var(--ai-border); border-radius: 11px; background: var(--ai-surface); }
+.ai-week-plan-day > header { display: flex; min-height: 38px; align-items: center; justify-content: space-between; gap: 12px; padding: 0 13px; border-bottom: 1px solid var(--ai-border); background: var(--ai-surface-soft); }
+.ai-week-plan-day > header strong { font-size: 11px; }
+.ai-week-plan-day > header span { display: grid; min-width: 22px; height: 22px; place-items: center; border-radius: 11px; color: var(--ai-text-muted); background: #e9eef5; font-size: 9px; font-weight: 750; }
+.ai-week-plan-day > div { display: grid; }
+
+.ai-week-plan-task {
+  position: relative;
+  display: grid;
+  min-height: 62px;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 11px 13px;
+  border-bottom: 1px solid var(--ai-border);
+  background: var(--ai-surface);
+  cursor: pointer;
+  transition: background-color 180ms ease;
+}
+
+.ai-week-plan-task:last-child { border-bottom: 0; }
+.ai-week-plan-task:hover { background: var(--ai-surface-soft); }
+.ai-week-plan-task.selected { background: #fbfdff; }
+.ai-week-plan-task input { position: absolute; opacity: 0; }
+.ai-week-plan-task:focus-within { outline: 3px solid rgba(18, 100, 232, 0.22); outline-offset: -3px; }
+
+.ai-week-plan-check {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border: 1px solid #bdc9d8;
+  border-radius: 6px;
+  color: #fff;
+  background: var(--ai-surface);
+}
+
+.ai-week-plan-task.selected .ai-week-plan-check { border-color: var(--ai-accent); background: var(--ai-accent); }
+.ai-week-plan-task-copy { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.ai-week-plan-task-copy > span { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: 12px; }
+.ai-week-plan-task-copy strong { overflow-wrap: anywhere; font-size: 11px; line-height: 1.4; }
+.ai-week-plan-task-copy time { flex: 0 0 auto; color: var(--ai-accent); font-size: 10px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.ai-week-plan-task-copy small { color: var(--ai-text-muted); font-size: 10px; line-height: 1.45; }
+
+.ai-week-planner-preview-footer { margin-right: -22px; margin-left: -22px; }
+
+@media (max-width: 900px) {
+  .schedule-control-actions { width: 100%; }
+  .schedule-control-actions > button { flex: 1; }
+  .ai-week-planner-modal { max-height: calc(100dvh - 24px); min-height: min(620px, calc(100dvh - 24px)); }
+}
+
+@media (max-width: 640px) {
+  .ai-week-planner-backdrop { padding: 8px; }
+  .ai-week-planner-modal { max-height: calc(100dvh - 16px); min-height: calc(100dvh - 16px); border-radius: 13px; }
+  .ai-week-planner-header,
+  .ai-week-planner-brief { padding-right: 16px; padding-left: 16px; }
+  .ai-week-planner-preview { padding-right: 16px; padding-left: 16px; }
+  .ai-week-planner-intensity { grid-template-columns: 1fr; }
+  .ai-week-planner-intensity legend { position: static; transform: none; }
+  .ai-week-planner-intensity { padding-top: 0; }
+  .ai-week-planner-footer { align-items: stretch; flex-direction: column-reverse; margin-right: -16px; margin-left: -16px; padding-right: 16px; padding-left: 16px; }
+  .ai-week-planner-preview-footer { flex-direction: column; }
+  .ai-week-planner-footer button { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-week-planner-modal { animation: none; }
+  .ai-week-planner-status .spin { animation-duration: 1.8s; }
+}

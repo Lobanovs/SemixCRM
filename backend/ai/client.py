@@ -130,6 +130,12 @@ class AiClient:
             payload["chat_template_kwargs"] = {"enable_thinking": False}
         try:
             response = self._post(payload)
+            if response.status_code >= 500:
+                logger.warning(
+                    "OpenCode Go вернул временную ошибку %s, повторяю запрос один раз",
+                    response.status_code,
+                )
+                response = self._post(payload)
         except httpx.HTTPError as error:
             raise AiError(f"Модель недоступна: {error}") from error
         if response.status_code == 401:

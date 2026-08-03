@@ -912,6 +912,16 @@ class ApiErrorTests(unittest.TestCase):
         with self.assertRaises(AiError):
             AiClient(AiSettings(api_key="k"), transport=transport).complete("s", "u")
 
+    def test_transient_server_error_is_retried_once(self) -> None:
+        transport = RecordingTransport(
+            response_with("temporary failure", status=500),
+            completion_response("Готово"),
+        )
+        client = AiClient(AiSettings(api_key="k"), transport=transport)
+
+        self.assertEqual("Готово", client.complete("s", "u"))
+        self.assertEqual(2, len(transport.calls))
+
 
 if __name__ == "__main__":
     unittest.main()
