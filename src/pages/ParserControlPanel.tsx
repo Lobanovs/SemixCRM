@@ -235,7 +235,10 @@ export default function ParserControlPanel({
             onClick={useFiniteScope}
           >
             <Hash size={17} />
-            <span><strong>Указать лимит</strong><small>Любое количество</small></span>
+            <span>
+              <strong>Указать лимит</strong>
+              <small>{settings.sources.includes('2gis') ? 'Любое количество для 2GIS' : 'До 50 в Яндекс Картах'}</small>
+            </span>
             {settings.limit > 0 && <Check size={15} />}
           </button>
         </div>
@@ -257,7 +260,11 @@ export default function ParserControlPanel({
             ? settings.sources.includes('yandex')
               ? '2GIS будет собран до последней страницы. Яндекс Карты — до 50 компаний на нишу.'
               : 'Парсер пройдёт 2GIS от стартовой до последней страницы и соберёт всю доступную выдачу.'
-            : `Парсер остановится после ${settings.limit} компаний для каждой выбранной ниши и источника.`}
+            : settings.sources.includes('yandex')
+              ? settings.sources.includes('2gis')
+                ? `2GIS остановится после ${settings.limit} компаний. Яндекс Карты — до ${Math.min(settings.limit, 50)} компаний на нишу.`
+                : `Яндекс Карты соберут до ${Math.min(settings.limit, 50)} компаний на нишу.`
+              : `2GIS остановится после ${settings.limit} компаний для каждой выбранной ниши.`}
         </p>
       </div>
     </fieldset>

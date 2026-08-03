@@ -127,6 +127,21 @@ describe('client parser controls', () => {
     })
   })
 
+  it('explains the Yandex ceiling without presenting it as a 2GIS limit', async () => {
+    const user = userEvent.setup()
+    render(<ClientsPage />)
+
+    const yandexButton = await screen.findByRole('button', { name: 'Яндекс Карты' })
+    await waitFor(() => expect(yandexButton).toBeEnabled())
+    await user.click(yandexButton)
+
+    const limitInput = screen.getByRole('spinbutton', { name: 'Компаний на нишу и источник' })
+    await user.clear(limitInput)
+    await user.type(limitInput, '275')
+
+    expect(screen.getByText('2GIS остановится после 275 компаний. Яндекс Карты — до 50 компаний на нишу.')).toBeVisible()
+  })
+
   it('saves current settings before starting the parser', async () => {
     const user = userEvent.setup()
     const baseFetch = createFetchMock()
