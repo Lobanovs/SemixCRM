@@ -21,18 +21,18 @@ function jsonResponse(payload: unknown, status = 200) {
   })
 }
 
-function createFetchMock() {
+function createFetchMock(clients: Array<Record<string, unknown>> = []) {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     const method = init?.method || 'GET'
 
     if (method === 'GET' && url.endsWith('/api/clients')) {
       return jsonResponse({
-        clients: [],
+        clients,
         stats: {
-          total: 0, contacted: 0, replied: 0, calls: 0, closed: 0,
+          total: clients.length, contacted: 0, replied: 0, calls: 0, closed: 0,
           found_today: 0, new_today: 0,
-          stages: { Новый: 0, Написал: 0, Ответили: 0, Созвон: 0, КП: 0, Закрыто: 0, Отказ: 0 },
+          stages: { Новый: clients.length, Написал: 0, Ответили: 0, Созвон: 0, КП: 0, Закрыто: 0, Отказ: 0 },
         },
       })
     }
@@ -213,5 +213,64 @@ describe('client parser controls', () => {
     expect(screen.getByText('Нужно обновить')).toBeVisible()
     expect(screen.getByText('Текст не создан')).toBeVisible()
     expect(screen.getAllByRole('button', { name: /^Посмотреть текст для / })).toHaveLength(3)
+  })
+
+  it('оставляет только клиентов с нужными очками и обязательными каналами связи', async () => {
+    const user = userEvent.setup()
+    const clients = [
+      {
+        id: 1,
+        name: 'Лид с Telegram',
+        category: 'Стоматология',
+        status: 'Новый',
+        lead_score: 19,
+        contacts: [
+          { type: 'telegram', label: 'Telegram', value: '@lead' },
+          { type: 'whatsapp', label: 'WhatsApp', value: '+79990000001' },
+        ],
+      },
+      {
+        id: 2,
+        name: 'Лид только с телефоном',
+        category: 'Стоматология',
+        status: 'Новый',
+        lead_score: 16,
+        phone: '+79990000002',
+        contacts: [{ type: 'phone', label: 'Телефон', value: '+79990000002' }],
+      },
+      {
+        id: 3,
+        name: 'Слабый лид с Telegram',
+        category: 'Стоматология',
+        status: 'Новый',
+        lead_score: 9,
+        contacts: [{ type: 'telegram', label: 'Telegram', value: '@weak' }],
+      },
+    ]
+    const fetchMock = createFetchMock(clients)
+    vi.stubGlobal('fetch', fetchMock)
+    render(<ClientsPage />)
+
+    await user.click(await screen.findByRole('button', { name: /Кто остаётся/ }))
+    await user.click(screen.getByRole('button', { name: '15+ очков' }))
+
+    expect(screen.getByText('Осталось 2 из 3')).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Лид с Telegram' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Лид только с телефоном' })).toBeVisible()
+    expect(screen.queryByRole('heading', { name: 'Слабый лид с Telegram' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('checkbox', { name: 'Telegram' }))
+    await user.click(screen.getByRole('checkbox', { name: 'WhatsApp' }))
+
+    expect(screen.getByText('Осталось 1 из 3')).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Лид с Telegram' })).toBeVisible()
+    expect(screen.queryByRole('heading', { name: 'Лид только с телефоном' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Сбросить фильтр' }))
+
+    expect(screen.getByRole('heading', { name: 'Лид с Telegram' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Лид только с телефоном' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Слабый лид с Telegram' })).toBeVisible()
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false)
   })
 })

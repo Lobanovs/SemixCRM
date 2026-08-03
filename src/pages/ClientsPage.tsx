@@ -11,6 +11,7 @@ import {
   Coffee,
   ExternalLink,
   Globe2,
+  ListFilter,
   Mail,
   MapPin,
   MessageCircle,
@@ -35,6 +36,13 @@ import type { UiAccent } from '../components/DashboardUi'
 import PageGuide from '../components/PageGuide'
 import { CLIENTS_GUIDE } from '../guides'
 import ClientMessageModal from './ClientMessageModal'
+import ClientRetentionFilters from './ClientRetentionFilters'
+import {
+  DEFAULT_CLIENT_RETENTION_FILTERS,
+  countActiveClientFilters,
+  matchesClientRetentionFilters,
+} from './clientFilters'
+import type { ClientRetentionFilterState } from './clientFilters'
 import { apiRequest } from '../api'
 import type { LucideIcon } from 'lucide-react'
 import ParserControlPanel from './ParserControlPanel'
@@ -229,6 +237,11 @@ export default function ClientsPage() {
   const [messageClient, setMessageClient] = useState<Client | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<{ kind: 'one'; client: Client } | { kind: 'all' } | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [showRetentionFilters, setShowRetentionFilters] = useState(false)
+  const [retentionFilters, setRetentionFilters] = useState<ClientRetentionFilterState>({
+    ...DEFAULT_CLIENT_RETENTION_FILTERS,
+    requiredContacts: [],
+  })
 
   const refreshBackend = async () => {
     const [clientsResponse, settingsResponse, runsResponse] = await Promise.all([
@@ -284,13 +297,15 @@ export default function ClientsPage() {
       const haystack = `${client.name} ${client.category} ${client.location} ${client.address} ${client.source} ${contacts} ${client.tags.join(' ')}`.toLocaleLowerCase('ru')
       return (!normalized || haystack.includes(normalized)) && (status === 'Все' || client.status === status)
         && (source === 'Все' || client.source === source) && (niche === 'Все' || client.category === niche)
+        && matchesClientRetentionFilters(client, retentionFilters)
     })
     if (sort === 'Сначала новые') return [...result].sort((a, b) => b.id - a.id)
     if (sort === 'Больше отзывов') return [...result].sort((a, b) => (b.reviews || 0) - (a.reviews || 0))
     return [...result].sort((a, b) => b.score - a.score || b.match - a.match)
-  }, [clients, niche, query, sort, source, status])
+  }, [clients, niche, query, retentionFilters, sort, source, status])
   const sourceOptions = useMemo(() => Array.from(new Set(clients.map((client) => client.source))).sort(), [clients])
   const nicheOptions = useMemo(() => Array.from(new Set(clients.map((client) => client.category))).sort(), [clients])
+  const activeRetentionFilterCount = countActiveClientFilters(retentionFilters)
 
   const derivedStats = useMemo<ApiStats>(() => {
     const stages = Object.fromEntries(stageOrder.map((stage) => [stage, clients.filter((client) => client.status === stage).length])) as Record<ClientStatus, number>
@@ -484,14 +499,34 @@ export default function ClientsPage() {
             <label className="select-control"><span className="sr-only">Источник</span><select value={source} onChange={(event) => setSource(event.target.value)}><option>Все</option>{sourceOptions.map((item) => <option key={item}>{item}</option>)}</select></label>
             <label className="select-control"><span className="sr-only">Ниша</span><select value={niche} onChange={(event) => setNiche(event.target.value)}><option>Все</option>{nicheOptions.map((item) => <option key={item}>{item}</option>)}</select></label>
             <label className="select-control clients-sort"><span className="sr-only">Сортировка</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option>Сначала лучшие лиды</option><option>Больше отзывов</option><option>Сначала новые</option></select></label>
+            <button
+              className={`toolbar-secondary-action retention-filter-trigger ${activeRetentionFilterCount ? 'active' : ''}`}
+              type="button"
+              aria-expanded={showRetentionFilters}
+              aria-controls="client-retention-filter-panel"
+              onClick={() => setShowRetentionFilters((value) => !value)}
+            >
+              <ListFilter size={18} />Кто остаётся
+              {activeRetentionFilterCount > 0 && <span aria-label={`${activeRetentionFilterCount} активных условий`}>{activeRetentionFilterCount}</span>}
+            </button>
             <button className="toolbar-secondary-action" type="button" data-guide="clients-history" onClick={() => setPageView('history')}><CalendarClock size={18} />История</button>
             <button className="toolbar-secondary-action" type="button" data-guide="clients-archive" onClick={() => setPageView('archive')}><Archive size={18} />Скрытые <span>{archivedClients.length}</span></button>
             <button className="solid-action" type="button" onClick={() => setShowModal(true)}><Plus size={18} />Добавить</button>
             <button className="danger-outline-action" type="button" onClick={() => setDeleteTarget({ kind: 'all' })} disabled={!clients.length}><Trash2 size={18} />Очистить</button>
           </div>
 
+          <ClientRetentionFilters
+            filters={retentionFilters}
+            isOpen={showRetentionFilters}
+            totalCount={clients.length}
+            visibleCount={filtered.length}
+            onChange={setRetentionFilters}
+            onClose={() => setShowRetentionFilters(false)}
+            onReset={() => setRetentionFilters({ ...DEFAULT_CLIENT_RETENTION_FILTERS, requiredContacts: [] })}
+          />
+
           <div className="client-list">
-            {filtered.length ? filtered.map((client) => <ClientRow key={client.id} client={client} onStatusChange={updateStatus} onDetails={setSelectedClient} onDelete={(item) => setDeleteTarget({ kind: 'one', client: item })} onWrite={setMessageClient} />) : <EmptyState>Клиентов пока нет. Настройте город и ниши, затем запустите парсер.</EmptyState>}
+            {filtered.length ? filtered.map((client) => <ClientRow key={client.id} client={client} onStatusChange={updateStatus} onDetails={setSelectedClient} onDelete={(item) => setDeleteTarget({ kind: 'one', client: item })} onWrite={setMessageClient} />) : <EmptyState>{clients.length ? 'По выбранным условиям клиентов нет. Ослабьте фильтр «Кто остаётся».' : 'Клиентов пока нет. Настройте город и ниши, затем запустите парсер.'}</EmptyState>}
           </div>
         </section>
 
