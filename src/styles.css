@@ -4545,18 +4545,95 @@ a:focus-visible {
 .parser-control-stepper button:hover { border-color: #79a9e6; background: #eef6ff; }
 .parser-control-stepper button:disabled { cursor: not-allowed; opacity: .45; }
 
-.parser-control-limit {
+.parser-control-scope {
   display: grid;
-  gap: 7px;
+  min-width: 0;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid #d6e1ec;
+  border-radius: 10px;
+  background: #fbfdff;
+}
+
+.parser-control-scope-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   color: #46566f;
   font-size: 11px;
   font-weight: 700;
 }
 
-.parser-control-limit > span { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.parser-control-limit > span strong { color: #1264e8; font-size: 15px; font-variant-numeric: tabular-nums; }
-.parser-control-limit input { width: 100%; accent-color: #1264e8; }
-.parser-control-limit small { display: flex; justify-content: space-between; color: #8a96a8; font-size: 9px; font-weight: 500; }
+.parser-control-scope-heading > span { display: inline-flex; align-items: center; gap: 6px; }
+.parser-control-scope-heading svg { color: #1264e8; }
+.parser-control-scope-heading > strong { color: #1264e8; font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.parser-control-scope-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.parser-control-scope-options button {
+  display: grid;
+  min-width: 0;
+  min-height: 58px;
+  grid-template-columns: 19px minmax(0, 1fr) 15px;
+  align-items: center;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid #d1dce8;
+  border-radius: 8px;
+  color: #637187;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.parser-control-scope-options button > span { display: grid; min-width: 0; gap: 2px; }
+.parser-control-scope-options button strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.parser-control-scope-options button small { overflow: hidden; color: #8491a4; font-size: 8px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.parser-control-scope-options button > svg:last-child { color: #1264e8; }
+.parser-control-scope-options button:hover:not(:disabled) { border-color: #8cb1dd; background: #f4f9ff; }
+.parser-control-scope-options button.active { border-color: #79a9e6; color: #1264e8; background: #eef6ff; box-shadow: inset 0 0 0 1px rgba(18, 100, 232, .05); }
+.parser-control-scope-options button.active small { color: #4977ad; }
+.parser-control-scope-options button:disabled { cursor: not-allowed; opacity: .48; }
+.parser-control-scope-options button:focus-visible,
+.parser-control-limit-input input:focus-visible { outline: 3px solid rgba(18, 100, 232, .2); outline-offset: 1px; }
+
+.parser-control-limit-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px;
+  align-items: center;
+  gap: 10px;
+  color: #59687e;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.parser-control-limit-input input {
+  width: 100%;
+  height: 40px;
+  padding: 0 8px;
+  border: 1px solid #a9c4e3;
+  border-radius: 8px;
+  color: #153f77;
+  background: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.parser-control-scope-hint {
+  margin: 0;
+  color: #718097;
+  font-size: 9px;
+  line-height: 1.45;
+}
 
 .parser-control-feedback {
   margin: 14px 0 0;
@@ -4750,7 +4827,8 @@ a:focus-visible {
 .theme-dark .parser-control-heading p,
 .theme-dark .parser-control-field > span,
 .theme-dark .parser-control-page label,
-.theme-dark .parser-control-limit { color: #b3c0d1; }
+.theme-dark .parser-control-scope-heading,
+.theme-dark .parser-control-limit-input { color: #b3c0d1; }
 .theme-dark .parser-control-icon { color: #9ac4ff; background: #193a63; }
 .theme-dark .parser-control-stats { border-color: #33455b; background: #172333; }
 .theme-dark .parser-control-stats span + span { border-color: #33455b; }
@@ -4760,14 +4838,21 @@ a:focus-visible {
 .theme-dark .parser-control-sources button,
 .theme-dark .parser-control-stepper button,
 .theme-dark .parser-control-stepper input,
+.theme-dark .parser-control-scope-options button,
+.theme-dark .parser-control-limit-input input,
 .theme-dark .parser-niches-search,
 .theme-dark .parser-niches-grid > label,
 .theme-dark .parser-niches-dialog > header button { border-color: #40536a; color: #dce7f4; background: #1a293c; }
 .theme-dark .parser-control-sources button.active,
+.theme-dark .parser-control-scope-options button.active,
 .theme-dark .parser-niches-grid > label.active { border-color: #4e8fe2; color: #9bc4ff; background: #17345e; }
 .theme-dark .parser-control-page { border-color: #36506c; background: #172b42; }
 .theme-dark .parser-control-page p,
-.theme-dark .parser-control-niches p { color: #aab8cb; }
+.theme-dark .parser-control-niches p,
+.theme-dark .parser-control-scope-options button small,
+.theme-dark .parser-control-scope-hint { color: #aab8cb; }
+.theme-dark .parser-control-scope { border-color: #36506c; background: #172333; }
+.theme-dark .parser-control-scope-options button.active small { color: #b9d5fa; }
 .theme-dark .parser-save-action { border-color: #42617f; color: #a8cdff; background: #1a293c; }
 .theme-dark .parser-control-actions { border-color: #33455b; }
 .theme-dark .parser-control-feedback { border-color: #365a84; color: #b5d3f8; background: #172c47; }
@@ -4786,10 +4871,12 @@ a:focus-visible {
   .parser-niches-dialog { width: calc(100vw - 20px); max-height: calc(100vh - 20px); }
   .parser-niches-dialog > header, .parser-niches-body, .parser-niches-dialog > footer { padding-right: 14px; padding-left: 14px; }
   .parser-niches-grid { grid-template-columns: 1fr; }
+  .parser-control-scope-options { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .parser-control-actions button { transition: none; }
+  .parser-control-actions button,
+  .parser-control-scope-options button { transition: none; }
 }
 
 

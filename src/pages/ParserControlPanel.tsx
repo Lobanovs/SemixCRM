@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check,
+  Hash,
+  Infinity as InfinityIcon,
   ListOrdered,
   MapPin,
   Minus,
@@ -52,7 +54,9 @@ export default function ParserControlPanel({
 }: ParserControlPanelProps) {
   const [showNiches, setShowNiches] = useState(false)
   const [startPageInput, setStartPageInput] = useState(String(settings.start_page))
+  const [limitInput, setLimitInput] = useState(String(settings.limit > 0 ? settings.limit : 50))
   const nicheTriggerRef = useRef<HTMLButtonElement>(null)
+  const lastFiniteLimitRef = useRef(settings.limit > 0 ? settings.limit : 50)
   const dirty = !parserSettingsEqual(settings, savedSettings)
   const locked = !isReady || isSaving || isParsing
   const selectedNiches = settings.niches.slice(0, 2)
@@ -64,6 +68,11 @@ export default function ParserControlPanel({
       : ''
 
   useEffect(() => setStartPageInput(String(settings.start_page)), [settings.start_page])
+  useEffect(() => {
+    if (settings.limit <= 0) return
+    lastFiniteLimitRef.current = settings.limit
+    setLimitInput(String(settings.limit))
+  }, [settings.limit])
 
   const update = <Key extends keyof ParserSettings>(key: Key, value: ParserSettings[Key]) => {
     onChange({ ...settings, [key]: value })
@@ -73,7 +82,35 @@ export default function ParserControlPanel({
     const sources = settings.sources.includes(source)
       ? settings.sources.filter((item) => item !== source)
       : [...settings.sources, source]
-    update('sources', sources)
+    const limit = !sources.includes('2gis') && settings.limit === 0
+      ? lastFiniteLimitRef.current
+      : settings.limit
+    onChange({ ...settings, sources, limit })
+  }
+
+  const useUnlimitedScope = () => update('limit', 0)
+
+  const useFiniteScope = () => {
+    const limit = Math.max(1, lastFiniteLimitRef.current)
+    setLimitInput(String(limit))
+    update('limit', limit)
+  }
+
+  const updateFiniteLimit = (value: string) => {
+    setLimitInput(value)
+    if (!/^\d+$/.test(value)) return
+    const limit = Math.max(1, Math.round(Number(value)))
+    if (!Number.isFinite(limit)) return
+    lastFiniteLimitRef.current = limit
+    update('limit', limit)
+  }
+
+  const commitFiniteLimit = () => {
+    const parsed = Number(limitInput)
+    const limit = Number.isFinite(parsed) ? Math.max(1, Math.round(parsed)) : lastFiniteLimitRef.current
+    lastFiniteLimitRef.current = limit
+    setLimitInput(String(limit))
+    if (settings.limit !== limit) update('limit', limit)
   }
 
   const closeNiches = () => {
@@ -172,11 +209,57 @@ export default function ParserControlPanel({
         </div>
       </div>
 
-      <label className="parser-control-limit" htmlFor="parser-control-limit">
-        <span>Лимит на нишу и источник<strong>{settings.limit}</strong></span>
-        <input id="parser-control-limit" type="range" min="1" max="50" value={settings.limit} onChange={(event) => update('limit', Number(event.target.value))} />
-        <small><span>1</span><span>50 компаний</span></small>
-      </label>
+      <div className="parser-control-scope">
+        <div className="parser-control-scope-heading">
+          <span><Hash size={15} />Объём парсинга</span>
+          <strong>{settings.limit === 0 ? 'Без лимита' : `${settings.limit} компаний`}</strong>
+        </div>
+        <div className="parser-control-scope-options" role="group" aria-label="Объём парсинга">
+          <button
+            type="button"
+            aria-label="Все компании"
+            aria-pressed={settings.limit === 0}
+            className={settings.limit === 0 ? 'active' : ''}
+            disabled={!settings.sources.includes('2gis')}
+            onClick={useUnlimitedScope}
+          >
+            <InfinityIcon size={18} />
+            <span><strong>Все компании</strong><small>До конца выдачи 2GIS</small></span>
+            {settings.limit === 0 && <Check size={15} />}
+          </button>
+          <button
+            type="button"
+            aria-label="Указать лимит"
+            aria-pressed={settings.limit > 0}
+            className={settings.limit > 0 ? 'active' : ''}
+            onClick={useFiniteScope}
+          >
+            <Hash size={17} />
+            <span><strong>Указать лимит</strong><small>Любое количество</small></span>
+            {settings.limit > 0 && <Check size={15} />}
+          </button>
+        </div>
+        {settings.limit > 0 && <label className="parser-control-limit-input" htmlFor="parser-control-limit">
+          <span>Компаний на нишу и источник</span>
+          <input
+            id="parser-control-limit"
+            type="number"
+            min="1"
+            step="1"
+            inputMode="numeric"
+            value={limitInput}
+            onChange={(event) => updateFiniteLimit(event.target.value)}
+            onBlur={commitFiniteLimit}
+          />
+        </label>}
+        <p className="parser-control-scope-hint">
+          {settings.limit === 0
+            ? settings.sources.includes('yandex')
+              ? '2GIS будет собран до последней страницы. Яндекс Карты — до 50 компаний на нишу.'
+              : 'Парсер пройдёт 2GIS от стартовой до последней страницы и соберёт всю доступную выдачу.'
+            : `Парсер остановится после ${settings.limit} компаний для каждой выбранной ниши и источника.`}
+        </p>
+      </div>
     </fieldset>
 
     {isReady && validationMessage && <p className="parser-control-validation" role="alert">{validationMessage}. Верните источник или нишу, чтобы сохранить настройки и запустить парсер.</p>}

@@ -707,6 +707,7 @@
   .parser-control-stats,
   .parser-page-section,
   .parser-control-page,
+  .parser-control-scope,
   .parser-run-state,
   .bulk-run-summary,
   .project-log-view,
@@ -722,6 +723,8 @@
 
 .theme-dark[data-theme='premium-dark'] :is(
   .parser-source-options button,
+  .parser-control-scope-options button,
+  .parser-control-limit-input input,
   .parser-niche-grid label,
   .parser-settings-modal .parser-niche-grid > label,
   .parser-checkbox-mark,
@@ -740,6 +743,7 @@
   .parser-niche-grid label.active,
   .parser-settings-modal .parser-niche-grid > label.active,
   .parser-control-sources button.active,
+  .parser-control-scope-options button.active,
   .parser-niches-grid > label.active,
   .freelance-source-option.active > label,
   .ai-tone-tabs button.active

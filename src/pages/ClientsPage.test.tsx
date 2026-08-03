@@ -87,6 +87,46 @@ describe('client parser controls', () => {
     })
   })
 
+  it('saves and starts all 2GIS companies as an unlimited parser scope', async () => {
+    const user = userEvent.setup()
+    render(<ClientsPage />)
+    const allCompaniesButton = await screen.findByRole('button', { name: 'Все компании' })
+    await waitFor(() => expect(allCompaniesButton).toBeEnabled())
+
+    await user.click(allCompaniesButton)
+    await user.click(screen.getByRole('button', { name: 'Запустить парсер' }))
+
+    const fetchMock = vi.mocked(fetch)
+    await waitFor(() => {
+      const saveCall = fetchMock.mock.calls.find(([url, init]) => String(url).endsWith('/api/parser/settings') && init?.method === 'PUT')
+      const startCall = fetchMock.mock.calls.find(([url, init]) => String(url).endsWith('/api/clients/parse') && init?.method === 'POST')
+      expect(saveCall).toBeDefined()
+      expect(startCall).toBeDefined()
+      expect(JSON.parse(String(saveCall?.[1]?.body))).toMatchObject({ limit: 0 })
+      expect(JSON.parse(String(startCall?.[1]?.body))).toMatchObject({ limit: 0 })
+    })
+  })
+
+  it('saves a custom parser limit above the former fifty-company ceiling', async () => {
+    const user = userEvent.setup()
+    render(<ClientsPage />)
+    const customLimitButton = await screen.findByRole('button', { name: 'Указать лимит' })
+    await waitFor(() => expect(customLimitButton).toBeEnabled())
+
+    await user.click(customLimitButton)
+    const limitInput = screen.getByRole('spinbutton', { name: 'Компаний на нишу и источник' })
+    await user.clear(limitInput)
+    await user.type(limitInput, '275')
+    await user.click(screen.getByRole('button', { name: 'Сохранить настройки' }))
+
+    const fetchMock = vi.mocked(fetch)
+    await waitFor(() => {
+      const saveCall = fetchMock.mock.calls.find(([url, init]) => String(url).endsWith('/api/parser/settings') && init?.method === 'PUT')
+      expect(saveCall).toBeDefined()
+      expect(JSON.parse(String(saveCall?.[1]?.body))).toMatchObject({ limit: 275 })
+    })
+  })
+
   it('saves current settings before starting the parser', async () => {
     const user = userEvent.setup()
     const baseFetch = createFetchMock()

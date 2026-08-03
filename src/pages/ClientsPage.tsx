@@ -196,7 +196,7 @@ const toClient = (item: ApiClient): Client => {
 }
 const toArchivedClient = (item: ApiClient): ArchivedClient => ({ ...toClient(item), archivedAt: item.archived_at || '' })
 
-const defaultParserSettings: ParserSettings = { city: 'Москва', niches: ['салоны красоты'], sources: ['2gis'], limit: 10, start_page: 1 }
+const defaultParserSettings: ParserSettings = { city: 'Москва', niches: ['салоны красоты'], sources: ['2gis'], limit: 0, start_page: 1 }
 const emptyStats: ApiStats = {
   total: 0, contacted: 0, replied: 0, calls: 0, closed: 0, found_today: 0, new_today: 0,
   stages: { Новый: 0, Написал: 0, Ответили: 0, Созвон: 0, КП: 0, Закрыто: 0, Отказ: 0 },

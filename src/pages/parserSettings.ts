@@ -21,11 +21,17 @@ import { API_BASE, jsonHeaders, readJson, responseError } from '../api'
 
 export { API_BASE }
 
+export const normalizeParserLimit = (limit: number) => {
+  if (!Number.isFinite(limit)) return 1
+  const rounded = Math.round(limit)
+  return rounded <= 0 ? 0 : rounded
+}
+
 const settingsPayload = (settings: ParserSettings) => ({
   city: settings.city.trim(),
   niches: [...settings.niches],
   sources: [...settings.sources],
-  limit: Math.max(1, Math.min(50, Math.round(settings.limit))),
+  limit: normalizeParserLimit(settings.limit),
   start_page: Math.max(1, Math.min(999, Math.round(settings.start_page || 1))),
 })
 
