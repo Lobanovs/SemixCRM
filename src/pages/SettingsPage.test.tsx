@@ -33,6 +33,12 @@ const PROFILE = {
   signature: 'Семён',
 }
 
+const BACKUP = {
+  name: 'semixcrm-20260824-101112.sqlite3',
+  size: 4096,
+  created_at: '2026-08-24T10:11:12+00:00',
+}
+
 function jsonResponse(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -45,6 +51,7 @@ function createSettingsFetch(options: {
   failSave?: string
   failTest?: string
   failProfileSave?: string
+  failBackup?: string
 } = {}) {
   const initial = options.enabled === false
     ? { ...SETTINGS, enabled: false, api_key_configured: false, api_key_hint: '', api_key_source: '' }
@@ -54,6 +61,11 @@ function createSettingsFetch(options: {
     const method = init?.method || 'GET'
     if (method === 'GET' && url.endsWith('/api/ai/settings')) return jsonResponse(initial)
     if (method === 'GET' && url.endsWith('/api/ai/profile')) return jsonResponse(PROFILE)
+    if (method === 'GET' && url.endsWith('/api/backups')) return jsonResponse({ backups: [BACKUP] })
+    if (method === 'POST' && url.endsWith('/api/backups')) {
+      if (options.failBackup) return jsonResponse({ detail: options.failBackup }, 500)
+      return jsonResponse({ ...BACKUP, name: 'semixcrm-20260824-120000.sqlite3' }, 201)
+    }
     if (method === 'PUT' && url.endsWith('/api/ai/profile')) {
       if (options.failProfileSave) return jsonResponse({ detail: options.failProfileSave }, 422)
       return jsonResponse(JSON.parse(String(init?.body)))
@@ -235,5 +247,25 @@ describe('настройки OpenCode Go', () => {
     await user.click(await screen.findByRole('button', { name: 'Сохранить AI-профиль' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Не удалось сохранить профиль')
+  })
+
+  it('creates and exposes downloadable database backups', async () => {
+    const user = userEvent.setup()
+    const fetchMock = createSettingsFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    render(<SettingsPage />)
+
+    expect(await screen.findByRole('heading', { name: 'Резервные копии' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /semixcrm-20260824-101112/i })).toHaveAttribute(
+      'href',
+      expect.stringContaining('/api/backups/semixcrm-20260824-101112.sqlite3'),
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Создать резервную копию' }))
+
+    expect(await screen.findByText('Резервная копия создана')).toBeInTheDocument()
+    const createCall = fetchMock.mock.calls.find(([input, init]) => String(input).endsWith('/api/backups') && init?.method === 'POST')
+    expect((createCall?.[1]?.headers as Record<string, string>)['X-Requested-With']).toBe('SemixCRM')
+    expect(screen.getByRole('link', { name: /semixcrm-20260824-120000/i })).toBeInTheDocument()
   })
 })

@@ -10,6 +10,7 @@ from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from .database import (
@@ -105,6 +106,7 @@ from .ai.settings import (
     validate_settings_values,
 )
 from .dashboard import build_dashboard
+from .backups import create_database_backup, list_database_backups, resolve_database_backup
 
 
 logger = logging.getLogger(__name__)
@@ -260,6 +262,33 @@ def health() -> dict[str, str]:
 @app.get("/api/dashboard")
 def dashboard(limit: int = Query(default=5, ge=1, le=20)) -> dict[str, Any]:
     return build_dashboard(limit=limit)
+
+
+@app.get("/api/backups")
+def database_backups() -> dict[str, Any]:
+    return {"backups": list_database_backups()}
+
+
+@app.post("/api/backups", status_code=201, dependencies=[Depends(guard_powerful_action)])
+def create_backup() -> dict[str, Any]:
+    try:
+        return create_database_backup()
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except Exception as error:  # noqa: BLE001 - пользователю нужен понятный сбой создания копии
+        logger.exception("Не удалось создать резервную копию")
+        raise HTTPException(status_code=500, detail=f"Не удалось создать копию: {error}") from error
+
+
+@app.get("/api/backups/{filename}")
+def download_backup(filename: str) -> FileResponse:
+    try:
+        path = resolve_database_backup(filename)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return FileResponse(path=path, filename=path.name, media_type="application/vnd.sqlite3")
 
 
 class FreelanceOrderCreateRequest(BaseModel):

@@ -3,6 +3,8 @@ import {
   CheckCircle2,
   CircleAlert,
   Cpu,
+  DatabaseBackup,
+  Download,
   Eye,
   EyeOff,
   KeyRound,
@@ -18,7 +20,7 @@ import {
   X,
 } from 'lucide-react'
 
-import { apiRequest } from '../api'
+import { API_BASE, apiRequest } from '../api'
 import './SettingsPage.css'
 
 
@@ -63,6 +65,12 @@ type AiProfile = {
   signature: string
 }
 
+type BackupInfo = {
+  name: string
+  size: number
+  created_at: string
+}
+
 type BusyAction = 'load' | 'save' | 'test' | 'delete' | ''
 type Feedback = { kind: 'success' | 'error'; text: string } | null
 
@@ -79,6 +87,9 @@ export default function SettingsPage() {
   const [profile, setProfile] = useState<AiProfile | null>(null)
   const [profileBusy, setProfileBusy] = useState(false)
   const [profileFeedback, setProfileFeedback] = useState<Feedback>(null)
+  const [backups, setBackups] = useState<BackupInfo[]>([])
+  const [backupBusy, setBackupBusy] = useState(false)
+  const [backupFeedback, setBackupFeedback] = useState<Feedback>(null)
 
   const applySettings = (next: AiSettings) => {
     setSettings(next)
@@ -114,9 +125,24 @@ export default function SettingsPage() {
     }
   }
 
+  const loadBackups = async () => {
+    try {
+      const result = await apiRequest<{ backups: BackupInfo[] }>('/api/backups', {
+        fallback: 'Не удалось загрузить список резервных копий',
+      })
+      setBackups(result.backups)
+    } catch (error) {
+      setBackupFeedback({
+        kind: 'error',
+        text: error instanceof Error ? error.message : 'Не удалось загрузить резервные копии',
+      })
+    }
+  }
+
   useEffect(() => {
     void load()
     void loadProfile()
+    void loadBackups()
   }, [])
 
   const formPayload = () => {
@@ -219,6 +245,30 @@ export default function SettingsPage() {
       setProfileBusy(false)
     }
   }
+
+  const createBackup = async () => {
+    setBackupBusy(true)
+    setBackupFeedback(null)
+    try {
+      const item = await apiRequest<BackupInfo>('/api/backups', {
+        method: 'POST',
+        fallback: 'Не удалось создать резервную копию',
+      })
+      setBackups((current) => [item, ...current.filter((backup) => backup.name !== item.name)])
+      setBackupFeedback({ kind: 'success', text: 'Резервная копия создана' })
+    } catch (error) {
+      setBackupFeedback({
+        kind: 'error',
+        text: error instanceof Error ? error.message : 'Не удалось создать резервную копию',
+      })
+    } finally {
+      setBackupBusy(false)
+    }
+  }
+
+  const formatBackupSize = (size: number) => size < 1024 * 1024
+    ? `${Math.max(1, Math.round(size / 1024))} КБ`
+    : `${(size / (1024 * 1024)).toFixed(1)} МБ`
 
   if (!settings && busy === 'load') {
     return (
@@ -404,6 +454,40 @@ export default function SettingsPage() {
               <li><CheckCircle2 size={16} />Настройки применяются без перезапуска</li>
               <li><CheckCircle2 size={16} />Ключ отправляется только в OpenCode Go</li>
             </ul>
+          </section>
+
+          <section className="settings-panel settings-backup-card">
+            <span className="settings-panel-icon is-violet"><DatabaseBackup /></span>
+            <h2>Резервные копии</h2>
+            <p>Создайте целостную копию SQLite перед массовыми изменениями.</p>
+            <button
+              className="settings-secondary-button backup-create-button"
+              type="button"
+              onClick={() => void createBackup()}
+              disabled={backupBusy}
+            >
+              {backupBusy ? <LoaderCircle className="is-spinning" size={17} /> : <DatabaseBackup size={17} />}
+              {backupBusy ? 'Создаю…' : 'Создать резервную копию'}
+            </button>
+            {backupFeedback && (
+              <div className={`settings-feedback backup-feedback is-${backupFeedback.kind}`} role={backupFeedback.kind === 'error' ? 'alert' : 'status'}>
+                {backupFeedback.kind === 'success' ? <CheckCircle2 size={16} /> : <CircleAlert size={16} />}
+                <span>{backupFeedback.text}</span>
+              </div>
+            )}
+            <div className="backup-list" aria-label="Созданные резервные копии">
+              {backups.length ? backups.slice(0, 5).map((backup) => (
+                <a
+                  key={backup.name}
+                  className="backup-download-link"
+                  href={`${API_BASE}/api/backups/${encodeURIComponent(backup.name)}`}
+                  download
+                >
+                  <span><strong>{backup.name}</strong><small>{formatBackupSize(backup.size)} · {new Date(backup.created_at).toLocaleString('ru-RU')}</small></span>
+                  <Download size={16} aria-hidden="true" />
+                </a>
+              )) : <span className="backup-empty">Копий пока нет</span>}
+            </div>
           </section>
 
           {settings.api_key_configured && (
