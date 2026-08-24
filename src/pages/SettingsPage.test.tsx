@@ -21,6 +21,18 @@ const SETTINGS = {
   ],
 }
 
+const PROFILE = {
+  name: 'Семён',
+  role: 'Разрабатываю сайты для бизнеса',
+  stack: 'React, TypeScript, Python',
+  portfolio_url: 'https://semyon-lobanov-portfolio.vercel.app/',
+  price_from: 'от 50 000 ₽',
+  cases: 'Сайты клиник и салонов',
+  offer: 'Показываю, как упростить онлайн-запись',
+  tone: 'Коротко, уважительно, без давления',
+  signature: 'Семён',
+}
+
 function jsonResponse(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -28,7 +40,12 @@ function jsonResponse(payload: unknown, status = 200) {
   })
 }
 
-function createSettingsFetch(options: { enabled?: boolean; failSave?: string; failTest?: string } = {}) {
+function createSettingsFetch(options: {
+  enabled?: boolean
+  failSave?: string
+  failTest?: string
+  failProfileSave?: string
+} = {}) {
   const initial = options.enabled === false
     ? { ...SETTINGS, enabled: false, api_key_configured: false, api_key_hint: '', api_key_source: '' }
     : SETTINGS
@@ -36,6 +53,11 @@ function createSettingsFetch(options: { enabled?: boolean; failSave?: string; fa
     const url = String(input)
     const method = init?.method || 'GET'
     if (method === 'GET' && url.endsWith('/api/ai/settings')) return jsonResponse(initial)
+    if (method === 'GET' && url.endsWith('/api/ai/profile')) return jsonResponse(PROFILE)
+    if (method === 'PUT' && url.endsWith('/api/ai/profile')) {
+      if (options.failProfileSave) return jsonResponse({ detail: options.failProfileSave }, 422)
+      return jsonResponse(JSON.parse(String(init?.body)))
+    }
     if (method === 'PUT' && url.endsWith('/api/ai/settings')) {
       if (options.failSave) return jsonResponse({ detail: options.failSave }, 422)
       const body = JSON.parse(String(init?.body)) as Record<string, unknown>
@@ -173,5 +195,45 @@ describe('настройки OpenCode Go', () => {
     await user.click(screen.getByRole('button', { name: 'Проверить подключение' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Ключ OpenCode отклонён')
+  })
+
+  it('loads the working profile used for AI generations', async () => {
+    vi.stubGlobal('fetch', createSettingsFetch())
+
+    render(<SettingsPage />)
+
+    expect(await screen.findByRole('heading', { name: 'Рабочий AI-профиль' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Ваше имя')).toHaveValue('Семён')
+    expect(screen.getByLabelText('Ссылка на портфолио')).toHaveValue(PROFILE.portfolio_url)
+    expect(screen.getByLabelText('Тон сообщений')).toHaveValue(PROFILE.tone)
+  })
+
+  it('saves the working profile and sends the mutation safety header', async () => {
+    const user = userEvent.setup()
+    const fetchMock = createSettingsFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    render(<SettingsPage />)
+
+    const nameInput = await screen.findByLabelText('Ваше имя')
+    await user.clear(nameInput)
+    await user.type(nameInput, 'Семён Лобанов')
+    await user.clear(screen.getByLabelText('Цена от'))
+    await user.type(screen.getByLabelText('Цена от'), 'от 75 000 ₽')
+    await user.click(screen.getByRole('button', { name: 'Сохранить AI-профиль' }))
+
+    expect(await screen.findByText(/^Рабочий профиль сохранён/)).toBeInTheDocument()
+    const saveCall = fetchMock.mock.calls.find(([input, init]) => String(input).endsWith('/api/ai/profile') && init?.method === 'PUT')
+    expect(JSON.parse(String(saveCall?.[1]?.body))).toMatchObject({ name: 'Семён Лобанов', price_from: 'от 75 000 ₽' })
+    expect((saveCall?.[1]?.headers as Record<string, string>)['X-Requested-With']).toBe('SemixCRM')
+  })
+
+  it('shows profile saving errors next to the profile form', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', createSettingsFetch({ failProfileSave: 'Не удалось сохранить профиль' }))
+    render(<SettingsPage />)
+
+    await user.click(await screen.findByRole('button', { name: 'Сохранить AI-профиль' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Не удалось сохранить профиль')
   })
 })

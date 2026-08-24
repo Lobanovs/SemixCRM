@@ -1378,7 +1378,7 @@ def ai_profile() -> dict[str, Any]:
     return get_ai_profile().as_dict()
 
 
-@app.put("/api/ai/profile")
+@app.put("/api/ai/profile", dependencies=[Depends(guard_powerful_action)])
 def update_ai_profile(request: AiProfileRequest) -> dict[str, Any]:
     current = get_ai_profile()
     # Пустые поля оставляют текущее значение: форма не должна затирать профиль пробелами.

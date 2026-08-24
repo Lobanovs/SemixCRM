@@ -12,6 +12,7 @@ import {
   Save,
   Settings2,
   ShieldCheck,
+  Sparkles,
   Timer,
   Trash2,
   X,
@@ -50,6 +51,18 @@ type TestResponse = {
   model: string
 }
 
+type AiProfile = {
+  name: string
+  role: string
+  stack: string
+  portfolio_url: string
+  price_from: string
+  cases: string
+  offer: string
+  tone: string
+  signature: string
+}
+
 type BusyAction = 'load' | 'save' | 'test' | 'delete' | ''
 type Feedback = { kind: 'success' | 'error'; text: string } | null
 
@@ -63,6 +76,9 @@ export default function SettingsPage() {
   const [confirmRemove, setConfirmRemove] = useState(false)
   const [busy, setBusy] = useState<BusyAction>('load')
   const [feedback, setFeedback] = useState<Feedback>(null)
+  const [profile, setProfile] = useState<AiProfile | null>(null)
+  const [profileBusy, setProfileBusy] = useState(false)
+  const [profileFeedback, setProfileFeedback] = useState<Feedback>(null)
 
   const applySettings = (next: AiSettings) => {
     setSettings(next)
@@ -84,8 +100,23 @@ export default function SettingsPage() {
     }
   }
 
+  const loadProfile = async () => {
+    setProfileFeedback(null)
+    try {
+      setProfile(await apiRequest<AiProfile>('/api/ai/profile', {
+        fallback: 'Не удалось загрузить рабочий AI-профиль',
+      }))
+    } catch (error) {
+      setProfileFeedback({
+        kind: 'error',
+        text: error instanceof Error ? error.message : 'Не удалось загрузить AI-профиль',
+      })
+    }
+  }
+
   useEffect(() => {
     void load()
+    void loadProfile()
   }, [])
 
   const formPayload = () => {
@@ -155,6 +186,37 @@ export default function SettingsPage() {
       setFeedback({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось удалить ключ' })
     } finally {
       setBusy('')
+    }
+  }
+
+  const updateProfile = (field: keyof AiProfile, value: string) => {
+    setProfile((current) => current ? { ...current, [field]: value } : current)
+  }
+
+  const saveProfile = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!profile) return
+    if (!profile.name.trim() || !profile.role.trim()) {
+      setProfileFeedback({ kind: 'error', text: 'Укажите имя и кратко опишите, чем вы полезны клиенту' })
+      return
+    }
+    setProfileBusy(true)
+    setProfileFeedback(null)
+    try {
+      const saved = await apiRequest<AiProfile>('/api/ai/profile', {
+        method: 'PUT',
+        body: profile,
+        fallback: 'Не удалось сохранить рабочий AI-профиль',
+      })
+      setProfile(saved)
+      setProfileFeedback({ kind: 'success', text: 'Рабочий профиль сохранён и будет учтён в новых генерациях' })
+    } catch (error) {
+      setProfileFeedback({
+        kind: 'error',
+        text: error instanceof Error ? error.message : 'Не удалось сохранить AI-профиль',
+      })
+    } finally {
+      setProfileBusy(false)
     }
   }
 
@@ -379,6 +441,87 @@ export default function SettingsPage() {
           )}
         </aside>
       </div>
+
+      <form
+        id="profile"
+        className="settings-panel profile-settings-card"
+        tabIndex={-1}
+        onSubmit={(event) => void saveProfile(event)}
+      >
+        <header className="settings-panel-heading">
+          <span className="settings-panel-icon is-violet"><Sparkles /></span>
+          <div>
+            <h2>Рабочий AI-профиль</h2>
+            <p>Эти данные помогают нейросети писать от вашего имени и не выдумывать опыт</p>
+          </div>
+        </header>
+
+        {profile ? (
+          <>
+            <div className="profile-fields-grid">
+              <div className="settings-field">
+                <label htmlFor="ai-profile-name">Ваше имя</label>
+                <input id="ai-profile-name" value={profile.name} maxLength={120} onChange={(event) => updateProfile('name', event.target.value)} disabled={profileBusy} />
+              </div>
+              <div className="settings-field">
+                <label htmlFor="ai-profile-signature">Подпись в сообщениях</label>
+                <input id="ai-profile-signature" value={profile.signature} maxLength={120} onChange={(event) => updateProfile('signature', event.target.value)} disabled={profileBusy} />
+              </div>
+              <div className="settings-field is-wide">
+                <label htmlFor="ai-profile-role">Чем вы полезны клиенту</label>
+                <textarea id="ai-profile-role" rows={3} value={profile.role} maxLength={1000} onChange={(event) => updateProfile('role', event.target.value)} disabled={profileBusy} />
+              </div>
+              <div className="settings-field">
+                <label htmlFor="ai-profile-stack">Стек и специализация</label>
+                <textarea id="ai-profile-stack" rows={3} value={profile.stack} maxLength={1000} onChange={(event) => updateProfile('stack', event.target.value)} disabled={profileBusy} />
+              </div>
+              <div className="settings-field">
+                <label htmlFor="ai-profile-cases">Кейсы и опыт</label>
+                <textarea id="ai-profile-cases" rows={3} value={profile.cases} maxLength={2000} onChange={(event) => updateProfile('cases', event.target.value)} disabled={profileBusy} />
+              </div>
+              <div className="settings-field">
+                <label htmlFor="ai-profile-portfolio">Ссылка на портфолио</label>
+                <input id="ai-profile-portfolio" type="url" value={profile.portfolio_url} maxLength={500} onChange={(event) => updateProfile('portfolio_url', event.target.value)} disabled={profileBusy} />
+              </div>
+              <div className="settings-field">
+                <label htmlFor="ai-profile-price">Цена от</label>
+                <input id="ai-profile-price" value={profile.price_from} maxLength={200} onChange={(event) => updateProfile('price_from', event.target.value)} disabled={profileBusy} />
+              </div>
+              <div className="settings-field is-wide">
+                <label htmlFor="ai-profile-offer">Ваше предложение</label>
+                <textarea id="ai-profile-offer" rows={3} value={profile.offer} maxLength={2000} onChange={(event) => updateProfile('offer', event.target.value)} disabled={profileBusy} />
+              </div>
+              <div className="settings-field is-wide">
+                <label htmlFor="ai-profile-tone">Тон сообщений</label>
+                <input id="ai-profile-tone" value={profile.tone} maxLength={500} onChange={(event) => updateProfile('tone', event.target.value)} disabled={profileBusy} />
+              </div>
+            </div>
+
+            {profileFeedback && (
+              <div className={`settings-feedback is-${profileFeedback.kind}`} role={profileFeedback.kind === 'error' ? 'alert' : 'status'}>
+                {profileFeedback.kind === 'success' ? <CheckCircle2 size={18} /> : <CircleAlert size={18} />}
+                <span>{profileFeedback.text}</span>
+              </div>
+            )}
+
+            <footer className="settings-form-actions">
+              <button className="settings-primary-button" type="submit" disabled={profileBusy}>
+                {profileBusy ? <LoaderCircle className="is-spinning" size={18} /> : <Save size={18} />}
+                {profileBusy ? 'Сохраняю…' : 'Сохранить AI-профиль'}
+              </button>
+            </footer>
+          </>
+        ) : (
+          <div className="profile-loading-state">
+            {profileFeedback?.kind === 'error' ? (
+              <>
+                <span role="alert">{profileFeedback.text}</span>
+                <button className="settings-secondary-button" type="button" onClick={() => void loadProfile()}>Повторить</button>
+              </>
+            ) : <><LoaderCircle className="is-spinning" size={18} /><span>Загружаю профиль…</span></>}
+          </div>
+        )}
+      </form>
     </div>
   )
 }

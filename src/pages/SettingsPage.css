@@ -188,6 +188,11 @@
   background: #fff0f2;
 }
 
+.settings-panel-icon.is-violet {
+  color: #6d43d6;
+  background: #f0ebff;
+}
+
 .settings-panel-heading h2,
 .settings-security-card h2,
 .settings-danger-card h2 {
@@ -511,6 +516,73 @@
   margin: 0;
 }
 
+.profile-settings-card {
+  margin-top: 20px;
+  padding: 22px;
+  scroll-margin-top: 84px;
+}
+
+.profile-settings-card:focus {
+  outline: 0;
+}
+
+.profile-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px;
+}
+
+.profile-fields-grid .settings-field.is-wide {
+  grid-column: 1 / -1;
+}
+
+.profile-fields-grid input,
+.profile-fields-grid textarea {
+  width: 100%;
+  border: 1px solid #ced8e5;
+  border-radius: 9px;
+  outline: 0;
+  background: #fff;
+  color: #172033;
+  font: inherit;
+  font-size: 12px;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.profile-fields-grid input {
+  min-height: 44px;
+  padding: 0 12px;
+}
+
+.profile-fields-grid textarea {
+  min-height: 82px;
+  padding: 11px 12px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.profile-fields-grid input:focus,
+.profile-fields-grid textarea:focus {
+  border-color: #6fa5e9;
+  box-shadow: 0 0 0 3px rgba(18, 100, 232, 0.1);
+}
+
+.profile-fields-grid input:disabled,
+.profile-fields-grid textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.profile-loading-state {
+  display: flex;
+  min-height: 96px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #66758a;
+  font-size: 12px;
+}
+
 .settings-load-error h2 {
   color: #28364a;
   font-size: 16px;
@@ -541,7 +613,9 @@
   .ai-connection-icon { width: 48px; height: 48px; }
   .ai-connection-badge { grid-column: 2; justify-self: start; }
   .settings-fields-row,
-  .settings-side-column { grid-template-columns: 1fr; }
+  .settings-side-column,
+  .profile-fields-grid { grid-template-columns: 1fr; }
+  .profile-fields-grid .settings-field.is-wide { grid-column: auto; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -622,6 +696,20 @@
   background: #1b2432;
   color: #edf3fb;
 }
+
+.theme-dark .settings-panel-icon.is-violet {
+  color: #c2a8ff;
+  background: #312649;
+}
+
+.theme-dark .profile-fields-grid input,
+.theme-dark .profile-fields-grid textarea {
+  border-color: #3a475a;
+  background: #151d29;
+  color: #edf3fb;
+}
+
+.theme-dark .profile-loading-state { color: #a8b5c8; }
 
 .theme-dark .settings-secret-input > button:hover { background: #253246; }
 

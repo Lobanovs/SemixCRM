@@ -224,6 +224,16 @@ class AiSettingsApiTests(unittest.TestCase):
         self.assertEqual(400, response.status_code)
         self.assertIn("ключ", response.json()["detail"].lower())
 
+    def test_working_profile_update_requires_the_crm_header(self) -> None:
+        with TestClient(app) as bare_client:
+            response = bare_client.put(
+                "/api/ai/profile",
+                json={"name": "Семён", "role": "Разрабатываю сайты"},
+            )
+
+        self.assertEqual(403, response.status_code)
+        self.assertIn("X-Requested-With", response.json()["detail"])
+
 
 if __name__ == "__main__":
     unittest.main()
