@@ -119,6 +119,21 @@
 .theme-dark[data-theme='premium-dark'] .action-queue.purple .action-queue-icon { background: rgba(174, 135, 255, .12); color: #c2a7ff; }
 .theme-dark[data-theme='premium-dark'] .source-health-strip { border-color: rgba(102, 217, 145, .18); background: rgba(102, 217, 145, .07); color: var(--premium-success); }
 .theme-dark[data-theme='premium-dark'] .source-health-strip.has-attention { border-color: rgba(244, 196, 106, .22); background: rgba(244, 196, 106, .075); color: var(--premium-warning); }
+.theme-dark[data-theme='premium-dark'] .progressive-list-footer {
+  border-color: var(--premium-border);
+  background: rgba(255, 255, 255, .025);
+  color: var(--premium-text-muted);
+}
+.theme-dark[data-theme='premium-dark'] .progressive-list-footer button {
+  border-color: var(--premium-border);
+  background: var(--premium-surface-raised);
+  color: var(--premium-text-soft);
+}
+.theme-dark[data-theme='premium-dark'] .progressive-list-footer button:hover {
+  border-color: rgba(117, 167, 255, .4);
+  background: var(--premium-surface-hover);
+  color: var(--premium-accent-bright);
+}
 
 .theme-dark[data-theme='premium-dark'] .brand {
   color: var(--premium-text);

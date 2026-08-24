@@ -175,4 +175,21 @@ describe('страница «Работа (вакансии)»', () => {
 
     expect(await screen.findByText(/Вакансий пока нет/)).toBeInTheDocument()
   })
+
+  it('не монтирует все найденные вакансии одновременно', async () => {
+    const jobs = Array.from({ length: 51 }, (_, index) => ({
+      ...job,
+      id: index + 1,
+      external_id: `job-${index + 1}`,
+      role: `React вакансия ${String(index + 1).padStart(2, '0')}`,
+      company: `Компания ${String(index + 1).padStart(2, '0')}`,
+    }))
+    vi.stubGlobal('fetch', createFetchMock({ jobs }))
+    render(<JobsPage />)
+
+    expect(await screen.findByText('Показано 50 из 51')).toBeVisible()
+    expect(screen.queryByText('React вакансия 51')).not.toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Показать ещё 1' }))
+    expect(screen.getByText('React вакансия 51')).toBeVisible()
+  })
 })

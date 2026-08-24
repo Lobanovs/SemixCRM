@@ -46,6 +46,7 @@ import type { ClientRetentionFilterState } from './clientFilters'
 import { apiRequest } from '../api'
 import type { LucideIcon } from 'lucide-react'
 import ParserControlPanel from './ParserControlPanel'
+import ProgressiveListFooter from '../components/ProgressiveListFooter'
 import { API_BASE, persistParserSettings, startParserWithSettings } from './parserSettings'
 import type { ParserSettings } from './parserSettings'
 
@@ -242,6 +243,7 @@ export default function ClientsPage() {
     ...DEFAULT_CLIENT_RETENTION_FILTERS,
     requiredContacts: [],
   })
+  const [visibleClientCount, setVisibleClientCount] = useState(60)
 
   const refreshBackend = async () => {
     const [clientsResponse, settingsResponse, runsResponse] = await Promise.all([
@@ -303,6 +305,8 @@ export default function ClientsPage() {
     if (sort === 'Больше отзывов') return [...result].sort((a, b) => (b.reviews || 0) - (a.reviews || 0))
     return [...result].sort((a, b) => b.score - a.score || b.match - a.match)
   }, [clients, niche, query, retentionFilters, sort, source, status])
+  useEffect(() => setVisibleClientCount(60), [filtered])
+  const visibleClients = filtered.slice(0, visibleClientCount)
   const sourceOptions = useMemo(() => Array.from(new Set(clients.map((client) => client.source))).sort(), [clients])
   const nicheOptions = useMemo(() => Array.from(new Set(clients.map((client) => client.category))).sort(), [clients])
   const activeRetentionFilterCount = countActiveClientFilters(retentionFilters)
@@ -531,7 +535,8 @@ export default function ClientsPage() {
           />
 
           <div className="client-list">
-            {filtered.length ? filtered.map((client) => <ClientRow key={client.id} client={client} onStatusChange={updateStatus} onDetails={setSelectedClient} onDelete={(item) => setDeleteTarget({ kind: 'one', client: item })} onWrite={setMessageClient} />) : <EmptyState>{emptyClientsMessage}</EmptyState>}
+            {filtered.length ? visibleClients.map((client) => <ClientRow key={client.id} client={client} onStatusChange={updateStatus} onDetails={setSelectedClient} onDelete={(item) => setDeleteTarget({ kind: 'one', client: item })} onWrite={setMessageClient} />) : <EmptyState>{emptyClientsMessage}</EmptyState>}
+            <ProgressiveListFooter shown={visibleClients.length} total={filtered.length} step={60} onMore={() => setVisibleClientCount((count) => Math.min(count + 60, filtered.length))} onAll={() => setVisibleClientCount(filtered.length)} />
           </div>
         </section>
 
@@ -618,8 +623,11 @@ function RunResultCard({ result }: { result: ParserRunResult }) {
 
 function ArchiveView({ clients, isRestoring, onBack, onRestore, onRestoreAll }: { clients: ArchivedClient[]; isRestoring: boolean; onBack: () => void; onRestore: (client: ArchivedClient) => void; onRestoreAll: () => void }) {
   const [query, setQuery] = useState('')
+  const [visibleCount, setVisibleCount] = useState(60)
   const filtered = clients.filter((client) => `${client.name} ${client.category} ${client.location} ${client.source}`.toLocaleLowerCase('ru').includes(query.trim().toLocaleLowerCase('ru')))
-  return <div className="archive-page-shell"><div className="archive-page-header"><button className="back-link" type="button" onClick={onBack}><ArrowLeft size={17} />К клиентам</button><div><p className="eyebrow-label">Архив базы</p><h1>Скрытые клиенты</h1><p>Очистка только убирает клиентов из рабочего списка. Здесь их можно вернуть без повторного парсинга.</p></div><button className="solid-action" type="button" onClick={onRestoreAll} disabled={!clients.length || isRestoring}><RotateCcw size={17} />Восстановить всех</button></div><div className="archive-toolbar"><label className="local-search"><span className="sr-only">Поиск скрытых клиентов</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по архиву" /><Search size={18} /></label><span className="archive-count">{clients.length} в архиве</span></div>{filtered.length ? <div className="archive-client-grid">{filtered.map((client) => <ArchiveClientCard client={client} isRestoring={isRestoring} onRestore={onRestore} key={client.id} />)}</div> : <EmptyState>{clients.length ? 'По этому запросу клиентов нет.' : 'Архив пуст. Скрытые клиенты появятся здесь после очистки списка.'}</EmptyState>}</div>
+  useEffect(() => setVisibleCount(60), [clients, query])
+  const visibleClients = filtered.slice(0, visibleCount)
+  return <div className="archive-page-shell"><div className="archive-page-header"><button className="back-link" type="button" onClick={onBack}><ArrowLeft size={17} />К клиентам</button><div><p className="eyebrow-label">Архив базы</p><h1>Скрытые клиенты</h1><p>Очистка только убирает клиентов из рабочего списка. Здесь их можно вернуть без повторного парсинга.</p></div><button className="solid-action" type="button" onClick={onRestoreAll} disabled={!clients.length || isRestoring}><RotateCcw size={17} />Восстановить всех</button></div><div className="archive-toolbar"><label className="local-search"><span className="sr-only">Поиск скрытых клиентов</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по архиву" /><Search size={18} /></label><span className="archive-count">{clients.length} в архиве</span></div>{filtered.length ? <><div className="archive-client-grid">{visibleClients.map((client) => <ArchiveClientCard client={client} isRestoring={isRestoring} onRestore={onRestore} key={client.id} />)}</div><ProgressiveListFooter shown={visibleClients.length} total={filtered.length} step={60} onMore={() => setVisibleCount((count) => Math.min(count + 60, filtered.length))} onAll={() => setVisibleCount(filtered.length)} /></> : <EmptyState>{clients.length ? 'По этому запросу клиентов нет.' : 'Архив пуст. Скрытые клиенты появятся здесь после очистки списка.'}</EmptyState>}</div>
 }
 
 function ArchiveClientCard({ client, isRestoring, onRestore }: { client: ArchivedClient; isRestoring: boolean; onRestore: (client: ArchivedClient) => void }) {

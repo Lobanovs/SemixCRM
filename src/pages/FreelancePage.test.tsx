@@ -175,4 +175,29 @@ describe('freelance source controls', () => {
       expect((call?.[1]?.headers as Record<string, string>)['X-Requested-With']).toBe('SemixCRM')
     })
   })
+
+  it('показывает большую ленту заказов порциями', async () => {
+    const orders = Array.from({ length: 51 }, (_, index) => ({
+      id: index + 1,
+      source: 'kwork', external_id: `order-${index + 1}`, title: `Заказ ${String(index + 1).padStart(2, '0')}`,
+      description: 'Разработка сайта', url: 'https://example.com', customer: '', categories: [], tags: [],
+      budget_min: 50000, budget_max: null, currency: 'RUB', budget_text: '50 000 ₽',
+      published_at: '2026-08-24T08:00:00+00:00', discovered_at: '2026-08-24T08:00:00+00:00',
+      relevance: 90 - index, relevance_points: 18, relevance_reasons: [], status: 'Новый',
+      next_step: 'Изучить заказ', note: '', archived: false,
+    }))
+    const baseFetch = createFetchMock()
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if ((!init?.method || init.method === 'GET') && String(input).includes('/api/freelance/orders')) {
+        return jsonResponse({ orders, stats: { total: 51, responded: 0, replied: 0, in_progress: 0, new_today: 51, archived: 0, stages: { Новый: 51 } }, relevance_max: 20 })
+      }
+      return baseFetch(input, init)
+    }))
+    render(<FreelancePage />)
+
+    expect(await screen.findByText('Показано 50 из 51')).toBeVisible()
+    expect(screen.queryByRole('heading', { name: 'Заказ 51' })).not.toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Показать ещё 1' }))
+    expect(screen.getByRole('heading', { name: 'Заказ 51' })).toBeVisible()
+  })
 })

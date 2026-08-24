@@ -27,6 +27,7 @@ import type { UiAccent } from '../components/DashboardUi'
 import PageGuide from '../components/PageGuide'
 import { FREELANCE_GUIDE } from '../guides'
 import { apiRequest } from '../api'
+import ProgressiveListFooter from '../components/ProgressiveListFooter'
 import {
   BROWSER_SOURCE_KEYS,
   FREELANCE_SOURCE_KEYS,
@@ -118,6 +119,7 @@ export default function FreelancePage() {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
   const [showCleanupModal, setShowCleanupModal] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(50)
 
   const loadData = async (showLoader = false, archivedView = showArchived) => {
     if (showLoader) setLoading(true)
@@ -155,6 +157,8 @@ export default function FreelancePage() {
     if (sort === 'newest') return [...result].sort((a, b) => (b.published_at || b.discovered_at).localeCompare(a.published_at || a.discovered_at))
     return [...result].sort((a, b) => b.relevance - a.relevance)
   }, [category, minRelevance, orders, query, sort, source, status])
+  useEffect(() => setVisibleCount(50), [filtered])
+  const visibleOrders = filtered.slice(0, visibleCount)
 
   const runAction = async (action: string, request: () => Promise<unknown>, message: string) => {
     setBusy(action)
@@ -249,7 +253,7 @@ export default function FreelancePage() {
 
           {error && <div className="page-feedback error" role="alert"><AlertCircle size={17} />{error}</div>}
           {feedback && <div className="page-feedback success" role="status"><Check size={17} />{feedback}</div>}
-          {loading ? <div className="freelance-loading" role="status"><LoaderCircle className="spin" size={24} />Загружаю сохранённые заказы…</div> : <div className="opportunity-list freelance-list">{filtered.length ? filtered.map((order) => <OrderRow key={order.id} order={order} archived={showArchived} relevanceMax={relevanceMax} busy={busy === `order-${order.id}` || busy === `archive-${order.id}` || busy === `restore-${order.id}`} onUpdate={updateOrder} onArchive={archiveOrder} onRestore={restoreOrder} />) : <EmptyState>{orders.length ? 'По выбранным фильтрам заказы не найдены.' : showArchived ? 'Скрытых заказов нет. Здесь появятся карточки, которые вы убрали из активного списка.' : 'Заказов пока нет. Запустите проверку источников или добавьте заказ вручную.'}</EmptyState>}</div>}
+          {loading ? <div className="freelance-loading" role="status"><LoaderCircle className="spin" size={24} />Загружаю сохранённые заказы…</div> : <div className="opportunity-list freelance-list">{filtered.length ? visibleOrders.map((order) => <OrderRow key={order.id} order={order} archived={showArchived} relevanceMax={relevanceMax} busy={busy === `order-${order.id}` || busy === `archive-${order.id}` || busy === `restore-${order.id}`} onUpdate={updateOrder} onArchive={archiveOrder} onRestore={restoreOrder} />) : <EmptyState>{orders.length ? 'По выбранным фильтрам заказы не найдены.' : showArchived ? 'Скрытых заказов нет. Здесь появятся карточки, которые вы убрали из активного списка.' : 'Заказов пока нет. Запустите проверку источников или добавьте заказ вручную.'}</EmptyState>}<ProgressiveListFooter shown={visibleOrders.length} total={filtered.length} step={50} onMore={() => setVisibleCount((count) => Math.min(count + 50, filtered.length))} onAll={() => setVisibleCount(filtered.length)} /></div>}
         </section>
 
         <aside className="data-side-column">

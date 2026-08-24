@@ -21,6 +21,7 @@ import PageGuide from '../components/PageGuide'
 import { JOBS_GUIDE } from '../guides'
 import { apiRequest } from '../api'
 import { JOB_SOURCE_META } from './jobSources'
+import ProgressiveListFooter from '../components/ProgressiveListFooter'
 
 export type Job = {
   id: number
@@ -141,6 +142,7 @@ export default function JobsPage() {
   const [runId, setRunId] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [visibleCount, setVisibleCount] = useState(50)
 
   const load = useCallback(async () => {
     try {
@@ -165,6 +167,9 @@ export default function JobsPage() {
     const timer = window.setTimeout(() => { void load() }, 200)
     return () => window.clearTimeout(timer)
   }, [load])
+
+  useEffect(() => setVisibleCount(50), [jobs])
+  const visibleJobs = jobs.slice(0, visibleCount)
 
   useEffect(() => {
     void (async () => {
@@ -314,7 +319,7 @@ export default function JobsPage() {
 
           <div className="opportunity-list">
             {loading ? <EmptyState>Загружаю вакансии…</EmptyState>
-              : jobs.length ? jobs.map((job) => (
+              : jobs.length ? visibleJobs.map((job) => (
                 <JobRow
                   key={job.id}
                   job={job}
@@ -326,6 +331,7 @@ export default function JobsPage() {
                 />
               ))
                 : <EmptyState>{archived ? 'В архиве пусто.' : 'Вакансий пока нет. Добавьте вручную или запустите сбор в панели справа.'}</EmptyState>}
+            <ProgressiveListFooter shown={visibleJobs.length} total={jobs.length} step={50} onMore={() => setVisibleCount((count) => Math.min(count + 50, jobs.length))} onAll={() => setVisibleCount(jobs.length)} />
           </div>
         </section>
 

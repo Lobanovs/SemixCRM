@@ -333,4 +333,30 @@ describe('client parser controls', () => {
     await user.type(screen.getByRole('textbox', { name: 'Поиск клиентов' }), 'нет совпадений')
     expect(screen.getByText('По текущим фильтрам клиентов нет. Измените поиск, статус, источник или нишу.')).toBeVisible()
   })
+
+  it('монтирует большую базу порциями и сбрасывает порцию при новом поиске', async () => {
+    const user = userEvent.setup()
+    const clients = Array.from({ length: 61 }, (_, index) => ({
+      id: index + 1,
+      name: `Клиент ${String(index + 1).padStart(2, '0')}`,
+      category: 'Стоматология',
+      city: 'Москва',
+      status: 'Новый',
+      lead_score: 80 - index,
+      lead_score_max: 100,
+      contacts: [],
+    }))
+    vi.stubGlobal('fetch', createFetchMock(clients))
+    render(<ClientsPage />)
+
+    expect(await screen.findByText('Показано 60 из 61')).toBeVisible()
+    expect(screen.queryByRole('heading', { name: 'Клиент 61' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Показать ещё 1' }))
+    expect(screen.getByRole('heading', { name: 'Клиент 61' })).toBeVisible()
+
+    const search = screen.getByRole('textbox', { name: 'Поиск клиентов' })
+    await user.type(search, 'Клиент 01')
+    await user.clear(search)
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Клиент 61' })).not.toBeInTheDocument())
+  })
 })
