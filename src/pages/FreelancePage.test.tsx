@@ -89,10 +89,18 @@ describe('freelance source controls', () => {
     render(<FreelancePage />)
 
     await user.click(await screen.findByRole('button', { name: 'Войти в Profi.ru' }))
-    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url, init]) => init?.method === 'POST' && String(url).endsWith('/sources/profi/auth'))).toBe(true))
+    await waitFor(() => {
+      const authCall = vi.mocked(fetch).mock.calls.find(([url, init]) => init?.method === 'POST' && String(url).endsWith('/sources/profi/auth'))
+      expect(authCall).toBeDefined()
+      expect((authCall?.[1]?.headers as Record<string, string>)['X-Requested-With']).toBe('SemixCRM')
+    })
 
     await user.click(screen.getByRole('button', { name: 'Повторить проверку Kwork' }))
-    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url, init]) => init?.method === 'POST' && String(url).endsWith('/sniper/check'))).toBe(true))
+    await waitFor(() => {
+      const checkCall = vi.mocked(fetch).mock.calls.find(([url, init]) => init?.method === 'POST' && String(url).endsWith('/sniper/check'))
+      expect(checkCall).toBeDefined()
+      expect((checkCall?.[1]?.headers as Record<string, string>)['X-Requested-With']).toBe('SemixCRM')
+    })
   })
 
   it('saves settings with exactly the five supported sources', async () => {

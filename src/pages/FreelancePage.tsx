@@ -26,6 +26,7 @@ import { EmptyState, MetricCard, SidePanel, StatusBadge, Tag } from '../componen
 import type { UiAccent } from '../components/DashboardUi'
 import PageGuide from '../components/PageGuide'
 import { FREELANCE_GUIDE } from '../guides'
+import { apiRequest } from '../api'
 import {
   BROWSER_SOURCE_KEYS,
   FREELANCE_SOURCE_KEYS,
@@ -35,7 +36,6 @@ import {
   type FreelanceSourceKey,
 } from './freelanceSources'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
 const sourceKeys = FREELANCE_SOURCE_KEYS
 const browserSourceKeys = BROWSER_SOURCE_KEYS
 type SourceKey = FreelanceSourceKey
@@ -73,6 +73,7 @@ type SourceStatus = { source: string; status: string; checked_at?: string; order
 type FreelanceSettings = { sources: string[]; keywords: string[]; excluded_keywords: string[]; categories: string[]; min_budget: number; interval_seconds: number; sniper_enabled: boolean; telegram_enabled: boolean }
 type SniperStatus = { status: string; sources: Record<string, SourceStatus>; interval_seconds: number }
 type FreelanceRun = { id: number; started_at: string; finished_at: string; status: string; inserted_count: number; duplicate_count: number; source_count: number; order_count: number; sources: Record<string, SourceStatus> }
+type FreelanceOrdersResponse = { orders: FreelanceOrder[]; stats: FreelanceStats; relevance_max?: number }
 
 const emptyStats: FreelanceStats = { total: 0, responded: 0, replied: 0, in_progress: 0, new_today: 0, archived: 0, stages: {} }
 const emptySettings: FreelanceSettings = { sources: [], keywords: [], excluded_keywords: [], categories: [], min_budget: 0, interval_seconds: 60, sniper_enabled: false, telegram_enabled: false }
@@ -123,20 +124,17 @@ export default function FreelancePage() {
     setError('')
     try {
       const [ordersResponse, settingsResponse, sourceResponse, sniperResponse] = await Promise.all([
-        fetch(`${API_BASE}/api/freelance/orders${archivedView ? '?archived=true' : ''}`),
-        fetch(`${API_BASE}/api/freelance/settings`),
-        fetch(`${API_BASE}/api/freelance/sources`),
-        fetch(`${API_BASE}/api/freelance/sniper/status`),
+        apiRequest<FreelanceOrdersResponse>(`/api/freelance/orders${archivedView ? '?archived=true' : ''}`, { fallback: 'Не удалось загрузить заказы' }),
+        apiRequest<FreelanceSettings>('/api/freelance/settings', { fallback: 'Не удалось загрузить настройки' }),
+        apiRequest<{ sources: SourceStatus[] }>('/api/freelance/sources', { fallback: 'Не удалось загрузить статусы источников' }),
+        apiRequest<SniperStatus>('/api/freelance/sniper/status', { fallback: 'Не удалось загрузить статус снайпера' }),
       ])
-      if (![ordersResponse, settingsResponse, sourceResponse, sniperResponse].every((response) => response.ok)) throw new Error('Не удалось загрузить данные фриланса')
-      const orderData = await ordersResponse.json()
-      setOrders(orderData.orders ?? [])
-      setStats(orderData.stats ?? emptyStats)
-      if (orderData.relevance_max) setRelevanceMax(orderData.relevance_max)
-      const savedSettings = await settingsResponse.json() as FreelanceSettings
-      setSettings({ ...savedSettings, sources: savedSettings.sources.filter((item) => sourceKeys.includes(item as SourceKey)) })
-      setSourceStatuses(((await sourceResponse.json()).sources ?? []).filter((item: SourceStatus) => sourceKeys.includes(item.source as SourceKey)))
-      setSniper(await sniperResponse.json())
+      setOrders(ordersResponse.orders ?? [])
+      setStats(ordersResponse.stats ?? emptyStats)
+      if (ordersResponse.relevance_max) setRelevanceMax(ordersResponse.relevance_max)
+      setSettings({ ...settingsResponse, sources: settingsResponse.sources.filter((item) => sourceKeys.includes(item as SourceKey)) })
+      setSourceStatuses((sourceResponse.sources ?? []).filter((item) => sourceKeys.includes(item.source as SourceKey)))
+      setSniper(sniperResponse)
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Не удалось загрузить раздел «Фриланс»')
     } finally {
@@ -158,12 +156,11 @@ export default function FreelancePage() {
     return [...result].sort((a, b) => b.relevance - a.relevance)
   }, [category, minRelevance, orders, query, sort, source, status])
 
-  const runAction = async (action: string, request: () => Promise<Response>, message: string) => {
+  const runAction = async (action: string, request: () => Promise<unknown>, message: string) => {
     setBusy(action)
     setError('')
     try {
-      const response = await request()
-      if (!response.ok) throw new Error((await response.json()).detail ?? 'Операция не выполнена')
+      await request()
       setFeedback(message)
       window.setTimeout(() => setFeedback(''), 2200)
       await loadData()
@@ -174,19 +171,18 @@ export default function FreelancePage() {
     }
   }
 
-  const updateOrder = (orderId: number, changes: Record<string, unknown>) => runAction(`order-${orderId}`, () => fetch(`${API_BASE}/api/freelance/orders/${orderId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changes) }), 'Заказ обновлён')
-  const toggleSniper = () => runAction('sniper', () => fetch(`${API_BASE}/api/freelance/sniper/${sniper.status === 'running' ? 'stop' : 'start'}`, { method: 'POST' }), sniper.status === 'running' ? 'Снайпер остановлен' : 'Снайпер запущен')
-  const checkNow = () => runAction('check', () => fetch(`${API_BASE}/api/freelance/sniper/check`, { method: 'POST' }), 'Проверка источников завершена')
-  const archiveOrder = (orderId: number) => runAction(`archive-${orderId}`, () => fetch(`${API_BASE}/api/freelance/orders/${orderId}`, { method: 'DELETE' }), 'Заказ скрыт')
-  const restoreOrder = (orderId: number) => runAction(`restore-${orderId}`, () => fetch(`${API_BASE}/api/freelance/orders/${orderId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ archived: false }) }), 'Заказ возвращён в активные')
-  const openAuth = (source: string) => runAction(`auth-${source}`, () => fetch(`${API_BASE}/api/freelance/sources/${source}/auth`, { method: 'POST' }), `Окно входа ${sourceLabel(source)} открыто`)
+  const updateOrder = (orderId: number, changes: Record<string, unknown>) => runAction(`order-${orderId}`, () => apiRequest(`/api/freelance/orders/${orderId}`, { method: 'PUT', body: changes }), 'Заказ обновлён')
+  const toggleSniper = () => runAction('sniper', () => apiRequest(`/api/freelance/sniper/${sniper.status === 'running' ? 'stop' : 'start'}`, { method: 'POST' }), sniper.status === 'running' ? 'Снайпер остановлен' : 'Снайпер запущен')
+  const checkNow = () => runAction('check', () => apiRequest('/api/freelance/sniper/check', { method: 'POST' }), 'Проверка источников завершена')
+  const archiveOrder = (orderId: number) => runAction(`archive-${orderId}`, () => apiRequest(`/api/freelance/orders/${orderId}`, { method: 'DELETE' }), 'Заказ скрыт')
+  const restoreOrder = (orderId: number) => runAction(`restore-${orderId}`, () => apiRequest(`/api/freelance/orders/${orderId}`, { method: 'PUT', body: { archived: false } }), 'Заказ возвращён в активные')
+  const openAuth = (source: string) => runAction(`auth-${source}`, () => apiRequest(`/api/freelance/sources/${source}/auth`, { method: 'POST' }), `Окно входа ${sourceLabel(source)} открыто`)
   const openHistory = async () => {
     setShowHistoryModal(true)
     setHistoryLoading(true)
     try {
-      const response = await fetch(`${API_BASE}/api/freelance/runs`)
-      if (!response.ok) throw new Error('Не удалось загрузить историю запусков')
-      setRunHistory((await response.json()).runs ?? [])
+      const response = await apiRequest<{ runs: FreelanceRun[] }>('/api/freelance/runs', { fallback: 'Не удалось загрузить историю запусков' })
+      setRunHistory(response.runs ?? [])
     } catch (historyError) {
       setError(historyError instanceof Error ? historyError.message : 'Не удалось загрузить историю запусков')
     } finally { setHistoryLoading(false) }
@@ -194,21 +190,20 @@ export default function FreelancePage() {
   const openRun = async (run: FreelanceRun) => {
     setHistoryLoading(true)
     try {
-      const response = await fetch(`${API_BASE}/api/freelance/runs/${run.id}`)
-      if (!response.ok) throw new Error('Не удалось загрузить запуск')
-      setSelectedRun({ run, orders: (await response.json()).orders ?? [] })
+      const response = await apiRequest<{ orders: FreelanceOrder[] }>(`/api/freelance/runs/${run.id}`, { fallback: 'Не удалось загрузить запуск' })
+      setSelectedRun({ run, orders: response.orders ?? [] })
     } catch (historyError) {
       setError(historyError instanceof Error ? historyError.message : 'Не удалось загрузить запуск')
     } finally { setHistoryLoading(false) }
   }
 
   const addOrder = async (payload: Record<string, unknown>) => {
-    await runAction('add-order', () => fetch(`${API_BASE}/api/freelance/orders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }), 'Заказ сохранён')
+    await runAction('add-order', () => apiRequest('/api/freelance/orders', { method: 'POST', body: payload }), 'Заказ сохранён')
     setShowOrderModal(false)
   }
 
   const saveSettings = async (next: FreelanceSettings) => {
-    await runAction('settings', () => fetch(`${API_BASE}/api/freelance/settings`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) }), 'Настройки снайпера сохранены')
+    await runAction('settings', () => apiRequest('/api/freelance/settings', { method: 'PUT', body: next }), 'Настройки снайпера сохранены')
     setShowSettingsModal(false)
   }
 
@@ -238,7 +233,7 @@ export default function FreelancePage() {
           <div className="freelance-view-tabs" role="tablist" aria-label="Списки заказов">
             <button className={!showArchived ? 'active' : ''} type="button" role="tab" aria-selected={!showArchived} onClick={() => setShowArchived(false)}><Folder size={17} />Активные <span>{stats.total}</span></button>
             <button className={showArchived ? 'active' : ''} type="button" role="tab" aria-selected={showArchived} onClick={() => setShowArchived(true)}><Archive size={17} />Скрытые <span>{stats.archived}</span></button>
-            {showArchived && stats.archived > 0 && <button className="restore-all-tab-action" type="button" disabled={busy === 'restore-all'} onClick={() => void runAction('restore-all', () => fetch(`${API_BASE}/api/freelance/orders/restore-all`, { method: 'POST', headers: { 'X-Requested-With': 'SemixCRM' } }), 'Все заказы возвращены в активные')}><RotateCcw size={16} />Вернуть всех</button>}
+            {showArchived && stats.archived > 0 && <button className="restore-all-tab-action" type="button" disabled={busy === 'restore-all'} onClick={() => void runAction('restore-all', () => apiRequest('/api/freelance/orders/restore-all', { method: 'POST' }), 'Все заказы возвращены в активные')}><RotateCcw size={16} />Вернуть всех</button>}
           </div>
 
           <div className="toolbar-row freelance-toolbar">
@@ -458,14 +453,10 @@ function CleanupModal({
     const timer = window.setTimeout(() => {
       void (async () => {
         try {
-          const response = await fetch(`${API_BASE}/api/freelance/orders/cleanup`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'SemixCRM' },
-            body: JSON.stringify({ ...rules, preview: true }),
+          const payload = await apiRequest<CleanupPreview>('/api/freelance/orders/cleanup', {
+            method: 'POST', body: { ...rules, preview: true }, fallback: 'Не удалось посчитать',
           })
-          const payload = await response.json()
           if (cancelled) return
-          if (!response.ok) throw new Error(payload.detail ?? 'Не удалось посчитать')
           setPreview(payload)
           setError('')
         } catch (previewError) {
@@ -482,13 +473,9 @@ function CleanupModal({
     setApplying(true)
     setError('')
     try {
-      const response = await fetch(`${API_BASE}/api/freelance/orders/cleanup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'SemixCRM' },
-        body: JSON.stringify({ ...rules, preview: false }),
+      const payload = await apiRequest<{ archived_count?: number }>('/api/freelance/orders/cleanup', {
+        method: 'POST', body: { ...rules, preview: false }, fallback: 'Не удалось скрыть заказы',
       })
-      const payload = await response.json()
-      if (!response.ok) throw new Error(payload.detail ?? 'Не удалось скрыть заказы')
       await onDone(payload.archived_count ?? 0)
     } catch (applyError) {
       setError(applyError instanceof Error ? applyError.message : 'Не удалось скрыть заказы')
