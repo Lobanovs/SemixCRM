@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type MouseEvent } from 'react'
 import {
   BriefcaseBusiness,
   Bookmark,
@@ -26,14 +26,14 @@ import ClientsPage from './pages/ClientsPage'
 import SettingsPage from './pages/SettingsPage'
 import UsefulThingsPage from './pages/UsefulThingsPage'
 import PageGuide from './components/PageGuide'
+import ActionCenter from './components/ActionCenter'
 import { HOME_GUIDE } from './guides'
-import { apiRequest } from './api'
 
 type Accent = 'blue' | 'green' | 'purple' | 'orange' | 'gray'
 
 // Переход между разделами идёт по устойчивому id: раньше сравнивались подписи меню,
 // и переименование пункта молча ломало маршрут.
-type SectionId = 'home' | 'projects' | 'jobs' | 'freelance' | 'schedule' | 'useful' | 'clients' | 'settings'
+export type SectionId = 'home' | 'projects' | 'jobs' | 'freelance' | 'schedule' | 'useful' | 'clients' | 'settings'
 
 type Feature = {
   id: SectionId
@@ -94,48 +94,29 @@ const menuItems: { id: SectionId; title: string; icon: LucideIcon; accent: Accen
   { id: 'settings', title: 'Настройки', icon: Settings, accent: 'gray' },
 ]
 
-type DashboardStats = { value: string; label: string }[]
+const validSections = new Set<SectionId>(menuItems.map((item) => item.id))
 
-const PLACEHOLDER_STATS: DashboardStats = [
-  { value: '—', label: 'Проекты' },
-  { value: '—', label: 'Вакансии' },
-  { value: '—', label: 'Клиенты' },
-  { value: '—', label: 'Задач на сегодня' },
-]
+function sectionFromHash(): SectionId {
+  const value = window.location.hash.replace(/^#/, '') as SectionId
+  return validSections.has(value) ? value : 'home'
+}
 
 function App() {
-  const [active, setActive] = useState<SectionId>('home')
+  const [active, setActive] = useState<SectionId>(sectionFromHash)
   const [search, setSearch] = useState('')
   const [isSidebarOpen, setSidebarOpen] = useState(false)
   const [showGuide, setShowGuide] = useState(false)
-  const [stats, setStats] = useState<DashboardStats>(PLACEHOLDER_STATS)
   const [isDark, setIsDark] = useState(() => window.localStorage.getItem('semix-crm-theme') === 'dark')
 
-  // Цифры на главной берутся из тех же эндпоинтов, что и разделы: иначе они врут.
   useEffect(() => {
-    void (async () => {
-      const count = async (path: string, read: (payload: never) => number) => {
-        try {
-          return read(await apiRequest(path, { fallback: '' }) as never)
-        } catch {
-          return null
-        }
-      }
-      const [projects, jobs, clients, schedule] = await Promise.all([
-        count('/api/projects', (payload: { stats?: { total?: number } }) => payload.stats?.total ?? 0),
-        count('/api/jobs', (payload: { stats?: { total?: number } }) => payload.stats?.total ?? 0),
-        count('/api/clients', (payload: { stats?: { total?: number } }) => payload.stats?.total ?? 0),
-        count('/api/schedule', (payload: { stats?: { total?: number; done?: number } }) =>
-          Math.max(0, (payload.stats?.total ?? 0) - (payload.stats?.done ?? 0))),
-      ])
-      const show = (value: number | null) => (value === null ? '—' : String(value))
-      setStats([
-        { value: show(projects), label: 'Проекты' },
-        { value: show(jobs), label: 'Вакансии' },
-        { value: show(clients), label: 'Клиенты' },
-        { value: show(schedule), label: 'Задач на неделю' },
-      ])
-    })()
+    if (!window.location.hash) window.history.replaceState(null, '', '#home')
+    const followHash = () => setActive(sectionFromHash())
+    window.addEventListener('hashchange', followHash)
+    window.addEventListener('popstate', followHash)
+    return () => {
+      window.removeEventListener('hashchange', followHash)
+      window.removeEventListener('popstate', followHash)
+    }
   }, [])
 
   // Прокручиваем после commit React: до него браузерное scroll anchoring
@@ -155,6 +136,17 @@ function App() {
   const selectSection = (id: SectionId) => {
     setActive(id)
     setSidebarOpen(false)
+    if (window.location.hash !== `#${id}`) window.history.pushState(null, '', `#${id}`)
+  }
+
+  const openProfile = () => {
+    selectSection('settings')
+    window.setTimeout(() => document.getElementById('profile')?.focus(), 0)
+  }
+
+  const openBrand = (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault()
+    selectSection('home')
   }
 
   return (
@@ -162,9 +154,10 @@ function App() {
       className={`app-shell ${isDark ? 'theme-dark' : ''}`}
       data-theme={isDark ? 'premium-dark' : undefined}
     >
+      <a className="skip-link" href="#main-content">Перейти к содержимому</a>
       <aside className={`sidebar ${isSidebarOpen ? 'is-open' : ''}`} aria-label="Главная навигация">
         <div className="brand-row">
-          <a className="brand" href="#home" onClick={() => selectSection('home')}>Semix CRM</a>
+          <a className="brand" href="#home" onClick={openBrand}>Semix CRM</a>
           <button className="mobile-close" type="button" onClick={() => setSidebarOpen(false)} aria-label="Закрыть меню">
             <X size={22} />
           </button>
@@ -200,11 +193,11 @@ function App() {
         <button className="menu-toggle" type="button" onClick={() => setSidebarOpen(true)} aria-label="Открыть меню">
           <Menu size={24} />
         </button>
-        <label className="search-box" data-guide="home-search">
-          <span className="sr-only">Поиск</span>
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск..." />
+        {active === 'home' ? <label className="search-box" data-guide="home-search">
+          <span className="sr-only">Поиск по разделам</span>
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Найти раздел..." />
           <Search size={24} strokeWidth={1.8} />
-        </label>
+        </label> : <div className="topbar-section-title">{menuItems.find((item) => item.id === active)?.title}</div>}
         <button
           className="theme-toggle"
           type="button"
@@ -220,17 +213,16 @@ function App() {
         >
           {isDark ? <Sun size={21} strokeWidth={1.8} /> : <Moon size={21} strokeWidth={1.8} />}
         </button>
-        <button className="profile-button" type="button" aria-label="Профиль">
+        <button className="profile-button" type="button" aria-label="Открыть рабочий профиль" onClick={openProfile}>
           <UserRound size={24} strokeWidth={1.8} />
         </button>
       </header>
 
-      <main className="workspace" id="home">
+      <main className="workspace" id="main-content" tabIndex={-1}>
         {active === 'home' ? (
           <Dashboard
             features={filteredFeatures}
             hasSearch={Boolean(search.trim())}
-            stats={stats}
             onOpen={selectSection}
             onClearSearch={() => setSearch('')}
           />
@@ -272,22 +264,22 @@ function App() {
 function Dashboard({
   features,
   hasSearch,
-  stats,
   onOpen,
   onClearSearch,
 }: {
   features: Feature[]
   hasSearch: boolean
-  stats: DashboardStats
   onOpen: (id: SectionId) => void
   onClearSearch: () => void
 }) {
   return (
     <div className="dashboard">
       <section className="welcome-section">
-        <h1>Главная</h1>
-        <p>Добро пожаловать в Semix CRM!<br />Ваш личный помощник для организации дел, проектов и задач.</p>
+        <h1>Сегодня</h1>
+        <p>Главное за день без переходов между десятками списков.</p>
       </section>
+
+      {!hasSearch && <ActionCenter onOpen={onOpen} />}
 
       <PageGuide
         sectionId="home"
@@ -353,14 +345,6 @@ function Dashboard({
                 </ul>
               </aside>
 
-              <section className="stats-card" data-guide="home-stats">
-                <h3>Статистика</h3>
-                <div className="stats-grid">
-                  {stats.map(({ value, label }) => (
-                    <div className="stat" key={label}><strong>{value}</strong><span>{label}</span></div>
-                  ))}
-                </div>
-              </section>
             </div>
           </div>
         </section>
