@@ -13,6 +13,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from .config import load_environment
+
+load_environment()
+
 from .database import (
     client_stats,
     create_parser_run,
