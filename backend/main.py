@@ -104,6 +104,7 @@ from .ai.settings import (
     save_settings as save_ai_settings,
     validate_settings_values,
 )
+from .dashboard import build_dashboard
 
 
 logger = logging.getLogger(__name__)
@@ -254,6 +255,11 @@ job_runs_lock = threading.Lock()
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "semix-crm"}
+
+
+@app.get("/api/dashboard")
+def dashboard(limit: int = Query(default=5, ge=1, le=20)) -> dict[str, Any]:
+    return build_dashboard(limit=limit)
 
 
 class FreelanceOrderCreateRequest(BaseModel):
