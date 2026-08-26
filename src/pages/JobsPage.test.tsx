@@ -47,7 +47,7 @@ function jsonResponse(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json' } })
 }
 
-function createFetchMock(overrides: { jobs?: unknown[]; keywords?: string[] } = {}) {
+function createFetchMock(overrides: { jobs?: unknown[]; keywords?: string[]; archiveResponse?: Promise<Response> } = {}) {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     const method = init?.method || 'GET'
@@ -62,6 +62,9 @@ function createFetchMock(overrides: { jobs?: unknown[]; keywords?: string[] } = 
       return jsonResponse({ run_id: 'r1', status: 'done', message: 'Готово: новых — 4, уже были — 1', error: '', inserted: 4, duplicates: 1, sources: { hh: { status: 'done', found: 5, new: 4 } } })
     }
     if (method === 'POST' && url.includes('/api/jobs/parse')) return jsonResponse({ run_id: 'r1' })
+    if (method === 'POST' && url.includes('/api/jobs/archive-all')) {
+      return overrides.archiveResponse ?? jsonResponse({ ok: true, archived_count: overrides.jobs?.length ?? 1 })
+    }
     if (method === 'POST' && url.includes('/api/jobs')) return jsonResponse(job, 201)
     if (method === 'PUT' && url.includes('/api/jobs/')) return jsonResponse({ ...job, status: 'Откликнулся' })
     if (method === 'GET' && url.includes('/api/jobs')) {
@@ -174,6 +177,49 @@ describe('страница «Работа (вакансии)»', () => {
     render(<JobsPage />)
 
     expect(await screen.findByText(/Вакансий пока нет/)).toBeInTheDocument()
+  })
+
+  it('архивирует все активные вакансии после подтверждения', async () => {
+    const user = userEvent.setup()
+    let resolveArchive!: (response: Response) => void
+    const archiveResponse = new Promise<Response>((resolve) => { resolveArchive = resolve })
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.stubGlobal('fetch', createFetchMock({ archiveResponse }))
+    render(<JobsPage />)
+
+    const archiveButton = await screen.findByRole('button', { name: 'Все в архив' })
+    await waitFor(() => expect(archiveButton).toBeEnabled())
+    await user.click(archiveButton)
+
+    expect(window.confirm).toHaveBeenCalledWith('Перенести все активные вакансии (1) в архив?')
+    await waitFor(() => {
+      expect(archiveButton).toBeDisabled()
+      expect(archiveButton).toHaveTextContent('Архивирую…')
+    })
+    resolveArchive(jsonResponse({ ok: true, archived_count: 1 }))
+
+    await waitFor(() => {
+      const call = vi.mocked(fetch).mock.calls.find(([url, init]) =>
+        init?.method === 'POST' && String(url).endsWith('/api/jobs/archive-all'))
+      expect(call).toBeDefined()
+      expect((call?.[1]?.headers as Record<string, string>)['X-Requested-With']).toBe('SemixCRM')
+    })
+    expect(await screen.findByText('Перенесено в архив: 1')).toBeVisible()
+  })
+
+  it('не архивирует вакансии после отмены подтверждения', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    vi.stubGlobal('fetch', createFetchMock())
+    render(<JobsPage />)
+
+    const archiveButton = await screen.findByRole('button', { name: 'Все в архив' })
+    await waitFor(() => expect(archiveButton).toBeEnabled())
+    await user.click(archiveButton)
+
+    expect(window.confirm).toHaveBeenCalledWith('Перенести все активные вакансии (1) в архив?')
+    expect(vi.mocked(fetch).mock.calls.some(([url, init]) =>
+      init?.method === 'POST' && String(url).endsWith('/api/jobs/archive-all'))).toBe(false)
   })
 
   it('не монтирует все найденные вакансии одновременно', async () => {

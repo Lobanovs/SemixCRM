@@ -54,6 +54,22 @@ class JobsApiTests(unittest.TestCase):
         self.assertEqual([], self.client.get("/api/jobs").json()["jobs"])
         self.assertEqual(1, len(self.client.get("/api/jobs?archived=true").json()["jobs"]))
 
+    def test_archive_all_moves_every_active_job_and_is_idempotent(self) -> None:
+        first_id = self.client.post("/api/jobs", json={"role": "Frontend"}).json()["id"]
+        old_id = self.client.post("/api/jobs", json={"role": "Уже в архиве"}).json()["id"]
+        self.client.post("/api/jobs", json={"role": "Backend"})
+        self.client.put(f"/api/jobs/{old_id}", json={"archived": True})
+
+        response = self.client.post("/api/jobs/archive-all")
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual({"ok": True, "archived_count": 2}, response.json())
+        self.assertEqual([], self.client.get("/api/jobs").json()["jobs"])
+        archived = self.client.get("/api/jobs?archived=true").json()["jobs"]
+        self.assertEqual(3, len(archived))
+        self.assertIn(first_id, [item["id"] for item in archived])
+        self.assertEqual(0, self.client.post("/api/jobs/archive-all").json()["archived_count"])
+
     def test_custom_next_step_is_not_overwritten_by_status(self) -> None:
         job_id = self.client.post("/api/jobs", json={"role": "Backend"}).json()["id"]
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
+  Archive,
   BriefcaseBusiness,
   CalendarDays,
   CirclePlay,
@@ -142,6 +143,8 @@ export default function JobsPage() {
   const [runId, setRunId] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [archivingAll, setArchivingAll] = useState(false)
   const [visibleCount, setVisibleCount] = useState(50)
 
   const load = useCallback(async () => {
@@ -234,6 +237,25 @@ export default function JobsPage() {
     }
   }
 
+  const archiveAllJobs = async () => {
+    const count = stats?.total ?? jobs.length
+    if (!count || !window.confirm(`Перенести все активные вакансии (${count}) в архив?`)) return
+    setArchivingAll(true)
+    setError('')
+    setNotice('')
+    try {
+      const result = await apiRequest<{ archived_count: number }>('/api/jobs/archive-all', {
+        method: 'POST', fallback: 'Не удалось архивировать вакансии',
+      })
+      setNotice(`Перенесено в архив: ${result.archived_count}`)
+      await load()
+    } catch (archiveError) {
+      setError(archiveError instanceof Error ? archiveError.message : 'Не удалось архивировать вакансии')
+    } finally {
+      setArchivingAll(false)
+    }
+  }
+
   const createJob = async (payload: Record<string, unknown>) => {
     await apiRequest('/api/jobs', { method: 'POST', body: payload, fallback: 'Не удалось добавить вакансию' })
     setShowModal(false)
@@ -273,6 +295,7 @@ export default function JobsPage() {
           />
 
           {error && <div className="page-empty-state" role="alert">{error}</div>}
+          {notice && <div className="jobs-action-notice" role="status" aria-live="polite">{notice}</div>}
 
           <div className="metrics-grid">
             <MetricCard icon={BriefcaseBusiness} label="Всего вакансий" value={stats?.total ?? 0} hint={`+${stats?.found_today ?? 0} сегодня`} accent="blue" />
@@ -314,6 +337,16 @@ export default function JobsPage() {
             <button className="secondary-wide-action" type="button" onClick={() => setArchived((current) => !current)}>
               {archived ? 'Показать активные' : `Архив (${stats?.archived ?? 0})`}
             </button>
+            {!archived && (
+              <button
+                className="secondary-wide-action archive-all-action"
+                type="button"
+                onClick={() => void archiveAllJobs()}
+                disabled={archivingAll || !(stats?.total ?? jobs.length)}
+              >
+                <Archive size={17} />{archivingAll ? 'Архивирую…' : 'Все в архив'}
+              </button>
+            )}
             <button className="solid-action" type="button" data-guide="jobs-add" onClick={() => setShowModal(true)}><Plus size={19} />Добавить вакансию</button>
           </div>
 

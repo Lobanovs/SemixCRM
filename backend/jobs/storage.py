@@ -293,6 +293,15 @@ def update_job(
     return _serialize(row)
 
 
+def archive_all_jobs() -> int:
+    with _connect() as connection:
+        cursor = connection.execute(
+            "UPDATE jobs SET archived = 1, updated_at = ? WHERE archived = 0",
+            (_now(),),
+        )
+    return max(0, cursor.rowcount)
+
+
 def delete_job(job_id: int) -> bool:
     with _connect() as connection:
         cursor = connection.execute("DELETE FROM jobs WHERE id = ?", (job_id,))

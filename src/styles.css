@@ -5871,6 +5871,57 @@ a:focus-visible {
    В тулбаре это растягивало «Запустить все» и «Архив» на целую строку. */
 .toolbar-row > button { flex: 0 0 auto; width: auto; }
 
+.archive-all-action {
+  border-color: #e5a8ae;
+  color: #b42332;
+  background: #fff8f8;
+}
+
+.archive-all-action:hover:not(:disabled) {
+  border-color: #d45766;
+  color: #98212d;
+  background: #fff0f1;
+}
+
+.archive-all-action:focus-visible {
+  outline: 3px solid rgb(212 87 102 / 25%);
+  outline-offset: 2px;
+}
+
+.archive-all-action:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
+.jobs-action-notice {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid #a7dfbf;
+  border-radius: 10px;
+  color: #17663b;
+  background: #f0fff6;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.theme-dark .archive-all-action {
+  border-color: #743942;
+  color: #ffb3bc;
+  background: #27171a;
+}
+
+.theme-dark .archive-all-action:hover:not(:disabled) {
+  border-color: #a84e5a;
+  color: #ffd5da;
+  background: #351c20;
+}
+
+.theme-dark .jobs-action-notice {
+  border-color: #275d43;
+  color: #9ce0bb;
+  background: #12261c;
+}
+
 
 /* ================= Диалог уборки списка заказов ================= */
 .cleanup-modal { width: min(520px, 100%); }

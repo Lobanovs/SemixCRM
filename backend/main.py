@@ -1274,7 +1274,12 @@ def job_parse_status(run_id: str) -> dict[str, Any]:
     return run.snapshot()
 
 
-# Маршруты с параметром объявлены последними: иначе «settings», «runs» и «parse»
+@app.post("/api/jobs/archive-all", dependencies=[Depends(guard_powerful_action)])
+def archive_all_job_items() -> dict[str, Any]:
+    return {"ok": True, "archived_count": jobs_storage.archive_all_jobs()}
+
+
+# Маршруты с параметром объявлены последними: иначе «settings», «runs», «parse» и «archive-all»
 # попадали бы в {job_id} и падали с 422 при разборе числа.
 @app.put("/api/jobs/{job_id}")
 def edit_job(job_id: int, request: JobUpdateRequest) -> dict[str, Any]:

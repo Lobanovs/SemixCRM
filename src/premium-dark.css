@@ -1246,3 +1246,23 @@
   color: #b7d3fa;
   background: rgba(76, 141, 255, .07);
 }
+
+/* Bulk vacancy archive keeps its warning hierarchy in the premium theme. */
+.theme-dark[data-theme='premium-dark'] .archive-all-action {
+  border-color: rgba(255, 105, 122, .34);
+  color: #ffb3bc;
+  background: linear-gradient(180deg, rgba(190, 54, 72, .13), rgba(110, 28, 40, .1));
+}
+
+.theme-dark[data-theme='premium-dark'] .archive-all-action:hover:not(:disabled) {
+  border-color: rgba(255, 125, 140, .55);
+  color: #ffd5da;
+  background: rgba(190, 54, 72, .2);
+}
+
+.theme-dark[data-theme='premium-dark'] .jobs-action-notice {
+  border-color: rgba(67, 190, 122, .32);
+  color: #9ce0bb;
+  background: linear-gradient(90deg, rgba(42, 139, 86, .14), rgba(42, 139, 86, .05));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .025);
+}
